@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -90,10 +91,15 @@ public final class SoyToIncrementalDomSrcCompiler extends AbstractSoyCompiler {
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) {
     SoyFileSet sfs = sfsBuilder.build();
+    SoyIncrementalDomSrcOptions options = createIncrementalDomSrcOptions();
+    outputFiles.writeFiles(
+        srcs, sfs.compileToIncrementalDomSrcInternal(options), /* locale= */ null);
+  }
+
+  private SoyIncrementalDomSrcOptions createIncrementalDomSrcOptions() {
     SoyIncrementalDomSrcOptions options = new SoyIncrementalDomSrcOptions();
     options.setDependOnCssHeader(dependOnCssHeader);
     options.setGoogMsgsAreExternal(googMsgsAreExternal);
-    outputFiles.writeFiles(
-        srcs, sfs.compileToIncrementalDomSrcInternal(options), /* locale= */ null);
+    return options;
   }
 }
