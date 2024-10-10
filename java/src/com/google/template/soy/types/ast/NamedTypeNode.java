@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -23,6 +24,9 @@ import com.google.template.soy.base.internal.Identifier;
 /** A simple named type (may be an intrinsic type, '?', or a custom type). */
 @AutoValue
 public abstract class NamedTypeNode extends TypeNode {
+  
+  NamedTypeNode() {}
+
   public static NamedTypeNode create(Identifier identifier) {
     return new AutoValue_NamedTypeNode(identifier.location(), identifier);
   }
@@ -30,8 +34,6 @@ public abstract class NamedTypeNode extends TypeNode {
   public static NamedTypeNode create(SourceLocation sourceLocation, String name) {
     return create(Identifier.create(name, sourceLocation));
   }
-
-  NamedTypeNode() {}
 
   public abstract Identifier name();
 
@@ -47,8 +49,6 @@ public abstract class NamedTypeNode extends TypeNode {
 
   @Override
   public NamedTypeNode copy() {
-    NamedTypeNode copy = create(name());
-    copy.copyResolvedTypeFrom(this);
-    return copy;
+    return create(name().location(), name().identifier());
   }
 }
