@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -32,21 +33,25 @@ final class ValidatorContext implements JavaPluginContext {
 
   @Override
   public ValidatorValue getBidiDir() {
-    return ValidatorValue.forClazz(BidiGlobalDir.class, reporter);
+    return createValidatorValue(BidiGlobalDir.class);
   }
 
   @Override
   public ValidatorValue getULocale() {
-    return ValidatorValue.forClazz(ULocale.class, reporter);
+    return createValidatorValue(ULocale.class);
   }
 
   @Override
   public ValidatorValue getAllRequiredCssNamespaces(JavaValue template) {
-    return ValidatorValue.forClazz(ImmutableList.class, reporter);
+    return createValidatorValue(ImmutableList.class);
   }
 
   @Override
   public ValidatorValue getAllRequiredCssPaths(JavaValue template) {
-    return ValidatorValue.forClazz(ImmutableList.class, reporter);
+    return createValidatorValue(ImmutableList.class);
+  }
+
+  private ValidatorValue createValidatorValue(Class<?> clazz) {
+    return ValidatorValue.forClazz(clazz, reporter);
   }
 }
