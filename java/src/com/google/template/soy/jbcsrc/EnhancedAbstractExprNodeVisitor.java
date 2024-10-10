@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -52,17 +53,7 @@ abstract class EnhancedAbstractExprNodeVisitor<T> extends AbstractReturningExprN
     VarDefn defn = node.getDefnDecl();
     switch (defn.kind()) {
       case LOCAL_VAR:
-        LocalVar local = (LocalVar) defn;
-        LocalVarNode declaringNode = local.declaringNode();
-        switch (declaringNode.getKind()) {
-          case FOR_NONEMPTY_NODE:
-            return visitForLoopVar(node, local);
-          case LET_CONTENT_NODE:
-          case LET_VALUE_NODE:
-            return visitLetNodeVar(node, local);
-          default:
-            throw new AssertionError("Unexpected local variable: " + local);
-        }
+        return handleLocalVar(node, (LocalVar) defn);
       case PARAM:
         return visitParam(node, (TemplateParam) defn);
       case STATE:
@@ -80,46 +71,59 @@ abstract class EnhancedAbstractExprNodeVisitor<T> extends AbstractReturningExprN
     throw new AssertionError(defn.kind());
   }
 
+  private T handleLocalVar(VarRefNode node, LocalVar local) {
+    LocalVarNode declaringNode = local.declaringNode();
+    switch (declaringNode.getKind()) {
+      case FOR_NONEMPTY_NODE:
+        return visitForLoopVar(node, local);
+      case LET_CONTENT_NODE:
+      case LET_VALUE_NODE:
+        return visitLetNodeVar(node, local);
+      default:
+        throw new AssertionError("Unexpected local variable: " + local);
+    }
+  }
+
   @Override
   protected final T visitFunctionNode(FunctionNode node) {
     Object function = node.getSoyFunction();
-
     if (function instanceof BuiltinFunction) {
-      BuiltinFunction builtinFn = (BuiltinFunction) function;
-      switch (builtinFn) {
-        case CHECK_NOT_NULL:
-          return visitCheckNotNullFunction(node);
-        case CSS:
-          return visitCssFunction(node);
-        case XID:
-          return visitXidFunction(node);
-        case IS_PRIMARY_MSG_IN_USE:
-          return visitIsPrimaryMsgInUse(node);
-        case TO_FLOAT:
-          return visitToFloatFunction(node);
-        case DEBUG_SOY_TEMPLATE_INFO:
-          return visitDebugSoyTemplateInfoFunction(node);
-        case VE_DATA:
-          return visitVeDataFunction(node);
-        case SOY_SERVER_KEY:
-          return visitSoyServerKeyFunction(node);
-        case PROTO_INIT:
-          return visitProtoInitFunction(node);
-        case VE_DEF:
-          return visitVeDefNode(node);
-        case EMPTY_TO_NULL:
-          return visitEmptyToNullFunction(node);
-        case MSG_WITH_ID:
-        case REMAINDER:
-          // should have been removed earlier in the compiler
-        case UNKNOWN_JS_GLOBAL:
-        case LEGACY_DYNAMIC_TAG:
-          // unknownJsGlobals should not exist in jbcsrc
-          throw new AssertionError();
-      }
+      return handleBuiltinFunction(node, (BuiltinFunction) function);
     }
-
     return visitPluginFunction(node);
+  }
+
+  private T handleBuiltinFunction(FunctionNode node, BuiltinFunction builtinFn) {
+    switch (builtinFn) {
+      case CHECK_NOT_NULL:
+        return visitCheckNotNullFunction(node);
+      case CSS:
+        return visitCssFunction(node);
+      case XID:
+        return visitXidFunction(node);
+      case IS_PRIMARY_MSG_IN_USE:
+        return visitIsPrimaryMsgInUse(node);
+      case TO_FLOAT:
+        return visitToFloatFunction(node);
+      case DEBUG_SOY_TEMPLATE_INFO:
+        return visitDebugSoyTemplateInfoFunction(node);
+      case VE_DATA:
+        return visitVeDataFunction(node);
+      case SOY_SERVER_KEY:
+        return visitSoyServerKeyFunction(node);
+      case PROTO_INIT:
+        return visitProtoInitFunction(node);
+      case VE_DEF:
+        return visitVeDefNode(node);
+      case EMPTY_TO_NULL:
+        return visitEmptyToNullFunction(node);
+      case MSG_WITH_ID:
+      case REMAINDER:
+      case UNKNOWN_JS_GLOBAL:
+      case LEGACY_DYNAMIC_TAG:
+        throw new AssertionError();
+    }
+    return null; // Should not reach here
   }
 
   T visitForLoopVar(VarRefNode varRef, LocalVar local) {
@@ -145,7 +149,6 @@ abstract class EnhancedAbstractExprNodeVisitor<T> extends AbstractReturningExprN
   T visitListComprehensionVar(VarRefNode varRef, ComprehensionVarDefn var) {
     return visitExprNode(varRef);
   }
-
 
   T visitCheckNotNullFunction(FunctionNode node) {
     return visitExprNode(node);
