@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -27,26 +28,62 @@ import com.google.template.soy.data.SoyAbstractValue;
 final class TombstoneValue extends SoyAbstractValue {
   static final TombstoneValue INSTANCE = new TombstoneValue();
 
+  /**
+   * Renders the TombstoneValue. This operation is not supported as TombstoneValue
+   * is not intended to be rendered. Throws UnsupportedOperationException.
+   *
+   * @param appendable the appendable to which the output would be rendered
+   * @throws UnsupportedOperationException if this method is called
+   */
   @Override
   public void render(LoggingAdvisingAppendable appendable) {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Compares this TombstoneValue to another object for equality. This operation is not supported
+   * as TombstoneValue does not have a meaningful equality comparison. Throws UnsupportedOperationException.
+   *
+   * @param other the object to compare with
+   * @return false
+   * @throws UnsupportedOperationException if this method is called
+   */
   @Override
   public boolean equals(Object other) {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Returns the hash code for this TombstoneValue. This operation is not supported as
+   * TombstoneValue does not have a meaningful hash code. Throws UnsupportedOperationException.
+   *
+   * @return 0
+   * @throws UnsupportedOperationException if this method is called
+   */
   @Override
   public int hashCode() {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Coerces this TombstoneValue to a String. This operation is not supported as
+   * TombstoneValue does not have a meaningful string representation. Throws UnsupportedOperationException.
+   *
+   * @return an empty string
+   * @throws UnsupportedOperationException if this method is called
+   */
   @Override
   public String coerceToString() {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Coerces this TombstoneValue to a boolean. This operation is not supported as
+   * TombstoneValue cannot be meaningfully coerced to a boolean. Throws UnsupportedOperationException.
+   *
+   * @return false
+   * @throws UnsupportedOperationException if this method is called
+   */
   @Override
   public boolean coerceToBoolean() {
     throw new UnsupportedOperationException();
