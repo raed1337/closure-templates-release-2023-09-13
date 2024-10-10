@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -47,29 +48,34 @@ final class AutoescaperPass implements CompilerFileSetPass {
 
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
-    ContextualAutoescaper autoescaper =
-        new ContextualAutoescaper(errorReporter, printDirectives, templateRegistryFull.get());
+    if (hasErrors()) {
+      return Result.STOP;
+    }
+    
+    ContextualAutoescaper autoescaper = createAutoescaper();
+    Inferences inferences = annotateFiles(autoescaper, sourceFiles);
+    
+    if (inferences == null || (autoescaperEnabled && !rewriteFiles(autoescaper, sourceFiles, idGenerator, inferences))) {
+      return Result.STOP;
+    }
+    
+    return hasErrors() ? Result.STOP : Result.CONTINUE;
+  }
 
-    // The autoescaper depends on certain amounts of template validation having been done, so we
-    // can't safely run on broken trees.
-    //  * that all deltemplates have compatible content kinds
-    //  * that 'external' templates are correctly allowed or disallowed.
-    // So just bail out.
-    if (errorReporter.hasErrors()) {
-      return Result.STOP;
-    }
-    Inferences inferences = autoescaper.annotate(sourceFiles);
-    if (inferences == null) {
-      return Result.STOP;
-    }
-    if (autoescaperEnabled) {
-      autoescaper.rewrite(sourceFiles, idGenerator, inferences);
-    }
-    // for historical reasons compiler passes that run after the autoescaper depend on the metadata
-    // addded by the escaping being present. So for now we abort compilation on autoescaper errors.
-    if (errorReporter.hasErrors()) {
-      return Result.STOP;
-    }
-    return Result.CONTINUE;
+  private ContextualAutoescaper createAutoescaper() {
+    return new ContextualAutoescaper(errorReporter, printDirectives, templateRegistryFull.get());
+  }
+
+  private boolean hasErrors() {
+    return errorReporter.hasErrors();
+  }
+
+  private Inferences annotateFiles(ContextualAutoescaper autoescaper, ImmutableList<SoyFileNode> sourceFiles) {
+    return autoescaper.annotate(sourceFiles);
+  }
+
+  private boolean rewriteFiles(ContextualAutoescaper autoescaper, ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator, Inferences inferences) {
+    autoescaper.rewrite(sourceFiles, idGenerator, inferences);
+    return !hasErrors();
   }
 }
