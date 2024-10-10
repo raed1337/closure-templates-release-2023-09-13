@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -50,11 +51,15 @@ public class MethodSignatureValidator {
         new ValidatorErrorReporter(
             errorReporter, fnName, fn.getClass(), sourceLocation, includeTriggeredInTemplateMsg);
     PluginMetadata metadata = PluginAnalyzer.analyze(fn);
+    validateMethodSignatures(metadata, reporter);
+  }
+
+  private void validateMethodSignatures(PluginMetadata metadata, ValidatorErrorReporter reporter) {
     for (MethodSignature ref : metadata.instanceMethodSignatures()) {
-      validateMethodSignature(/* expectedInstance= */ true, ref, reporter);
+      validateMethodSignature(true, ref, reporter);
     }
     for (MethodSignature ref : metadata.staticMethodSignatures()) {
-      validateMethodSignature(/* expectedInstance= */ false, ref, reporter);
+      validateMethodSignature(false, ref, reporter);
     }
   }
 
@@ -64,7 +69,14 @@ public class MethodSignatureValidator {
     ReadMethodData readMethod = sigReader.findMethod(expectedMethod);
     if (readMethod == null) {
       reporter.invalidPluginMethod(expectedMethod);
-    } else if (expectedInstance != readMethod.instanceMethod()) {
+    } else {
+      checkMethodSignature(expectedInstance, expectedMethod, reporter, readMethod);
+    }
+  }
+
+  private void checkMethodSignature(
+      boolean expectedInstance, MethodSignature expectedMethod, ValidatorErrorReporter reporter, ReadMethodData readMethod) {
+    if (expectedInstance != readMethod.instanceMethod()) {
       reporter.staticMismatch(expectedMethod, expectedInstance);
     } else if (!readMethod.returnType().equals(expectedMethod.returnType().getName())) {
       reporter.wrongPluginMethodReturnType(readMethod.returnType(), expectedMethod);
