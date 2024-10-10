@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -76,19 +77,14 @@ final class ResolveNamesPass implements CompilerFilePass {
 
     @Override
     protected void visitGlobalNode(GlobalNode node) {
-      // Check for a typo involving a global reference.  If the author forgets the leading '$' on a
-      // variable reference then it will get parsed as a global.  In some compiler configurations
-      // unknown globals are not an error.  To ensure that typos are caught we check for this case
-      // here.  Making 'unknown globals' an error consistently would be a better solution, though
-      // even then we would probably want some typo checking like this.
-      // Note.  This also makes it impossible for a global to share the same name as a local.  This
-      // should be fine since global names are typically qualified strings.
+      checkGlobalNodeForTypo(node);
+    }
+
+    private void checkGlobalNodeForTypo(GlobalNode node) {
       String globalName = node.getName();
       LocalVariables localVariables = getLocalVariables();
       VarDefn varDefn = localVariables.lookup("$" + globalName);
       if (varDefn != null) {
-        // This means that this global has the same name as an in-scope local or param.  It is
-        // likely that they just forgot the leading '$'
         errorReporter.report(node.getSourceLocation(), GLOBAL_MATCHES_VARIABLE, globalName);
         GlobalNode.replaceExprWithError(node);
       }
@@ -96,23 +92,29 @@ final class ResolveNamesPass implements CompilerFilePass {
 
     @Override
     protected void visitVarRefNode(VarRefNode varRef) {
+      resolveVarRef(varRef);
+    }
+
+    private void resolveVarRef(VarRefNode varRef) {
       if (varRef.getDefnDecl() != null) {
-        // some passes (e.g. ContentSecurityPolicyNonceInjectionPass) add var refs with accurate
-        // defns.
         return;
       }
       LocalVariables localVariables = getLocalVariables();
       VarDefn varDefn = localVariables.lookup(varRef.getName());
       if (varDefn == null) {
-        errorReporter.report(
-            varRef.getSourceLocation(),
-            UNKNOWN_VARIABLE,
-            SoyErrors.getDidYouMeanMessage(
-                localVariables.allVariablesInScope(), varRef.getOriginalName()));
-        GlobalNode.replaceExprWithError(varRef);
+        reportUnknownVariable(varRef, localVariables);
       } else {
         varRef.setDefn(varDefn);
       }
+    }
+
+    private void reportUnknownVariable(VarRefNode varRef, LocalVariables localVariables) {
+      errorReporter.report(
+          varRef.getSourceLocation(),
+          UNKNOWN_VARIABLE,
+          SoyErrors.getDidYouMeanMessage(
+              localVariables.allVariablesInScope(), varRef.getOriginalName()));
+      GlobalNode.replaceExprWithError(varRef);
     }
   }
 }
