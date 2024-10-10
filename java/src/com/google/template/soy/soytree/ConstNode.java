@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -28,10 +29,7 @@ import com.google.template.soy.soytree.defn.ConstVar;
 public final class ConstNode extends AbstractCommandNode implements ExprHolderNode {
 
   private final ConstVar var;
-
-  /** The value expression that the variable is set to. */
   private final ExprRootNode valueExpr;
-
   private final boolean exported;
 
   public ConstNode(
