@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -55,11 +56,15 @@ public final class CheckTemplateHeaderVarsPass implements CompilerFileSetPass {
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     IndirectParamsCalculator ipc = new IndirectParamsCalculator(templateRegistryFull.get());
     for (SoyFileNode fileNode : sourceFiles) {
-      for (TemplateNode templateNode : fileNode.getTemplates()) {
-        checkTemplate(templateNode, ipc);
-      }
+      processFileNode(fileNode, ipc);
     }
     return Result.CONTINUE;
+  }
+
+  private void processFileNode(SoyFileNode fileNode, IndirectParamsCalculator calculator) {
+    for (TemplateNode templateNode : fileNode.getTemplates()) {
+      checkTemplate(templateNode, calculator);
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -67,16 +72,23 @@ public final class CheckTemplateHeaderVarsPass implements CompilerFileSetPass {
 
   private void checkTemplate(TemplateNode node, IndirectParamsCalculator calculator) {
     IndirectParamsInfo ipi = calculator.calculateIndirectParams(node);
+    checkForNamingCollisions(node, ipi);
+  }
 
+  private void checkForNamingCollisions(TemplateNode node, IndirectParamsInfo ipi) {
     // Check for naming collisions between @inject in this template and @param in a data=all callee
     for (TemplateHeaderVarDefn param : node.getInjectedParams()) {
-      for (TemplateMetadata template : ipi.paramKeyToCalleesMultimap.get(param.name())) {
-        errorReporter.report(
-            param.getSourceLocation(),
-            INJECTED_PARAM_COLLISION,
-            param.name(),
-            template.getTemplateName());
-      }
+      reportCollisions(param, ipi);
+    }
+  }
+
+  private void reportCollisions(TemplateHeaderVarDefn param, IndirectParamsInfo ipi) {
+    for (TemplateMetadata template : ipi.paramKeyToCalleesMultimap.get(param.name())) {
+      errorReporter.report(
+          param.getSourceLocation(),
+          INJECTED_PARAM_COLLISION,
+          param.name(),
+          template.getTemplateName());
     }
   }
 }
