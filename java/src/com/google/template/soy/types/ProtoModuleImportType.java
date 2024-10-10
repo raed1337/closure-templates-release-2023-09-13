@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -43,10 +44,28 @@ public abstract class ProtoModuleImportType extends ImportType {
 
   @Override
   public ImmutableCollection<String> getNestedSymbolNames() {
-    ImmutableSet.Builder<String> allNames = ImmutableSet.builder();
-    getDescriptor().getMessageTypes().forEach(t -> allNames.add(t.getName()));
-    getDescriptor().getEnumTypes().forEach(t -> allNames.add(t.getName()));
-    getDescriptor().getExtensions().forEach(t -> allNames.add(Field.computeSoyName(t)));
-    return allNames.build();
+    return ImmutableSet.<String>builder()
+        .addAll(getMessageTypeNames())
+        .addAll(getEnumTypeNames())
+        .addAll(getExtensionNames())
+        .build();
+  }
+
+  private ImmutableSet<String> getMessageTypeNames() {
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    getDescriptor().getMessageTypes().forEach(t -> builder.add(t.getName()));
+    return builder.build();
+  }
+
+  private ImmutableSet<String> getEnumTypeNames() {
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    getDescriptor().getEnumTypes().forEach(t -> builder.add(t.getName()));
+    return builder.build();
+  }
+
+  private ImmutableSet<String> getExtensionNames() {
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    getDescriptor().getExtensions().forEach(t -> builder.add(Field.computeSoyName(t)));
+    return builder.build();
   }
 }
