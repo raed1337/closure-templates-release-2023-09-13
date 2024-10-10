@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -43,4 +44,6 @@ abstract class AbstractBlockNode extends AbstractParentSoyNode<StandaloneNode>
   protected AbstractBlockNode(AbstractBlockNode orig, CopyState copyState) {
     super(orig, copyState);
   }
+
+  // Additional utility methods can be added here if necessary
 }
