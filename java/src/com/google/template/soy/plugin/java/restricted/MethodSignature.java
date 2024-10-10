@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -81,11 +82,8 @@ public abstract class MethodSignature {
   public static MethodSignature create(
       String classFqn, String method, String returnTypeName, String... argTypeNames)
       throws ClassNotFoundException {
-    Class<?> returnType = forName(returnTypeName);
-    Class<?>[] args = new Class<?>[argTypeNames.length];
-    for (int i = 0; i < argTypeNames.length; i++) {
-      args[i] = forName(argTypeNames[i]);
-    }
+    Class<?> returnType = resolveClass(returnTypeName);
+    Class<?>[] args = resolveArgumentTypes(argTypeNames);
     return create(classFqn, method, returnType, args);
   }
 
@@ -97,7 +95,19 @@ public abstract class MethodSignature {
   }
 
   public static Class<?> forName(String className) throws ClassNotFoundException {
+    return resolveClass(className);
+  }
+
+  private static Class<?> resolveClass(String className) throws ClassNotFoundException {
     Class<?> primitive = PRIMITIVE_TYPE_INDEX.get(className);
     return primitive != null ? primitive : Class.forName(className);
+  }
+
+  private static Class<?>[] resolveArgumentTypes(String... argTypeNames) throws ClassNotFoundException {
+    Class<?>[] args = new Class<?>[argTypeNames.length];
+    for (int i = 0; i < argTypeNames.length; i++) {
+      args[i] = resolveClass(argTypeNames[i]);
+    }
+    return args;
   }
 }
