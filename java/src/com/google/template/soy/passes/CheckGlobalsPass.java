@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -49,10 +50,12 @@ final class CheckGlobalsPass implements CompilerFilePass {
 
     @Override
     protected void visitGlobalNode(GlobalNode global) {
-      if (global.alreadyReportedError()) {
-        return;
+      if (!global.alreadyReportedError()) {
+        reportGlobalError(global);
       }
+    }
 
+    private void reportGlobalError(GlobalNode global) {
       String sourceName = global.getIdentifier().originalName();
       String extraErrorMessage =
           SoyErrors.getDidYouMeanMessage(getLocalVariables().allVariablesInScope(), sourceName);
