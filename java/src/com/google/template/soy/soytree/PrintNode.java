@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -76,7 +77,6 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
 
   @Nullable private HtmlContext htmlContext;
 
-  // TODO(user): Consider adding static factory methods for implicit vs explicit print.
   public PrintNode(
       int id,
       SourceLocation location,
@@ -87,11 +87,16 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
     super(id, location, isImplicit ? "" : "print");
     this.isImplicit = isImplicit;
     this.expr = new ExprRootNode(expr);
-
     this.attributes = ImmutableList.copyOf(attributes);
-    SourceLocation phNameLocation = null;
+    this.placeholder = createPlaceholder(attributes, errorReporter);
+  }
+
+  private MessagePlaceholder createPlaceholder(
+      Iterable<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
     String phName = null;
+    SourceLocation phNameLocation = null;
     Optional<String> phExample = Optional.empty();
+
     for (CommandTagAttribute attribute : attributes) {
       switch (attribute.getName().identifier()) {
         case PHNAME_ATTR:
@@ -113,28 +118,20 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
               ImmutableList.of(PHNAME_ATTR, PHEX_ATTR));
       }
     }
-    this.placeholder =
-        (phName == null)
-            ? MessagePlaceholder.create(
-                genNaiveBaseNameForExpr(expr, FALLBACK_BASE_PLACEHOLDER_NAME), phExample)
-            : MessagePlaceholder.createWithUserSuppliedName(
-                convertToUpperUnderscore(phName), phName, phNameLocation, phExample);
+    return (phName == null)
+        ? MessagePlaceholder.create(
+            genNaiveBaseNameForExpr(expr, FALLBACK_BASE_PLACEHOLDER_NAME), phExample)
+        : MessagePlaceholder.createWithUserSuppliedName(
+            convertToUpperUnderscore(phName), phName, phNameLocation, phExample);
   }
 
-  /**
-   * Copy constructor.
-   *
-   * @param orig The node to copy.
-   */
   private PrintNode(PrintNode orig, CopyState copyState) {
     super(orig, copyState);
     this.isImplicit = orig.isImplicit;
     this.expr = orig.expr.copy(copyState);
     this.placeholder = orig.placeholder;
     this.htmlContext = orig.htmlContext;
-    this.attributes =
-        orig.attributes.stream().map(c -> c.copy(copyState)).collect(toImmutableList());
-    // we may have handed out a copy to ourselves via genSamenessKey()
+    this.attributes = orig.attributes.stream().map(c -> c.copy(copyState)).collect(toImmutableList());
     copyState.updateRefs(orig, this);
   }
 
@@ -143,11 +140,6 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
     return getSourceLocation();
   }
 
-  /**
-   * Gets the HTML source context immediately prior to the node (typically tag, attribute value,
-   * HTML PCDATA, or plain text) which this node emits in. This affects how the node is escaped (for
-   * traditional backends) or how it's passed to incremental DOM APIs.
-   */
   @Override
   public HtmlContext getHtmlContext() {
     return checkNotNull(
@@ -163,7 +155,6 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
     return Kind.PRINT_NODE;
   }
 
-  /** Returns whether the 'print' command name was implicit. */
   public boolean isImplicit() {
     return isImplicit;
   }
@@ -172,7 +163,6 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
     return getChildren().stream().anyMatch(pd -> !pd.isSynthetic());
   }
 
-  /** Returns the parsed expression. */
   public ExprRootNode getExpr() {
     return expr;
   }
@@ -236,14 +226,20 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
   public String getCommandText() {
     StringBuilder sb = new StringBuilder();
     sb.append(expr.toSourceString());
+    appendDirectives(sb);
+    appendPlaceholderAttributes(sb);
+    return sb.toString();
+  }
+
+  private void appendDirectives(StringBuilder sb) {
     for (PrintDirectiveNode child : getChildren()) {
       sb.append(' ').append(child.toSourceString());
     }
-    placeholder
-        .userSuppliedName()
-        .ifPresent(phname -> sb.append(" phname=\"").append(phname).append('"'));
+  }
+
+  private void appendPlaceholderAttributes(StringBuilder sb) {
+    placeholder.userSuppliedName().ifPresent(phname -> sb.append(" phname=\"").append(phname).append('"'));
     placeholder.example().ifPresent(phex -> sb.append(" phex=\"").append(phex).append('"'));
-    return sb.toString();
   }
 
   @Override
@@ -262,11 +258,6 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
     return new PrintNode(this, copyState);
   }
 
-  /**
-   * Equivalence relation for print nodes.
-   *
-   * <p>Doesn't account for {@code phname} or {@code phex} attributes
-   */
   static final class PrintEquivalence extends Equivalence<PrintNode> {
     private static final PrintEquivalence INSTANCE = new PrintEquivalence();
 
@@ -276,45 +267,45 @@ public final class PrintNode extends AbstractParentCommandNode<PrintDirectiveNod
 
     @Override
     protected boolean doEquivalent(PrintNode a, PrintNode b) {
-      ExprEquivalence exprEquivalence = new ExprEquivalence();
-      if (!exprEquivalence.equivalent(a.getExpr(), b.getExpr())) {
+      if (!new ExprEquivalence().equivalent(a.getExpr(), b.getExpr())) {
         return false;
       }
-      List<PrintDirectiveNode> aDirectives = a.getChildren();
-      List<PrintDirectiveNode> bDirectives = b.getChildren();
+      return compareDirectives(a.getChildren(), b.getChildren());
+    }
+
+    private boolean compareDirectives(List<PrintDirectiveNode> aDirectives, List<PrintDirectiveNode> bDirectives) {
       if (aDirectives.size() != bDirectives.size()) {
         return false;
       }
       for (int i = 0; i < aDirectives.size(); ++i) {
-        PrintDirectiveNode aDirective = aDirectives.get(i);
-        PrintDirectiveNode bDirective = bDirectives.get(i);
-        if (!aDirective.getName().equals(bDirective.getName())) {
-          return false;
-        }
-        // cast ImmutableList<ExprRootNode> to List<ExprNode>
-        @SuppressWarnings("unchecked")
-        List<ExprNode> one = (List<ExprNode>) ((List<?>) aDirective.getExprList());
-        @SuppressWarnings("unchecked")
-        List<ExprNode> two = (List<ExprNode>) ((List<?>) bDirective.getExprList());
-        if (!exprEquivalence.equivalent(one, two)) {
+        if (!areDirectivesEquivalent(aDirectives.get(i), bDirectives.get(i))) {
           return false;
         }
       }
       return true;
     }
 
+    private boolean areDirectivesEquivalent(PrintDirectiveNode aDirective, PrintDirectiveNode bDirective) {
+      if (!aDirective.getName().equals(bDirective.getName())) {
+        return false;
+      }
+      List<ExprNode> one = (List<ExprNode>) ((List<?>) aDirective.getExprList());
+      List<ExprNode> two = (List<ExprNode>) ((List<?>) bDirective.getExprList());
+      return new ExprEquivalence().equivalent(one, two);
+    }
+
     @Override
     protected int doHash(PrintNode t) {
-      ExprEquivalence exprEquivalence = new ExprEquivalence();
-      int hc = exprEquivalence.hash(t.getExpr());
+      int hc = new ExprEquivalence().hash(t.getExpr());
       for (PrintDirectiveNode child : t.getChildren()) {
-        // cast ImmutableList<ExprRootNode> to List<ExprNode>
-        @SuppressWarnings("unchecked")
-        List<ExprNode> list = (List<ExprNode>) ((List<?>) child.getExprList());
-        hc = 31 * hc + child.getName().hashCode();
-        hc = 31 * hc + exprEquivalence.hash(list);
+        hc = 31 * hc + computeDirectiveHash(child);
       }
       return hc;
+    }
+
+    private int computeDirectiveHash(PrintDirectiveNode child) {
+      List<ExprNode> list = (List<ExprNode>) ((List<?>) child.getExprList());
+      return 31 * child.getName().hashCode() + new ExprEquivalence().hash(list);
     }
   }
 }
