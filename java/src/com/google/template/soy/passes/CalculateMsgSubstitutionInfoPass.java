@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -39,6 +40,10 @@ final class CalculateMsgSubstitutionInfoPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
+    calculateSubstitutionInfoForMessages(file);
+  }
+
+  private void calculateSubstitutionInfoForMessages(SoyFileNode file) {
     for (MsgNode msg : SoyTreeUtils.getAllNodesOfType(file, MsgNode.class)) {
       msg.calculateSubstitutionInfo(errorReporter);
     }
