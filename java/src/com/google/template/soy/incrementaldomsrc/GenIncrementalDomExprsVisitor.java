@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -83,9 +84,9 @@ public final class GenIncrementalDomExprsVisitor extends GenJsExprsVisitor {
 
   @Override
   public List<Expression> exec(SoyNode node) {
-    chunks = new ArrayList<>();
+    List<Expression> resultChunks = new ArrayList<>();
     visit(node);
-    return chunks;
+    return resultChunks;
   }
 
   @Override
