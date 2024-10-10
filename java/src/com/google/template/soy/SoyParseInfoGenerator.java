@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -46,7 +47,7 @@ public final class SoyParseInfoGenerator extends AbstractSoyCompiler {
   @Option(
       name = "--generateBuilders",
       usage =
-          "[Reqiured] Whether to generate the new java template invocation builders"
+          "[Required] Whether to generate the new java template invocation builders"
               + " (FooTemplates.java). If false, generates the old FooSoyInfo.java files"
               + " instead.")
   private boolean generateBuilders = false;
@@ -69,7 +70,7 @@ public final class SoyParseInfoGenerator extends AbstractSoyCompiler {
   @Option(
       name = "--outputSrcJar",
       usage =
-          "[Optional]  The path to the source jar to write. If a file with the same name already"
+          "[Optional] The path to the source jar to write. If a file with the same name already"
               + " exists at this location, it will be overwritten. Either --outputDirectory or"
               + " --outputJar must be set.")
   private File outputSrcJar;
@@ -107,8 +108,7 @@ public final class SoyParseInfoGenerator extends AbstractSoyCompiler {
 
   @Override
   protected void validateFlags() {
-    // Java package is always required.
-    if (javaPackage.length() == 0) {
+    if (javaPackage.isEmpty()) {
       exitWithError("Must provide Java package.");
     }
 
@@ -124,32 +124,42 @@ public final class SoyParseInfoGenerator extends AbstractSoyCompiler {
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) throws IOException {
     SoyFileSet sfs = sfsBuilder.build();
-
-    ImmutableList<GeneratedFile> genFiles =
-        generateBuilders
-            ? sfs.generateBuilders(javaPackage, kytheCorpus)
-            : sfs.generateParseInfo(javaPackage, kytheCorpus, javaClassNameSource);
+    ImmutableList<GeneratedFile> genFiles = generateFiles(sfs);
 
     if (outputSrcJar == null) {
-      for (GeneratedFile genFile : genFiles) {
-        File outputFile = new File(outputDirectory, genFile.fileName());
-        BaseUtils.ensureDirsExistInPath(outputFile.getPath());
-        CharSink fileSink = Files.asCharSink(outputFile, UTF_8);
-        writeContentsWithKytheComment(genFile, fileSink);
-      }
+      writeFilesToDirectory(genFiles);
     } else {
-      String resourcePath = javaPackage.replace('.', '/') + "/";
-      try (SoyJarFileWriter writer = new SoyJarFileWriter(new FileOutputStream(outputSrcJar))) {
-        for (GeneratedFile genFile : genFiles) {
-          writer.writeEntry(
-              resourcePath + genFile.fileName(),
-              contentsWithKytheComment(genFile, false).asByteSource(UTF_8));
-        }
+      writeFilesToJar(genFiles);
+    }
+  }
+
+  private ImmutableList<GeneratedFile> generateFiles(SoyFileSet sfs) {
+    return generateBuilders
+        ? sfs.generateBuilders(javaPackage, kytheCorpus)
+        : sfs.generateParseInfo(javaPackage, kytheCorpus, javaClassNameSource);
+  }
+
+  private void writeFilesToDirectory(ImmutableList<GeneratedFile> genFiles) throws IOException {
+    for (GeneratedFile genFile : genFiles) {
+      File outputFile = new File(outputDirectory, genFile.fileName());
+      BaseUtils.ensureDirsExistInPath(outputFile.getPath());
+      CharSink fileSink = Files.asCharSink(outputFile, UTF_8);
+      writeFileContents(genFile, fileSink);
+    }
+  }
+
+  private void writeFilesToJar(ImmutableList<GeneratedFile> genFiles) throws IOException {
+    String resourcePath = javaPackage.replace('.', '/') + "/";
+    try (SoyJarFileWriter writer = new SoyJarFileWriter(new FileOutputStream(outputSrcJar))) {
+      for (GeneratedFile genFile : genFiles) {
+        writer.writeEntry(
+            resourcePath + genFile.fileName(),
+            contentsWithKytheComment(genFile, false).asByteSource(UTF_8));
       }
     }
   }
 
-  static void writeContentsWithKytheComment(GeneratedFile file, CharSink sink) throws IOException {
+  static void writeFileContents(GeneratedFile file, CharSink sink) throws IOException {
     contentsWithKytheComment(file, false).copyTo(sink);
   }
 
@@ -163,26 +173,28 @@ public final class SoyParseInfoGenerator extends AbstractSoyCompiler {
 
   private static CharSource contentsWithKytheComment(GeneratedFile file, boolean withTestOutput) {
     List<CharSource> parts = new ArrayList<>();
-    parts.add(CharSource.wrap((file.contents())));
+    parts.add(CharSource.wrap(file.contents()));
     Message generatedCodeInfo = file.generatedCodeInfo();
     if (generatedCodeInfo != null) {
-      if (!file.contents().endsWith("\n")) {
-        parts.add(CharSource.wrap(("\n")));
-      }
-      parts.add(CharSource.wrap(("// GeneratedCodeInfo:")));
-      if (withTestOutput) {
-        parts.add(CharSource.wrap(("--base64 encoding of the proto below--")));
-      } else {
-        parts.add(CharSource.wrap((BaseEncoding.base64().encode(generatedCodeInfo.toByteArray()))));
-      }
-      parts.add(CharSource.wrap(("\n")));
-
-      if (withTestOutput) {
-        parts.add(CharSource.wrap(("/**\n\nHuman-readable test-only output:\n\n")));
-        parts.add(CharSource.wrap(TextFormat.printer().printToString(generatedCodeInfo)));
-        parts.add(CharSource.wrap(("\n*/\n")));
-      }
+      addGeneratedCodeInfo(parts, generatedCodeInfo, withTestOutput);
     }
     return CharSource.concat(parts);
+  }
+
+  private static void addGeneratedCodeInfo(List<CharSource> parts, Message generatedCodeInfo, boolean withTestOutput) {
+    if (!parts.get(0).toString().endsWith("\n")) {
+      parts.add(CharSource.wrap("\n"));
+    }
+    parts.add(CharSource.wrap("// GeneratedCodeInfo:"));
+    parts.add(CharSource.wrap(withTestOutput ?
+        "--base64 encoding of the proto below--" :
+        BaseEncoding.base64().encode(generatedCodeInfo.toByteArray())));
+    parts.add(CharSource.wrap("\n"));
+
+    if (withTestOutput) {
+      parts.add(CharSource.wrap("/**\n\nHuman-readable test-only output:\n\n"));
+      parts.add(CharSource.wrap(TextFormat.printer().printToString(generatedCodeInfo)));
+      parts.add(CharSource.wrap("\n*/\n"));
+    }
   }
 }
