@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -67,11 +68,6 @@ public final class TypeRegistries {
     return new CompositeSoyTypeRegistry(typeRegistry, typeInterner);
   }
 
-  /**
-   * Looks up a type by name, including by FQN proto name. Depending on whether FQN names are
-   * allowed, deprecated, or disallowed this method may call {@code errorReporter} and may return
-   * the type or null.
-   */
   public static SoyType getTypeOrProtoFqn(
       SoyTypeRegistry registry, ErrorReporter errorReporter, Identifier id) {
     return getTypeOrProtoFqn(registry, errorReporter, id, id.identifier());
@@ -97,12 +93,10 @@ public final class TypeRegistries {
 
     private final Interner<SoyType> types = Interners.newStrongInterner();
     private final Map<String, SoyProtoType> protoTypes = new ConcurrentHashMap<>();
-    private final Map<GenericDescriptor, ImmutableMap<String, GenericDescriptor>>
-        protoMembersCache = new ConcurrentHashMap<>();
+    private final Map<GenericDescriptor, ImmutableMap<String, GenericDescriptor>> protoMembersCache = new ConcurrentHashMap<>();
     private final Map<GenericDescriptor, ImportType> protoImportTypes = new ConcurrentHashMap<>();
 
     public TypeInternerImpl() {
-      // Register the special number type so == comparisons work
       checkState(types.intern(NUMBER_TYPE) == NUMBER_TYPE);
     }
 
@@ -113,52 +107,48 @@ public final class TypeRegistries {
     }
 
     @Override
-    public SoyProtoType getOrComputeProtoType(
-        Descriptor descriptor, Function<? super String, ? extends SoyProtoType> mapper) {
+    public SoyProtoType getOrComputeProtoType(Descriptor descriptor, Function<? super String, ? extends SoyProtoType> mapper) {
       return protoTypes.computeIfAbsent(descriptor.getFullName(), mapper);
     }
 
     @Override
     public ImportType getProtoImportType(GenericDescriptor descriptor) {
-      return protoImportTypes.computeIfAbsent(
-          descriptor,
-          d -> {
-            if (d instanceof FileDescriptor) {
-              return ProtoModuleImportType.create((FileDescriptor) d);
-            }
-            if (d instanceof Descriptor) {
-              return ProtoImportType.create((Descriptor) d);
-            }
-            if (d instanceof EnumDescriptor) {
-              return ProtoEnumImportType.create((EnumDescriptor) d);
-            }
-            if (d instanceof FieldDescriptor && ((FieldDescriptor) d).isExtension()) {
-              return ProtoExtensionImportType.create((FieldDescriptor) d);
-            }
-            throw new ClassCastException(d.getClass().getName());
-          });
+      return protoImportTypes.computeIfAbsent(descriptor, this::createImportType);
+    }
+    
+    private ImportType createImportType(GenericDescriptor d) {
+      if (d instanceof FileDescriptor) {
+        return ProtoModuleImportType.create((FileDescriptor) d);
+      }
+      if (d instanceof Descriptor) {
+        return ProtoImportType.create((Descriptor) d);
+      }
+      if (d instanceof EnumDescriptor) {
+        return ProtoEnumImportType.create((EnumDescriptor) d);
+      }
+      if (d instanceof FieldDescriptor && ((FieldDescriptor) d).isExtension()) {
+        return ProtoExtensionImportType.create((FieldDescriptor) d);
+      }
+      throw new ClassCastException(d.getClass().getName());
     }
 
     @Override
     public SoyType getProtoImportType(FileDescriptor descriptor, String member) {
-      return getProtoImportType(
-          protoMembersCache.computeIfAbsent(descriptor, TypeInternerImpl::buildMemberIndex),
-          member);
+      return getProtoImportType(getProtoMembersIndex(descriptor), member);
     }
 
     @Override
     public SoyType getProtoImportType(Descriptor descriptor, String member) {
-      return getProtoImportType(
-          protoMembersCache.computeIfAbsent(descriptor, TypeInternerImpl::buildMemberIndex),
-          member);
+      return getProtoImportType(getProtoMembersIndex(descriptor), member);
     }
 
     private SoyType getProtoImportType(Map<String, GenericDescriptor> index, String member) {
       GenericDescriptor d = index.get(member);
-      if (d != null) {
-        return getProtoImportType(d);
-      }
-      return UnknownType.getInstance();
+      return d != null ? getProtoImportType(d) : UnknownType.getInstance();
+    }
+
+    private ImmutableMap<String, GenericDescriptor> getProtoMembersIndex(GenericDescriptor d) {
+      return protoMembersCache.computeIfAbsent(d, TypeInternerImpl::buildMemberIndex);
     }
 
     private static ImmutableMap<String, GenericDescriptor> buildMemberIndex(GenericDescriptor d) {
@@ -245,8 +235,7 @@ public final class TypeRegistries {
     }
 
     @Override
-    public SoyProtoType getOrComputeProtoType(
-        Descriptor descriptor, Function<? super String, ? extends SoyProtoType> mapper) {
+    public SoyProtoType getOrComputeProtoType(Descriptor descriptor, Function<? super String, ? extends SoyProtoType> mapper) {
       return typeInterner.getOrComputeProtoType(descriptor, mapper);
     }
 
