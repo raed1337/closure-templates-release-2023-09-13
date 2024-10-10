@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -33,7 +34,7 @@ import java.util.Set;
 
 /** statically analyzes {@link SoyJavaSourceFunction} plugins. */
 public final class PluginAnalyzer {
-  /** Simple metadata about the plugin. */
+  
   @AutoValue
   public abstract static class PluginMetadata {
     static PluginMetadata create(
@@ -48,46 +49,39 @@ public final class PluginAnalyzer {
           ImmutableSet.copyOf(staticMethodSignatures));
     }
 
-    /** Whether or not this plugin depends on the {@link JavaPluginContext}. */
     public abstract boolean accessesContext();
-
-    /** The set of plugin instances class names required for this plugin at runtime. */
     public abstract ImmutableSet<String> pluginInstanceNames();
-
-    /** The set of non-null instance method signatures required by this plugin at runtime. */
     public abstract ImmutableSet<MethodSignature> instanceMethodSignatures();
-
-    /** The set of non-null static method signatures required by this plugin at runtime. */
     public abstract ImmutableSet<MethodSignature> staticMethodSignatures();
   }
 
   private PluginAnalyzer() {}
 
-  /**
-   * Calls {@link SoyJavaSourceFunction#applyForJavaSource} with the arity of each supported
-   * signature to collect the instance classes used by the function.
-   */
   public static PluginMetadata analyze(SoyJavaSourceFunction ssf) {
     FinderFactory factory = new FinderFactory();
     FinderContext context = new FinderContext();
     SoyFunctionSignature fnSig = ssf.getClass().getAnnotation(SoyFunctionSignature.class);
-    for (Signature sig : fnSig.value()) {
-      List<JavaValue> args = Collections.nCopies(sig.parameterTypes().length, FinderValue.INSTANCE);
-      ssf.applyForJavaSource(factory, args, context);
-    }
-    return PluginMetadata.create(
-        context.accessed, factory.instances, factory.instanceMethodSigs, factory.staticMethodSigs);
+    analyzeSignatures(ssf, factory, context, fnSig);
+    return createPluginMetadata(context, factory);
   }
 
-  /**
-   * Calls {@link SoyJavaSourceFunction#applyForJavaSource} with the number of args requested and
-   * returns the instances it used.
-   */
   public static PluginMetadata analyze(SoyJavaSourceFunction ssf, int argCount) {
     FinderFactory factory = new FinderFactory();
     FinderContext context = new FinderContext();
     List<JavaValue> args = Collections.nCopies(argCount, FinderValue.INSTANCE);
     ssf.applyForJavaSource(factory, args, context);
+    return createPluginMetadata(context, factory);
+  }
+
+  private static void analyzeSignatures(SoyJavaSourceFunction ssf, FinderFactory factory, 
+                                        FinderContext context, SoyFunctionSignature fnSig) {
+    for (Signature sig : fnSig.value()) {
+      List<JavaValue> args = Collections.nCopies(sig.parameterTypes().length, FinderValue.INSTANCE);
+      ssf.applyForJavaSource(factory, args, context);
+    }
+  }
+
+  private static PluginMetadata createPluginMetadata(FinderContext context, FinderFactory factory) {
     return PluginMetadata.create(
         context.accessed, factory.instances, factory.instanceMethodSigs, factory.staticMethodSigs);
   }
