@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -22,16 +23,16 @@ import java.io.IOException;
 
 /** Adapter for using an Appendable as an AdvisingAppendable. */
 final class AppendableAsAdvisingAppendable implements AdvisingAppendable {
-  static AdvisingAppendable asAdvisingAppendable(Appendable appendable) {
-    return appendable instanceof AdvisingAppendable
-        ? (AdvisingAppendable) appendable
-        : new AppendableAsAdvisingAppendable(appendable);
-  }
-
   private final Appendable appendable;
 
   private AppendableAsAdvisingAppendable(Appendable appendable) {
     this.appendable = checkNotNull(appendable);
+  }
+
+  static AdvisingAppendable asAdvisingAppendable(Appendable appendable) {
+    return appendable instanceof AdvisingAppendable
+        ? (AdvisingAppendable) appendable
+        : new AppendableAsAdvisingAppendable(appendable);
   }
 
   @CanIgnoreReturnValue
@@ -57,7 +58,6 @@ final class AppendableAsAdvisingAppendable implements AdvisingAppendable {
 
   @Override
   public boolean softLimitReached() {
-    // no limits can be inferred
-    return false;
+    return false; // no limits can be inferred
   }
 }
