@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -27,17 +28,19 @@ public final class SoyIncrementalDomSrcOptions {
 
   /** Whether we should add a requirecss annotation for the generated GSS header file. */
   private boolean dependOnCssHeader;
-
   private boolean googMsgsAreExternal;
 
   public SoyIncrementalDomSrcOptions() {
-    dependOnCssHeader = false;
-    googMsgsAreExternal = true;
+    this(false, true);
   }
 
   private SoyIncrementalDomSrcOptions(SoyIncrementalDomSrcOptions orig) {
-    this.dependOnCssHeader = orig.dependOnCssHeader;
-    this.googMsgsAreExternal = orig.googMsgsAreExternal;
+    this(orig.dependOnCssHeader, orig.googMsgsAreExternal);
+  }
+
+  private SoyIncrementalDomSrcOptions(boolean dependOnCssHeader, boolean googMsgsAreExternal) {
+    this.dependOnCssHeader = dependOnCssHeader;
+    this.googMsgsAreExternal = googMsgsAreExternal;
   }
 
   /**
@@ -57,7 +60,7 @@ public final class SoyIncrementalDomSrcOptions {
   /**
    * Sets whether we should add a requirecss annotation for the generated GSS header file.
    *
-   * @param dependOnCssHeader The value to set.
+   * @param googMsgsAreExternal The value to set.
    */
   public void setGoogMsgsAreExternal(boolean googMsgsAreExternal) {
     this.googMsgsAreExternal = googMsgsAreExternal;
@@ -73,8 +76,11 @@ public final class SoyIncrementalDomSrcOptions {
    * lots of {@code jssrc} which needs to interact with this object.
    */
   SoyJsSrcOptions toJsSrcOptions() {
+    return createJsSrcOptions(googMsgsAreExternal, dependOnCssHeader);
+  }
+
+  private SoyJsSrcOptions createJsSrcOptions(boolean googMsgsAreExternal, boolean dependOnCssHeader) {
     SoyJsSrcOptions jsSrcOptions = new SoyJsSrcOptions();
-    // Only goog.module generation supported
     jsSrcOptions.setShouldGenerateGoogModules(true);
     jsSrcOptions.setShouldGenerateGoogMsgDefs(true);
     jsSrcOptions.setGoogMsgsAreExternal(googMsgsAreExternal);
