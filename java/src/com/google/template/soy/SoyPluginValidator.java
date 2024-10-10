@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -82,10 +83,22 @@ public final class SoyPluginValidator extends AbstractSoyCompiler {
 
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) throws IOException {
+    configurePluginRuntimeJars(sfsBuilder);
+    String tsxSource = validatePluginsAndGetTsxSource(sfsBuilder);
+    writeOutputFiles(tsxSource);
+  }
+
+  private void configurePluginRuntimeJars(SoyFileSet.Builder sfsBuilder) {
     if (pluginRuntimeJars != null) {
       sfsBuilder.setPluginRuntimeJars(pluginRuntimeJars);
     }
-    String tsxSource = sfsBuilder.build().validateUserPlugins(validateJavaImpls, tsxOutput != null);
+  }
+
+  private String validatePluginsAndGetTsxSource(SoyFileSet.Builder sfsBuilder) {
+    return sfsBuilder.build().validateUserPlugins(validateJavaImpls, tsxOutput != null);
+  }
+
+  private void writeOutputFiles(String tsxSource) throws IOException {
     Files.write(output.toPath(), ImmutableList.of("true"), UTF_8);
     if (tsxOutput != null) {
       Files.write(tsxOutput.toPath(), tsxSource.getBytes(UTF_8));
