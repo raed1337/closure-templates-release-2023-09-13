@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -49,6 +51,8 @@ import java.util.List;
 public final class ConcatCssValuesFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Methods methods = new Methods();
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -61,16 +65,15 @@ public final class ConcatCssValuesFunction
     return factory.global("runtime.concat_css_values").call(args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
+  @Override
+  public JavaValue applyForJavaSource(
+      JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return factory.callStaticMethod(methods.CONCAT_CSS_VALUES, args.get(0), args.get(1));
+  }
+
   private static final class Methods {
     static final Method CONCAT_CSS_VALUES =
         JavaValueFactory.createMethod(
             BasicFunctionsRuntime.class, "concatCssValues", SoyValue.class, SoyValue.class);
-  }
-
-  @Override
-  public JavaValue applyForJavaSource(
-      JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.CONCAT_CSS_VALUES, args.get(0), args.get(1));
   }
 }
