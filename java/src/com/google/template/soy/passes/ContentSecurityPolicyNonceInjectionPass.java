@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -104,46 +105,66 @@ public final class ContentSecurityPolicyNonceInjectionPass implements CompilerFi
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    // First, make sure that the user hasn't specified any injected parameters called 'csp_nonce' or
-    // 'csp_style_nonce'.
+    validateInjectedParameters(file);
+    processTemplates(file, nodeIdGen);
+  }
+
+  private void validateInjectedParameters(SoyFileNode file) {
     for (TemplateNode template : file.getTemplates()) {
       for (TemplateParam param : template.getAllParams()) {
-        if (param.isInjected()
-            && (param.name().equals(CSP_NONCE_VARIABLE_NAME)
-                || param.name().equals(CSP_STYLE_NONCE_VARIABLE_NAME))) {
+        if (param.isInjected() && isCspNonce(param.name())) {
           errorReporter.report(param.nameLocation(), IJ_CSP_NONCE_REFERENCE, param.name());
         }
       }
     }
+  }
+
+  private boolean isCspNonce(String paramName) {
+    return paramName.equals(CSP_NONCE_VARIABLE_NAME) || paramName.equals(CSP_STYLE_NONCE_VARIABLE_NAME);
+  }
+
+  private void processTemplates(SoyFileNode file, IdGenerator nodeIdGen) {
     for (TemplateNode template : file.getTemplates()) {
       Map<NonceType, TemplateParam> defns = new EnumMap<>(NonceType.class);
-      for (HtmlOpenTagNode openTag :
-          SoyTreeUtils.getAllNodesOfType(template, HtmlOpenTagNode.class)) {
-        NonceType nonceType = isTagNonceable(openTag);
-        if (nonceType != NonceType.NONE) {
-          HtmlAttributeNode manualNonce = openTag.getDirectAttributeNamed("nonce");
-          if (manualNonce != null) {
-            errorReporter.report(manualNonce.getSourceLocation(), MANUAL_NONCE);
-            continue;
-          }
-          TemplateParam defn = defns.get(nonceType);
-          if (defn == null) {
-            defn = createDefn(nonceType);
-            defns.put(nonceType, defn);
-            template.addParam(defn);
-          }
-          // this should point to the character immediately before the '>' or '/>' at the end of the
-          // open tag
-          SourceLocation insertionLocation =
-              openTag
-                  .getSourceLocation()
-                  .getEndPoint()
-                  .offset(0, openTag.isSelfClosing() ? -2 : -1)
-                  .asLocation(openTag.getSourceLocation().getFilePath());
-          openTag.addChild(createCspInjection(insertionLocation, nodeIdGen, defn));
-        }
+      for (HtmlOpenTagNode openTag : SoyTreeUtils.getAllNodesOfType(template, HtmlOpenTagNode.class)) {
+        handleOpenTag(openTag, template, defns, nodeIdGen);
       }
     }
+  }
+
+  private void handleOpenTag(HtmlOpenTagNode openTag, TemplateNode template, Map<NonceType, TemplateParam> defns, IdGenerator nodeIdGen) {
+    NonceType nonceType = isTagNonceable(openTag);
+    if (nonceType != NonceType.NONE) {
+      checkForManualNonce(openTag);
+      TemplateParam defn = getOrCreateNonceDefinition(defns, nonceType, template);
+      insertCspInjection(openTag, defn, nodeIdGen);
+    }
+  }
+
+  private void checkForManualNonce(HtmlOpenTagNode openTag) {
+    HtmlAttributeNode manualNonce = openTag.getDirectAttributeNamed("nonce");
+    if (manualNonce != null) {
+      errorReporter.report(manualNonce.getSourceLocation(), MANUAL_NONCE);
+    }
+  }
+
+  private TemplateParam getOrCreateNonceDefinition(Map<NonceType, TemplateParam> defns, NonceType nonceType, TemplateNode template) {
+    return defns.computeIfAbsent(nonceType, type -> {
+      TemplateParam defn = createDefn(type);
+      template.addParam(defn);
+      return defn;
+    });
+  }
+
+  private void insertCspInjection(HtmlOpenTagNode openTag, TemplateParam defn, IdGenerator nodeIdGen) {
+    SourceLocation insertionLocation = getInsertionLocation(openTag);
+    openTag.addChild(createCspInjection(insertionLocation, nodeIdGen, defn));
+  }
+
+  private SourceLocation getInsertionLocation(HtmlOpenTagNode openTag) {
+    return openTag.getSourceLocation().getEndPoint()
+        .offset(0, openTag.isSelfClosing() ? -2 : -1)
+        .asLocation(openTag.getSourceLocation().getFilePath());
   }
 
   private TemplateParam createDefn(NonceType nonceType) {
@@ -151,8 +172,6 @@ public final class ContentSecurityPolicyNonceInjectionPass implements CompilerFi
         nonceType == NonceType.STYLE ? CSP_STYLE_NONCE_VARIABLE_NAME : CSP_NONCE_VARIABLE_NAME,
         SourceLocation.UNKNOWN,
         SourceLocation.UNKNOWN,
-        // We don't use string because the targets don't have the dependency on
-        // goog.soy.data.UnsanitizedText.
         NamedTypeNode.create(SourceLocation.UNKNOWN, "any"),
         /* isInjected= */ true,
         /* isImplicit = */ false,
@@ -185,7 +204,6 @@ public final class ContentSecurityPolicyNonceInjectionPass implements CompilerFi
     return attr == null ? null : attr.getStaticContent();
   }
 
-  // See https://html.spec.whatwg.org/#obtaining-a-resource-from-a-link-element
   private NonceType isNonceableLink(HtmlOpenTagNode tag) {
     String relAttrValue = getStaticDirectAttributeValue(tag, "rel");
     if (relAttrValue == null) {
@@ -198,14 +216,19 @@ public final class ContentSecurityPolicyNonceInjectionPass implements CompilerFi
       return NonceType.STYLE;
     }
     if (Ascii.equalsIgnoreCase("preload", relAttrValue)) {
-      String asAttrValue = getStaticDirectAttributeValue(tag, "as");
-      if (asAttrValue == null) {
-        return NonceType.NONE;
-      } else if (Ascii.equalsIgnoreCase(asAttrValue, "style")) {
-        return NonceType.STYLE;
-      } else if (Ascii.equalsIgnoreCase(asAttrValue, "script")) {
-        return NonceType.OTHER;
-      }
+      return handlePreloadLink(tag);
+    }
+    return NonceType.NONE;
+  }
+
+  private NonceType handlePreloadLink(HtmlOpenTagNode tag) {
+    String asAttrValue = getStaticDirectAttributeValue(tag, "as");
+    if (asAttrValue == null) {
+      return NonceType.NONE;
+    } else if (Ascii.equalsIgnoreCase(asAttrValue, "style")) {
+      return NonceType.STYLE;
+    } else if (Ascii.equalsIgnoreCase(asAttrValue, "script")) {
+      return NonceType.OTHER;
     }
     return NonceType.NONE;
   }
@@ -244,15 +267,6 @@ public final class ContentSecurityPolicyNonceInjectionPass implements CompilerFi
             referenceCspNonce(insertionLocation, defn),
             /* attributes= */ ImmutableList.of(),
             ErrorReporter.exploding());
-    // Add an escaping directive for the value.
-    // Because we run before the autoescaper we know that the value cannot cause a dom injection,
-    // however because this value is inserted by the compiler in a way that isn't visible to the
-    // author we need to be more careful.
-    // Notably, if the document being written uses AngularJs and allows the nonce to be user
-    // controlled, then it is possible that angular interpolation of html attributes will allow for
-    // XSS.  This is a problem for all angularJs documents but for normal print nodes the author can
-    // at least consider the injection possibilities.  For auto-noncing we should just be extra
-    // careful and restrictive about what we print.
     printNode.addChild(
         PrintDirectiveNode.createSyntheticNode(
             nodeIdGen.genId(),
