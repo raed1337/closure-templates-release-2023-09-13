@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -93,40 +94,45 @@ final class RewriteRemaindersPass implements CompilerFilePass {
 
     private void rewriteRemainder(FunctionNode functionNode) {
       if (currPluralNode == null) {
-        errorReporter.report(functionNode.getSourceLocation(), REMAINDER_OUTSIDE_PLURAL);
-        removeBadRemainder(functionNode);
+        reportErrorAndRemove(functionNode, REMAINDER_OUTSIDE_PLURAL);
         return;
       }
-      // an error will have already been reported by the PluginResolver.  Just bail out
       if (functionNode.numChildren() != 1) {
         removeBadRemainder(functionNode);
         return;
       }
-      // 'remainder' with a different expression than the enclosing 'plural'. Bad!
-      if (!new ExprEquivalence()
-          .equivalent(functionNode.getChild(0), currPluralNode.getExpr().getRoot())) {
-        errorReporter.report(functionNode.getSourceLocation(), REMAINDER_PLURAL_EXPR_MISMATCH);
-        removeBadRemainder(functionNode);
+      if (!isEquivalentToPlural(functionNode)) {
+        reportErrorAndRemove(functionNode, REMAINDER_PLURAL_EXPR_MISMATCH);
         return;
       }
-      // 'remainder' with a 0 offset. Bad!
       if (currPluralNode.getOffset() == 0) {
-        errorReporter.report(functionNode.getSourceLocation(), REMAINDER_UNNECESSARY_AT_OFFSET_0);
-        removeBadRemainder(functionNode);
+        reportErrorAndRemove(functionNode, REMAINDER_UNNECESSARY_AT_OFFSET_0);
         return;
       }
+      if (isInvalidPhnameUsage(functionNode)) {
+        reportErrorAndRemove(functionNode, REMAINDER_WITH_PHNAME);
+        return;
+      }
+      rewriteFunctionNode(functionNode);
+    }
 
-      if (currPrintNode != null
+    private boolean isEquivalentToPlural(FunctionNode functionNode) {
+      return new ExprEquivalence()
+          .equivalent(functionNode.getChild(0), currPluralNode.getExpr().getRoot());
+    }
+
+    private boolean isInvalidPhnameUsage(FunctionNode functionNode) {
+      return currPrintNode != null
           && currPrintNode.getExpr() == functionNode.getParent()
-          && currPrintNode.getPlaceholder().userSuppliedName().isPresent()) {
-        // if the remainder call is the only expression in a print node, then there shouldn't be
-        // a phname attribute
-        errorReporter.report(functionNode.getSourceLocation(), REMAINDER_WITH_PHNAME);
-        removeBadRemainder(functionNode);
-        return;
-      }
+          && currPrintNode.getPlaceholder().userSuppliedName().isPresent();
+    }
 
-      // Now rewrite the FunctionNode(reusing the old node id).
+    private void reportErrorAndRemove(FunctionNode functionNode, SoyErrorKind errorKind) {
+      errorReporter.report(functionNode.getSourceLocation(), errorKind);
+      removeBadRemainder(functionNode);
+    }
+
+    private void rewriteFunctionNode(FunctionNode functionNode) {
       ExprNode plural = currPluralNode.getExpr().getRoot().copy(new CopyState());
       ExprNode offset =
           new IntegerNode(currPluralNode.getOffset(), functionNode.getSourceLocation());
@@ -157,8 +163,6 @@ final class RewriteRemaindersPass implements CompilerFilePass {
   }
 
   private static void removeBadRemainder(FunctionNode functionNode) {
-    // replace the function with a dummy node, so that the compiler can keep going since other
-    // parts don't expect the remainder() function.
     functionNode
         .getParent()
         .replaceChild(functionNode, new IntegerNode(0, functionNode.getSourceLocation()));
