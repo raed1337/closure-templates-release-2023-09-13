@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -23,8 +24,13 @@ import com.google.template.soy.jssrc.internal.DelTemplateNamer;
  * GenJsCodeVisitor.
  */
 final class IncrementalDomDelTemplateNamer extends DelTemplateNamer {
+
   @Override
   protected String getDelegateName(String delTemplateName) {
+    return modifyDelegateName(delTemplateName);
+  }
+
+  private String modifyDelegateName(String delTemplateName) {
     return delTemplateName + ".idom";
   }
 }
