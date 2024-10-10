@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -23,6 +24,14 @@ public final class Flags {
    * verification. Currently only enabled in tests.
    */
   public static final boolean DEBUG = Boolean.getBoolean("soy_jbcsrc_debug_mode");
+
+  /** 
+   * Indicates whether debug mode is enabled.
+   * @return true if debug mode is enabled, false otherwise.
+   */
+  public static boolean isDebugModeEnabled() {
+    return DEBUG;
+  }
 
   private Flags() {}
 }
