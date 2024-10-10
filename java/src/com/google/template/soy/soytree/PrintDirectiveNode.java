@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -42,7 +43,7 @@ public final class PrintDirectiveNode extends AbstractSoyNode implements ExprHol
 
   public static PrintDirectiveNode createSyntheticNode(
       int id, Identifier name, SourceLocation location) {
-    return new PrintDirectiveNode(id, name, location, ImmutableList.of(), /* isSynthetic=*/ true);
+    return new PrintDirectiveNode(id, name, location, ImmutableList.of(), true);
   }
 
   public static PrintDirectiveNode createSyntheticNode(
@@ -67,7 +68,7 @@ public final class PrintDirectiveNode extends AbstractSoyNode implements ExprHol
 
   public PrintDirectiveNode(
       int id, Identifier name, SourceLocation location, ImmutableList<ExprNode> args) {
-    this(id, name, location, args, /* isSynthetic=*/ false);
+    this(id, name, location, args, false);
   }
 
   private PrintDirectiveNode(
@@ -126,7 +127,7 @@ public final class PrintDirectiveNode extends AbstractSoyNode implements ExprHol
 
   @Override
   public String toSourceString() {
-    return args.isEmpty() ? getName() : getName() + ":" + SoyTreeUtils.toSourceString(args);
+    return args.isEmpty() ? getName() : String.format("%s:%s", getName(), SoyTreeUtils.toSourceString(args));
   }
 
   @Override
@@ -141,7 +142,7 @@ public final class PrintDirectiveNode extends AbstractSoyNode implements ExprHol
 
   /** Returns the print directive for this node. */
   public SoyPrintDirective getPrintDirective() {
-    checkState(printDirective != null, "setPrintDirective hasn't been called yet");
+    checkState(printDirective != null, "Print directive must be set before calling this method.");
     return printDirective;
   }
 
@@ -153,15 +154,14 @@ public final class PrintDirectiveNode extends AbstractSoyNode implements ExprHol
 
   /** Sets the print directive. */
   public void setPrintDirective(SoyPrintDirective printDirective) {
-    checkState(this.printDirective == null, "setPrintDirective has already been called");
-    checkArgument(name.identifier().equals(printDirective.getName()));
-    this.printDirective = checkNotNull(printDirective);
+    checkState(this.printDirective == null, "Print directive has already been set.");
+    checkArgument(name.identifier().equals(printDirective.getName()), "Print directive name mismatch.");
+    this.printDirective = checkNotNull(printDirective, "Print directive cannot be null.");
   }
 
   /** Sets the print directive. A later compiler pass will rewrite the node to use this function. */
   public void setPrintDirectiveFunction(SoySourceFunction sourceFunction) {
-    checkState(
-        this.printDirectiveFunction == null, "setPrintDirectiveFunction has already been called");
-    this.printDirectiveFunction = checkNotNull(sourceFunction);
+    checkState(this.printDirectiveFunction == null, "Print directive function has already been set.");
+    this.printDirectiveFunction = checkNotNull(sourceFunction, "Source function cannot be null.");
   }
 }
