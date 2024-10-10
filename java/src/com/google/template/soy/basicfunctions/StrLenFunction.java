@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -31,6 +32,7 @@ import com.google.template.soy.plugin.python.restricted.PythonValueFactory;
 import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.SoyFieldSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -48,6 +50,12 @@ import java.util.List;
 public final class StrLenFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method STR_LEN_METHOD = initializeStrLenMethod();
+
+  private static Method initializeStrLenMethod() {
+    return JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "strLen", SoyValue.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -60,15 +68,9 @@ public final class StrLenFunction
     return factory.global("len").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method STR_LEN =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "strLen", SoyValue.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.STR_LEN, args.get(0));
+    return factory.callStaticMethod(STR_LEN_METHOD, args.get(0));
   }
 }
