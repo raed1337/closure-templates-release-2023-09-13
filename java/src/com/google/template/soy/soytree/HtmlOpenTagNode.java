@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -99,12 +100,12 @@ public final class HtmlOpenTagNode extends HtmlTagNode {
         && (getDirectAttributeNamed("slot") != null);
   }
 
-  /** Returns true if this is an skip root. */
+  /** Returns true if this is a skip root. */
   public boolean isSkipRoot() {
     return isSkipRoot || isSkipChildren;
   }
 
-  /** Marks this tag as an skip root. */
+  /** Marks this tag as a skip root. */
   public void setSkipRoot() {
     isSkipRoot = true;
   }
@@ -113,15 +114,19 @@ public final class HtmlOpenTagNode extends HtmlTagNode {
     return isSkipChildren;
   }
 
-  /** Marks this tag as an skip root. */
+  /** Marks this tag as a skip root. */
   public void setSkipChildren() {
     isSkipChildren = true;
   }
 
   public KeyNode getKeyNode() {
+    return findKeyNode();
+  }
+
+  private KeyNode findKeyNode() {
     for (SoyNode child : getChildren()) {
       if (child instanceof KeyNode) {
-        return ((KeyNode) child);
+        return (KeyNode) child;
       }
     }
     return null;
@@ -134,8 +139,18 @@ public final class HtmlOpenTagNode extends HtmlTagNode {
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
     sb.append('<');
+    appendChildrenToSourceString(sb);
+    sb.append(isSelfClosing() ? "/>" : ">");
+    return sb.toString();
+  }
+
+  private void appendChildrenToSourceString(StringBuilder sb) {
     for (int i = 0; i < numChildren(); i++) {
       StandaloneNode child = getChild(i);
       if (i != 0) {
@@ -143,7 +158,5 @@ public final class HtmlOpenTagNode extends HtmlTagNode {
       }
       sb.append(child.toSourceString());
     }
-    sb.append(isSelfClosing() ? "/>" : ">");
-    return sb.toString();
   }
 }
