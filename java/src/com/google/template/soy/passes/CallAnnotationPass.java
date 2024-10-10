@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -55,10 +56,14 @@ final class CallAnnotationPass implements CompilerFileSetPass {
 
     @Override
     protected void visitHtmlOpenTagNode(HtmlOpenTagNode node) {
-      if (node.getKeyNode() != null && !node.isSkipRoot()) {
+      if (shouldPushIdStack(node)) {
         idStack.push(0);
       }
       visitChildren(node);
+    }
+
+    private boolean shouldPushIdStack(HtmlOpenTagNode node) {
+      return node.getKeyNode() != null && !node.isSkipRoot();
     }
 
     @Override
@@ -71,13 +76,20 @@ final class CallAnnotationPass implements CompilerFileSetPass {
 
     @Override
     protected void visitHtmlCloseTagNode(HtmlCloseTagNode node) {
-      // This invariant is enforced at
-      if (node.getTaggedPairs().size() == 1) {
+      if (isValidCloseTag(node)) {
         HtmlOpenTagNode openTag = (HtmlOpenTagNode) node.getTaggedPairs().get(0);
-        if (openTag.getKeyNode() != null && !openTag.isSkipRoot()) {
+        if (shouldPopIdStack(openTag)) {
           idStack.pop();
         }
       }
+    }
+
+    private boolean isValidCloseTag(HtmlCloseTagNode node) {
+      return node.getTaggedPairs().size() == 1;
+    }
+
+    private boolean shouldPopIdStack(HtmlOpenTagNode openTag) {
+      return openTag.getKeyNode() != null && !openTag.isSkipRoot();
     }
 
     @Override
