@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2023 Google Inc.
  *
@@ -48,5 +49,16 @@ public final class UndefinedType extends PrimitiveType {
   /** Return the single instance of this type. */
   public static UndefinedType getInstance() {
     return INSTANCE;
+  }
+
+  /** Checks if this type is the same as another type. */
+  @Override
+  public boolean equals(Object obj) {
+    return this == obj;
+  }
+
+  @Override
+  public int hashCode() {
+    return System.identityHashCode(this);
   }
 }
