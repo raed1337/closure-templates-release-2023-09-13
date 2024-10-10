@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -113,33 +114,34 @@ public abstract class CallNode extends AbstractParentCommandNode<CallParamNode>
       ErrorReporter reporter) {
     super(id, location, commandName);
 
-    SourceLocation phNameLocation = null;
-    String phName = null;
-    Optional<String> phExample = Optional.empty();
+    this.attributes = ImmutableList.copyOf(attributes);
+    this.selfClosing = selfClosing;
+    this.openTagLocation = openTagLocation;
+    this.errorFallbackSkip = initializeAttributes(attributes, reporter);
+    this.placeholder = createPlaceholder(attributes, reporter);
+  }
+
+  private boolean initializeAttributes(List<CommandTagAttribute> attributes, ErrorReporter reporter) {
     boolean errorFallbackSkip = false;
+
     for (CommandTagAttribute attr : attributes) {
       String name = attr.getName().identifier();
 
       switch (name) {
         case DATA:
-          if (!attr.hasExprValue() && "all".equals(attr.getValue())) {
-            this.isPassingAllData = true;
-          } else {
-            this.isPassingAllData = false;
-            attr.checkAsExpr(reporter); // report any errors to compiler
+          this.isPassingAllData = attr.hasExprValue() || "all".equals(attr.getValue());
+          if (!this.isPassingAllData) {
+            attr.checkAsExpr(reporter);
           }
           break;
         case KEY:
-          attr.checkAsExpr(reporter); // report any errors to compiler
+          attr.checkAsExpr(reporter);
           break;
         case PHNAME_ATTR:
-          phNameLocation = attr.getValueLocation();
-          phName = validatePlaceholderName(attr.getValue(), phNameLocation, reporter);
+          validatePlaceholderName(attr.getValue(), attr.getValueLocation(), reporter);
           break;
         case PHEX_ATTR:
-          phExample =
-              Optional.ofNullable(
-                  validatePlaceholderExample(attr.getValue(), attr.getValueLocation(), reporter));
+          validatePlaceholderExample(attr.getValue(), attr.getValueLocation(), reporter);
           break;
         case ERROR_FALLBACK:
           if (attr.getValue().equals("skip")) {
@@ -152,16 +154,28 @@ public abstract class CallNode extends AbstractParentCommandNode<CallParamNode>
           // do nothing, validated by subclasses
       }
     }
+    return errorFallbackSkip;
+  }
 
-    this.attributes = ImmutableList.copyOf(attributes);
-    this.selfClosing = selfClosing;
-    this.placeholder =
-        (phName == null)
-            ? MessagePlaceholder.create(FALLBACK_BASE_PLACEHOLDER_NAME, phExample)
-            : MessagePlaceholder.createWithUserSuppliedName(
-                convertToUpperUnderscore(phName), phName, phNameLocation, phExample);
-    this.openTagLocation = openTagLocation;
-    this.errorFallbackSkip = errorFallbackSkip;
+  private MessagePlaceholder createPlaceholder(List<CommandTagAttribute> attributes, ErrorReporter reporter) {
+    String phName = attributes.stream()
+        .filter(attr -> PHNAME_ATTR.equals(attr.getName().identifier()))
+        .map(attr -> validatePlaceholderName(attr.getValue(), attr.getValueLocation(), reporter))
+        .findFirst()
+        .orElse(null);
+
+    Optional<String> phExample = attributes.stream()
+        .filter(attr -> PHEX_ATTR.equals(attr.getName().identifier()))
+        .map(attr -> validatePlaceholderExample(attr.getValue(), attr.getValueLocation(), reporter))
+        .findFirst();
+
+    return (phName == null)
+        ? MessagePlaceholder.create(FALLBACK_BASE_PLACEHOLDER_NAME, phExample)
+        : MessagePlaceholder.createWithUserSuppliedName(
+            convertToUpperUnderscore(phName), phName, attributes.stream()
+                .filter(attr -> PHNAME_ATTR.equals(attr.getName().identifier()))
+                .findFirst().map(CommandTagAttribute::getValueLocation).orElse(UNKNOWN),
+            phExample);
   }
 
   /**
@@ -182,15 +196,9 @@ public abstract class CallNode extends AbstractParentCommandNode<CallParamNode>
     this.attributes =
         orig.attributes.stream().map(c -> c.copy(copyState)).collect(toImmutableList());
     this.errorFallbackSkip = orig.errorFallbackSkip;
-    // we may have handed out a copy to ourselves via genSamenessKey()
     copyState.updateRefs(orig, this);
   }
 
-  /**
-   * Gets the HTML source context immediately prior to the node (typically tag, attribute value,
-   * HTML PCDATA, or plain text) which this node emits in. This affects how the node is escaped (for
-   * traditional backends) or how it's passed to incremental DOM APIs.
-   */
   @Override
   public HtmlContext getHtmlContext() {
     return checkNotNull(
@@ -249,32 +257,26 @@ public abstract class CallNode extends AbstractParentCommandNode<CallParamNode>
   }
 
   public void setKeyExpr(ExprRootNode expr) {
-    CommandTagAttribute existing =
-        attributes.stream().filter(a -> a.hasName(KEY)).findFirst().orElse(null);
-    if (existing == null && expr == null) {
-      return;
-    }
-
+    CommandTagAttribute existing = attributes.stream().filter(a -> a.hasName(KEY)).findFirst().orElse(null);
     List<CommandTagAttribute> newAttr = new ArrayList<>(attributes);
+
     if (existing != null) {
       newAttr.remove(existing);
-      if (expr != null) {
-        newAttr.add(
-            new CommandTagAttribute(
-                existing.getName(),
-                existing.getQuoteStyle(),
-                ImmutableList.of(expr.getRoot()),
-                existing.getSourceLocation()));
-      }
-    } else {
-      newAttr.add(
-          new CommandTagAttribute(
-              Identifier.create(KEY, UNKNOWN),
-              QuoteStyle.DOUBLE,
-              ImmutableList.of(expr.getRoot()),
-              UNKNOWN));
     }
+    if (expr != null) {
+      newAttr.add(createCommandTagAttribute(existing, expr));
+    }
+
     attributes = ImmutableList.copyOf(newAttr);
+  }
+
+  private CommandTagAttribute createCommandTagAttribute(
+      CommandTagAttribute existing, ExprRootNode expr) {
+    return new CommandTagAttribute(
+        existing != null ? existing.getName() : Identifier.create(KEY, UNKNOWN),
+        existing != null ? existing.getQuoteStyle() : QuoteStyle.DOUBLE,
+        ImmutableList.of(expr.getRoot()),
+        existing != null ? existing.getSourceLocation() : UNKNOWN);
   }
 
   public boolean getIsPcData() {
@@ -292,15 +294,12 @@ public abstract class CallNode extends AbstractParentCommandNode<CallParamNode>
 
   @Override
   public SamenessKey genSamenessKey() {
-    // CallNodes are never considered the same placeholder. We return the node instance as the info
-    // for determining sameness. Since nodes have identity semantics this will only compare equal
-    // to itself.
     return new IdentitySamenessKey(this);
   }
 
   @Override
   public String getTagString() {
-    return getTagString(numChildren() == 0); // tag is self-ending if it has no children
+    return getTagString(numChildren() == 0);
   }
 
   @Override
