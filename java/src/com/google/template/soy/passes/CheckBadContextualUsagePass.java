@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -73,7 +74,6 @@ final class CheckBadContextualUsagePass implements CompilerFileSetPass {
           "Printing CSS from non-CSS context is not allowed. You likely need to change the type to "
               + "string (kind=\"text\").");
 
-  // TODO(jakubvrana): Move to InferenceEngine and apply for other filter directives.
   private static final SoyErrorKind PRINTS_NON_TRU_FROM_TRU =
       SoyErrorKind.of("In trusted_resource_uri context, only trusted_resource_uri can be printed.");
 
@@ -93,30 +93,38 @@ final class CheckBadContextualUsagePass implements CompilerFileSetPass {
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     for (SoyFileNode fileNode : sourceFiles) {
       for (TemplateNode template : fileNode.getTemplates()) {
-        for (CallNode node : getAllNodesOfType(template, CallNode.class)) {
-          checkCallNode(node, SanitizedContentKind.HTML, CALLS_HTML_FROM_NON_HTML);
-          checkCallNode(node, SanitizedContentKind.CSS, CALLS_CSS_FROM_NON_CSS);
-          Optional<SanitizedContentKind> calleeContentKind =
-              Metadata.getCallContentKind(templateRegistryFull.get(), node);
-          if (isTrustedResourceUri(node.getEscapingDirectives())
-              && calleeContentKind.isPresent()
-              && calleeContentKind.get() != SanitizedContentKind.TRUSTED_RESOURCE_URI) {
-            errorReporter.report(node.getSourceLocation(), CALLS_NON_TRU_FROM_TRU);
-          }
-        }
-        for (PrintNode node : getAllNodesOfType(template, PrintNode.class)) {
-          checkPrintNode(node, SanitizedContentKind.HTML, PRINTS_HTML_FROM_NON_HTML);
-          checkPrintNode(node, SanitizedContentKind.CSS, PRINTS_CSS_FROM_NON_CSS);
-          if (isTrustedResourceUri(
-                  Lists.transform(node.getChildren(), PrintDirectiveNode::getPrintDirective))
-              && !SanitizedType.TrustedResourceUriType.getInstance()
-                  .isAssignableFromLoose(node.getExpr().getType())) {
-            errorReporter.report(node.getSourceLocation(), PRINTS_NON_TRU_FROM_TRU);
-          }
-        }
+        checkCallNodes(template);
+        checkPrintNodes(template);
       }
     }
     return Result.CONTINUE;
+  }
+
+  private void checkCallNodes(TemplateNode template) {
+    for (CallNode node : getAllNodesOfType(template, CallNode.class)) {
+      checkCallNode(node, SanitizedContentKind.HTML, CALLS_HTML_FROM_NON_HTML);
+      checkCallNode(node, SanitizedContentKind.CSS, CALLS_CSS_FROM_NON_CSS);
+      Optional<SanitizedContentKind> calleeContentKind =
+          Metadata.getCallContentKind(templateRegistryFull.get(), node);
+      if (isTrustedResourceUri(node.getEscapingDirectives())
+          && calleeContentKind.isPresent()
+          && calleeContentKind.get() != SanitizedContentKind.TRUSTED_RESOURCE_URI) {
+        errorReporter.report(node.getSourceLocation(), CALLS_NON_TRU_FROM_TRU);
+      }
+    }
+  }
+
+  private void checkPrintNodes(TemplateNode template) {
+    for (PrintNode node : getAllNodesOfType(template, PrintNode.class)) {
+      checkPrintNode(node, SanitizedContentKind.HTML, PRINTS_HTML_FROM_NON_HTML);
+      checkPrintNode(node, SanitizedContentKind.CSS, PRINTS_CSS_FROM_NON_CSS);
+      if (isTrustedResourceUri(
+              Lists.transform(node.getChildren(), PrintDirectiveNode::getPrintDirective))
+          && !SanitizedType.TrustedResourceUriType.getInstance()
+              .isAssignableFromLoose(node.getExpr().getType())) {
+        errorReporter.report(node.getSourceLocation(), PRINTS_NON_TRU_FROM_TRU);
+      }
+    }
   }
 
   private static final ImmutableMultimap<SanitizedContentKind, HtmlContext> ALLOWED_CONTEXTS =
@@ -139,19 +147,20 @@ final class CheckBadContextualUsagePass implements CompilerFileSetPass {
   private void checkPrintNode(
       PrintNode node, SanitizedContentKind contentKind, SoyErrorKind errorKind) {
     if (!ALLOWED_CONTEXTS.containsEntry(contentKind, node.getHtmlContext())) {
-      boolean report;
-      ContentKind contentKindOfPrintDirectives = getContentKindOfPrintDirectives(node);
-      if (contentKindOfPrintDirectives == null) {
-        SoyType type = node.getExpr().getRoot().getType();
-        report =
-            !type.isAssignableFromStrict(AnyType.getInstance())
-                && type.isAssignableFromStrict(SanitizedType.getTypeForContentKind(contentKind));
-      } else {
-        report = contentKindOfPrintDirectives.name().equals(contentKind.name());
-      }
-      if (report) {
+      if (shouldReportPrintNode(node, contentKind)) {
         errorReporter.report(node.getSourceLocation(), errorKind);
       }
+    }
+  }
+
+  private boolean shouldReportPrintNode(PrintNode node, SanitizedContentKind contentKind) {
+    ContentKind contentKindOfPrintDirectives = getContentKindOfPrintDirectives(node);
+    if (contentKindOfPrintDirectives == null) {
+      SoyType type = node.getExpr().getRoot().getType();
+      return !type.isAssignableFromStrict(AnyType.getInstance())
+          && type.isAssignableFromStrict(SanitizedType.getTypeForContentKind(contentKind));
+    } else {
+      return contentKindOfPrintDirectives.name().equals(contentKind.name());
     }
   }
 
