@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -40,12 +41,6 @@ import javax.annotation.Nullable;
 public final class VeLogNode extends AbstractBlockCommandNode
     implements ExprHolderNode, StatementNode, MsgBlockNode, CommandTagAttributesHolder {
 
-  /**
-   * An equivalence key for comparing {@link VeLogNode} instances.
-   *
-   * <p>This ignores things like {@link SoyNode#getId()} and {@link SoyNode#getSourceLocation()} and
-   * is useful for deciding placeholder equivalence for velog nodes in messages.
-   */
   static final class SamenessKey {
     private VeLogNode delegate;
 
@@ -54,7 +49,6 @@ public final class VeLogNode extends AbstractBlockCommandNode
     }
 
     private SamenessKey(SamenessKey orig, CopyState copyState) {
-      // store the original, this may still be valid if we are only copying a subtree
       this.delegate = orig.delegate;
       copyState.registerRefListener(orig.delegate, newDelegate -> this.delegate = newDelegate);
     }
@@ -69,7 +63,6 @@ public final class VeLogNode extends AbstractBlockCommandNode
         return false;
       }
       ExprEquivalence exprEquivalence = new ExprEquivalence();
-
       SamenessKey otherKey = (SamenessKey) other;
       return exprEquivalence.equivalent(delegate.veDataExpr, otherKey.delegate.veDataExpr)
           && exprEquivalence.equivalent(delegate.logonlyExpr, otherKey.delegate.logonlyExpr);
@@ -95,24 +88,24 @@ public final class VeLogNode extends AbstractBlockCommandNode
       ErrorReporter errorReporter) {
     super(id, location, openTagLocation, "velog");
     this.veDataExpr = new ExprRootNode(checkNotNull(veDataExpr));
-    ExprRootNode logonlyExpr = null;
     this.attributes = attributes;
+    this.logonlyExpr = extractLogonlyExpr(attributes, errorReporter);
+  }
+
+  private ExprRootNode extractLogonlyExpr(List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
     for (CommandTagAttribute attr : attributes) {
-      switch (attr.getName().identifier()) {
-        case "logonly":
-          logonlyExpr = attr.valueAsExpr(errorReporter);
-          break;
-        default:
-          errorReporter.report(
-              attr.getName().location(),
-              CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-              attr.getName().identifier(),
-              "velog",
-              ImmutableList.of("logonly"));
-          break;
+      if ("logonly".equals(attr.getName().identifier())) {
+        return attr.valueAsExpr(errorReporter);
+      } else {
+        errorReporter.report(
+            attr.getName().location(),
+            CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
+            attr.getName().identifier(),
+            "velog",
+            ImmutableList.of("logonly"));
       }
     }
-    this.logonlyExpr = logonlyExpr;
+    return null;
   }
 
   private VeLogNode(VeLogNode orig, CopyState copyState) {
@@ -122,7 +115,6 @@ public final class VeLogNode extends AbstractBlockCommandNode
         orig.attributes.stream().map(c -> c.copy(copyState)).collect(toImmutableList());
     this.logonlyExpr = orig.logonlyExpr == null ? null : orig.logonlyExpr.copy(copyState);
     this.needsSyntheticVelogNode = orig.needsSyntheticVelogNode;
-    // See SamenessKey copy constructor
     copyState.updateRefs(orig, this);
   }
 
@@ -143,12 +135,10 @@ public final class VeLogNode extends AbstractBlockCommandNode
     return needsSyntheticVelogNode;
   }
 
-  /** Returns a reference to the VE expression. */
   public ExprRootNode getVeDataExpression() {
     return veDataExpr;
   }
 
-  /** Returns a reference to the logonly expression, if there is one. */
   @Nullable
   public ExprRootNode getLogonlyExpression() {
     return logonlyExpr;
@@ -159,29 +149,32 @@ public final class VeLogNode extends AbstractBlockCommandNode
     return Kind.VE_LOG_NODE;
   }
 
-  /** Returns the open tag node if it exists. */
   @Nullable
   public HtmlOpenTagNode getOpenTagNode() {
-    if (numChildren() > 0) {
-      return (HtmlOpenTagNode) getNodeAsHtmlTagNode(getChild(0), /*openTag=*/ true);
-    }
-    return null;
+    return getHtmlTagNode(0, true);
   }
 
-  /** Returns the close tag node if it exists. */
   @Nullable
   public HtmlCloseTagNode getCloseTagNode() {
-    if (numChildren() > 1) {
-      return (HtmlCloseTagNode)
-          getNodeAsHtmlTagNode(getChild(numChildren() - 1), /*openTag=*/ false);
+    return getHtmlTagNode(numChildren() - 1, false);
+  }
+
+  @Nullable
+  private <T extends HtmlTagNode> T getHtmlTagNode(int index, boolean openTag) {
+    if (numChildren() > index) {
+      return (T) getNodeAsHtmlTagNode(getChild(index), openTag);
     }
     return null;
   }
 
   @Override
   public String getCommandText() {
-    return veDataExpr.toSourceString()
-        + (logonlyExpr != null ? " logonly=\"" + logonlyExpr.toSourceString() + "\"" : "");
+    return buildCommandText();
+  }
+
+  private String buildCommandText() {
+    return veDataExpr.toSourceString() +
+           (logonlyExpr != null ? " logonly=\"" + logonlyExpr.toSourceString() + "\"" : "");
   }
 
   @Override
@@ -207,6 +200,10 @@ public final class VeLogNode extends AbstractBlockCommandNode
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
     sb.append(getTagString());
     appendSourceStringForChildren(sb);
