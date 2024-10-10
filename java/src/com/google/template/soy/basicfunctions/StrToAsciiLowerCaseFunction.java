@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -44,6 +45,9 @@ import java.util.List;
 public final class StrToAsciiLowerCaseFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method ASCII_TO_LOWER_CASE_FN = 
+      JavaValueFactory.createMethod(Ascii.class, "toLowerCase", String.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -57,15 +61,9 @@ public final class StrToAsciiLowerCaseFunction
     return factory.global("runtime.str_to_ascii_lower_case").call(args.get(0).coerceToString());
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method ASCII_TO_LOWER_CASE_FN =
-        JavaValueFactory.createMethod(Ascii.class, "toLowerCase", String.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.ASCII_TO_LOWER_CASE_FN, args.get(0));
+    return factory.callStaticMethod(ASCII_TO_LOWER_CASE_FN, args.get(0));
   }
 }
