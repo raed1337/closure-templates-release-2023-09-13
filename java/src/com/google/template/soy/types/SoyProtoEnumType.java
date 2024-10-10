@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -38,9 +39,12 @@ public final class SoyProtoEnumType extends SoyType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType fromType) {
-    return fromType == this
-        || (fromType.getClass() == this.getClass()
-            && ((SoyProtoEnumType) fromType).descriptor == descriptor);
+    return fromType == this || isSameDescriptor(fromType);
+  }
+
+  private boolean isSameDescriptor(SoyType fromType) {
+    return fromType.getClass() == this.getClass() 
+           && ((SoyProtoEnumType) fromType).descriptor == descriptor;
   }
 
   public String getName() {
@@ -56,16 +60,19 @@ public final class SoyProtoEnumType extends SoyType {
       case PYTHON_SRC:
       case JBC_SRC:
         throw new UnsupportedOperationException();
+      default:
+        throw new AssertionError(backend);
     }
-    throw new AssertionError(backend);
   }
 
   public Integer getValue(String memberName) {
     EnumValueDescriptor value = descriptor.findValueByName(memberName);
-    if (value != null) {
-      return value.getNumber();
-    }
-    return null;
+    return (value != null) ? value.getNumber() : handleInvalidMemberName(memberName);
+  }
+
+  private Integer handleInvalidMemberName(String memberName) {
+    // Handle invalid member name case if needed, log or throw exception
+    return null; // or throw new IllegalArgumentException("Invalid member name: " + memberName);
   }
 
   public EnumDescriptor getDescriptor() {
