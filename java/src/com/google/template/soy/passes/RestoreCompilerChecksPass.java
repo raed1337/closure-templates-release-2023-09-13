@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -52,35 +53,43 @@ final class RestoreCompilerChecksPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    // Enforce certain symbols start with $, to match previous parser rules.
+    enforceDollarIdentForLetNodes(file);
+    enforceDollarIdentForForNonemptyNodes(file);
+    enforceDollarIdentForListComprehensionNodes(file);
+    enforceNonDollarIdentForRecordKeys(file);
+  }
+
+  private void enforceDollarIdentForLetNodes(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, LetNode.class)
         .map(LetNode::getVar)
         .forEach(this::checkDollarIdent);
-    SoyTreeUtils.allNodesOfType(file, ForNonemptyNode.class)
-        .forEach(
-            forNode -> {
-              checkDollarIdent(forNode.getVar());
-              if (forNode.getIndexVar() != null) {
-                checkDollarIdent(forNode.getIndexVar());
-              }
-            });
-    SoyTreeUtils.allNodesOfType(file, ListComprehensionNode.class)
-        .forEach(
-            listNode -> {
-              checkDollarIdent(listNode.getListIterVar());
-              if (listNode.getIndexVar() != null) {
-                checkDollarIdent(listNode.getIndexVar());
-              }
-            });
+  }
 
-    // Enforce record keys do not start with $, to match previous parser rules. No explicit check
-    // here for named function (proto init) parameter names. Those will trigger errors for "no such
-    // proto field" etc.
+  private void enforceDollarIdentForForNonemptyNodes(SoyFileNode file) {
+    SoyTreeUtils.allNodesOfType(file, ForNonemptyNode.class)
+        .forEach(forNode -> {
+          checkDollarIdent(forNode.getVar());
+          if (forNode.getIndexVar() != null) {
+            checkDollarIdent(forNode.getIndexVar());
+          }
+        });
+  }
+
+  private void enforceDollarIdentForListComprehensionNodes(SoyFileNode file) {
+    SoyTreeUtils.allNodesOfType(file, ListComprehensionNode.class)
+        .forEach(listNode -> {
+          checkDollarIdent(listNode.getListIterVar());
+          if (listNode.getIndexVar() != null) {
+            checkDollarIdent(listNode.getIndexVar());
+          }
+        });
+  }
+
+  private void enforceNonDollarIdentForRecordKeys(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, RecordLiteralNode.class)
         .flatMap(r -> r.getKeys().stream())
         .filter(k -> k.identifier().startsWith("$"))
         .forEach(k -> errorReporter.report(k.location(), MUST_NOT_BE_DOLLAR_IDENT));
-
   }
 
   private void checkDollarIdent(AbstractLocalVarDefn<?> localVar) {
