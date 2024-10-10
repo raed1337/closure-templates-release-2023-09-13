@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -32,9 +33,7 @@ import javax.annotation.Nullable;
 public final class HtmlMatcherBlockNode extends HtmlMatcherGraphNode {
 
   private final HtmlMatcherGraph graph;
-
   private final String parentBlockType;
-
   @Nullable private HtmlMatcherGraphNode nextNode;
 
   public HtmlMatcherBlockNode(HtmlMatcherGraph graph, String parentBlockType) {
@@ -59,21 +58,18 @@ public final class HtmlMatcherBlockNode extends HtmlMatcherGraphNode {
 
   @Override
   public Optional<HtmlMatcherGraphNode> getNodeForEdgeKind(EdgeKind edgeKind) {
-    if (edgeKind == EdgeKind.TRUE_EDGE) {
-      return Optional.ofNullable(nextNode);
-    }
-    return Optional.empty();
+    return edgeKind == EdgeKind.TRUE_EDGE ? Optional.ofNullable(nextNode) : Optional.empty();
   }
 
   @Override
   public void setActiveEdgeKind(EdgeKind edgeKind) {
-    throw new UnsupportedOperationException("Cannot set the edge kind of a Block node.");
+    throw new UnsupportedOperationException("Setting the edge kind of a Block node is not supported.");
   }
 
   @Override
   public void linkEdgeToNode(EdgeKind edgeKind, HtmlMatcherGraphNode node) {
     checkState(edgeKind == EdgeKind.TRUE_EDGE, "HTML Block nodes only have a true branch.");
-    checkState(!this.equals(node), "Can't link a node to itsself.");
+    checkState(!this.equals(node), "Can't link a node to itself.");
     checkNotNull(node);
     nextNode = node;
   }
