@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -97,9 +98,12 @@ public final class MsgPlaceholderNode extends AbstractBlockNode implements MsgSu
    */
   @Override
   public boolean shouldUseSameVarNameAs(MsgSubstUnitNode other, ExprEquivalence exprEquivalence) {
-    return (other instanceof MsgPlaceholderNode)
-        && this.initialNodeKind == ((MsgPlaceholderNode) other).initialNodeKind
-        && this.samenessKey.equals(((MsgPlaceholderNode) other).samenessKey);
+    if (other instanceof MsgPlaceholderNode) {
+      MsgPlaceholderNode otherPlaceholder = (MsgPlaceholderNode) other;
+      return this.initialNodeKind == otherPlaceholder.initialNodeKind
+          && this.samenessKey.equals(otherPlaceholder.samenessKey);
+    }
+    return false;
   }
 
   @Override
