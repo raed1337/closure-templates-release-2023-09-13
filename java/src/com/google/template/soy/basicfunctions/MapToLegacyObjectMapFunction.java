@@ -1,7 +1,9 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0
+ *
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -31,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.PythonValueFactory;
 import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -52,31 +55,23 @@ import java.util.List;
 public final class MapToLegacyObjectMapFunction
     implements SoyJavaSourceFunction, SoyPythonSourceFunction, SoyJavaScriptSourceFunction {
 
-  // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
-    static final Method MAP_TO_LEGACY_OBJECT_MAP =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class, "mapToLegacyObjectMap", SoyMap.class);
+    static final Method MAP_TO_LEGACY_OBJECT_MAP = 
+        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "mapToLegacyObjectMap", SoyMap.class);
   }
 
   @Override
-  public JavaValue applyForJavaSource(
-      JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+  public JavaValue applyForJavaSource(JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(Methods.MAP_TO_LEGACY_OBJECT_MAP, args.get(0));
   }
 
   @Override
-  public JavaScriptValue applyForJavaScriptSource(
-      JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    // TODO(lukes) this could be callModuleFunction but other parts of soy don't generate aliased
-    // requires so we can't generate one here without create a 'multiple require' error
-    // this could be handled via more clever require handling in the compiler.
+  public JavaScriptValue applyForJavaScriptSource(JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
     return factory.callNamespaceFunction("soy.map", "soy.map.$$mapToLegacyObjectMap", args.get(0));
   }
 
   @Override
-  public PythonValue applyForPythonSource(
-      PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
+  public PythonValue applyForPythonSource(PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
     return factory.global("runtime.map_to_legacy_object_map").call(args.get(0));
   }
 }
