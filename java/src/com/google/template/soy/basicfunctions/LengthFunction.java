@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -33,6 +34,7 @@ import com.google.template.soy.shared.restricted.SoyFieldSignature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
 import com.google.template.soy.shared.restricted.TypedSoyFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -48,6 +50,9 @@ import java.util.List;
 public final class LengthFunction extends TypedSoyFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method DELEGATE_SOYLIST_LENGTH =
+      JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "length", List.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -60,15 +65,9 @@ public final class LengthFunction extends TypedSoyFunction
     return factory.global("len").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method DELEGATE_SOYLIST_LENGTH =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "length", List.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.DELEGATE_SOYLIST_LENGTH, args.get(0));
+    return factory.callStaticMethod(DELEGATE_SOYLIST_LENGTH, args.get(0));
   }
 }
