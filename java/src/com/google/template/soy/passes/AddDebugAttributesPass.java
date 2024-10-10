@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -84,7 +85,6 @@ final class AddDebugAttributesPass implements CompilerFilePass {
      * non-negative).
      */
     int tagDepth;
-
     final IdGenerator nodeIdGen;
 
     Visitor(IdGenerator nodeIdGen) {
@@ -99,41 +99,44 @@ final class AddDebugAttributesPass implements CompilerFilePass {
     }
 
     private void visitBlock(BlockNode node) {
-      // reset for each render unit block.  These are templates, lets and params.
       int oldDepth = tagDepth;
       if (node instanceof RenderUnitNode) {
         tagDepth = 0;
       }
       visitChildren(node);
-      // always reset the tag depth at the end of a block.  This way if a block fails to close its
-      // tags we will tend to over-annotate instead of under-annotate.
-      tagDepth = oldDepth;
+      tagDepth = oldDepth; // reset at the end of a block
     }
 
     @Override
     protected void visitHtmlOpenTagNode(HtmlOpenTagNode node) {
+      addDebugAttribute(node);
+      manageTagDepthOnOpen(node);
+      visitChildren(node);
+    }
+
+    private void addDebugAttribute(HtmlOpenTagNode node) {
       if (tagDepth == 0 && node.getTagName().isStatic()) {
         node.addChild(createSoyDebug(node.getSourceLocation()));
       }
+    }
+
+    private void manageTagDepthOnOpen(HtmlOpenTagNode node) {
       if (!node.isSelfClosing() && !node.getTagName().isDefinitelyVoid()) {
         tagDepth++;
       }
-      visitChildren(node);
     }
 
     @Override
     protected void visitHtmlCloseTagNode(HtmlCloseTagNode node) {
+      manageTagDepthOnClose();
+      visitChildren(node);
+    }
+
+    private void manageTagDepthOnClose() {
       tagDepth--;
       if (tagDepth < 0) {
-        // This seems like an error, but there is no guarantee that we are in a stricthtml template
-        // and also we don't do robust matching so we might be in a weird control flow situation
-        // like:
-        //   {if $b}<div><div>{/if}...{if $b}</div></div>{/if}
-        // In the second branch the count will go negative.  The consequence is that we might
-        // instrument more nodes than we intend to, but that is ok.
-        tagDepth = 0;
+        tagDepth = 0; // clamp to non-negative
       }
-      visitChildren(node);
     }
 
     @Override
@@ -145,46 +148,37 @@ final class AddDebugAttributesPass implements CompilerFilePass {
       }
     }
 
-    /**
-     * Generates an AST fragment that looks like:
-     *
-     * <p>{@code {if debugSoyTemplateInfo()}data-debug-soy="<template> <file>:<line>"{/if}}
-     *
-     * @param insertionLocation The location where it is being inserted
-     */
     private IfNode createSoyDebug(SourceLocation insertionLocation) {
       IfNode ifNode = new IfNode(nodeIdGen.genId(), insertionLocation);
-      FunctionNode funcNode =
-          FunctionNode.newPositional(
-              Identifier.create(
-                  BuiltinFunction.DEBUG_SOY_TEMPLATE_INFO.getName(), insertionLocation),
-              BuiltinFunction.DEBUG_SOY_TEMPLATE_INFO,
-              insertionLocation);
-      IfCondNode ifCondNode =
-          new IfCondNode(
-              nodeIdGen.genId(), insertionLocation, SourceLocation.UNKNOWN, "if", funcNode);
-      HtmlAttributeNode attribute =
-          new HtmlAttributeNode(
-              nodeIdGen.genId(), insertionLocation, insertionLocation.getBeginPoint());
-      attribute.addChild(new RawTextNode(nodeIdGen.genId(), DATA_DEBUG_SOY, insertionLocation));
-      HtmlAttributeValueNode attrValue =
-          new HtmlAttributeValueNode(
-              nodeIdGen.genId(), insertionLocation, HtmlAttributeValueNode.Quotes.DOUBLE);
-      attribute.addChild(attrValue);
-      attrValue.addChild(
-          new RawTextNode(
-              nodeIdGen.genId(),
-              // escape special characters
-              Sanitizers.escapeHtmlAttribute(
-                  currentTemplate
-                      + " "
-                      + insertionLocation.getFilePath().path()
-                      + ":"
-                      + insertionLocation.getBeginLine()),
-              insertionLocation));
+      FunctionNode funcNode = createDebugFunctionNode(insertionLocation);
+      IfCondNode ifCondNode = new IfCondNode(nodeIdGen.genId(), insertionLocation, SourceLocation.UNKNOWN, "if", funcNode);
+      HtmlAttributeNode attribute = createHtmlAttribute(insertionLocation);
       ifCondNode.addChild(attribute);
       ifNode.addChild(ifCondNode);
       return ifNode;
+    }
+
+    private FunctionNode createDebugFunctionNode(SourceLocation insertionLocation) {
+      return FunctionNode.newPositional(
+          Identifier.create(BuiltinFunction.DEBUG_SOY_TEMPLATE_INFO.getName(), insertionLocation),
+          BuiltinFunction.DEBUG_SOY_TEMPLATE_INFO,
+          insertionLocation);
+    }
+
+    private HtmlAttributeNode createHtmlAttribute(SourceLocation insertionLocation) {
+      HtmlAttributeNode attribute = new HtmlAttributeNode(nodeIdGen.genId(), insertionLocation, insertionLocation.getBeginPoint());
+      attribute.addChild(new RawTextNode(nodeIdGen.genId(), DATA_DEBUG_SOY, insertionLocation));
+      HtmlAttributeValueNode attrValue = new HtmlAttributeValueNode(nodeIdGen.genId(), insertionLocation, HtmlAttributeValueNode.Quotes.DOUBLE);
+      attribute.addChild(attrValue);
+      attrValue.addChild(createAttributeValueNode(insertionLocation));
+      return attribute;
+    }
+
+    private RawTextNode createAttributeValueNode(SourceLocation insertionLocation) {
+      return new RawTextNode(
+          nodeIdGen.genId(),
+          Sanitizers.escapeHtmlAttribute(currentTemplate + " " + insertionLocation.getFilePath().path() + ":" + insertionLocation.getBeginLine()),
+          insertionLocation);
     }
   }
 }
