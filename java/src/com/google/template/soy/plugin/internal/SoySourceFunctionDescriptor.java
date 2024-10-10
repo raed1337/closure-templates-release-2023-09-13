@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2023 Google Inc.
  *
@@ -26,18 +27,16 @@ public abstract class SoySourceFunctionDescriptor {
   private static final String UNKNOWN_PLUGIN = "//unknown";
   private static final String INTERNAL_PLUGIN = "//internal";
 
-  public static SoySourceFunctionDescriptor create(
-      String pluginTarget, SoySourceFunction soySourceFunction) {
+  public static SoySourceFunctionDescriptor create(String pluginTarget, SoySourceFunction soySourceFunction) {
     return new AutoValue_SoySourceFunctionDescriptor(pluginTarget, soySourceFunction);
   }
 
-  public static SoySourceFunctionDescriptor createUnknownPlugin(
-      SoySourceFunction soySourceFunction) {
-    return new AutoValue_SoySourceFunctionDescriptor(UNKNOWN_PLUGIN, soySourceFunction);
+  public static SoySourceFunctionDescriptor createUnknownPlugin(SoySourceFunction soySourceFunction) {
+    return create(UNKNOWN_PLUGIN, soySourceFunction);
   }
 
   public static SoySourceFunctionDescriptor createInternal(SoySourceFunction soySourceFunction) {
-    return new AutoValue_SoySourceFunctionDescriptor(INTERNAL_PLUGIN, soySourceFunction);
+    return create(INTERNAL_PLUGIN, soySourceFunction);
   }
 
   /** The build target defining the plugin, e.g. //path/pkg:plugins. */
@@ -46,10 +45,10 @@ public abstract class SoySourceFunctionDescriptor {
   public abstract SoySourceFunction soySourceFunction();
 
   public boolean isKnownPlugin() {
-    return !pluginTarget().equals(UNKNOWN_PLUGIN);
+    return !UNKNOWN_PLUGIN.equals(pluginTarget());
   }
 
   public boolean isInternal() {
-    return pluginTarget().equals(INTERNAL_PLUGIN);
+    return INTERNAL_PLUGIN.equals(pluginTarget());
   }
 }
