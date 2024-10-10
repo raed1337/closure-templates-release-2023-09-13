@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -20,47 +21,49 @@ import com.google.template.soy.shared.restricted.SoyPrintDirective;
 
 /** Lists all basic directives. */
 public final class BasicDirectives {
-  private BasicDirectives() {}
+    private BasicDirectives() {}
 
-  public static SoyPrintDirective ESCAPE_HTML_ATTRIBUTE =
-      new BasicEscapeDirective.EscapeHtmlAttribute();
+    public static final SoyPrintDirective ESCAPE_HTML_ATTRIBUTE =
+            new BasicEscapeDirective.EscapeHtmlAttribute();
 
-  public static ImmutableSet<SoyPrintDirective> directives() {
-    return ImmutableSet.of(
+    private static final SoyPrintDirective[] ALL_DIRECTIVES = {
+            // Basic escape directives.
+            new BasicEscapeDirective.EscapeCssString(),
+            new BasicEscapeDirective.FilterCssValue(),
+            new BasicEscapeDirective.NormalizeHtml(),
+            new BasicEscapeDirective.EscapeHtmlRcdata(),
+            ESCAPE_HTML_ATTRIBUTE,
+            new BasicEscapeDirective.EscapeHtmlHtmlAttribute(),
+            new BasicEscapeDirective.EscapeHtmlAttributeNospace(),
+            new BasicEscapeDirective.FilterHtmlAttributes(),
+            new BasicEscapeDirective.FilterNumber(),
+            new BasicEscapeDirective.FilterHtmlElementName(),
+            new BasicEscapeDirective.EscapeJsRegex(),
+            new BasicEscapeDirective.EscapeJsString(),
+            new BasicEscapeDirective.EscapeJsValue(),
+            new BasicEscapeDirective.FilterNormalizeUri(),
+            new BasicEscapeDirective.FilterNormalizeMediaUri(),
+            new BasicEscapeDirective.FilterNormalizeRefreshUri(),
+            new BasicEscapeDirective.FilterTrustedResourceUri(),
+            new BasicEscapeDirective.NormalizeUri(),
+            new BasicEscapeDirective.EscapeUri(),
+            new BasicEscapeDirective.FilterHtmlScriptPhrasingData(),
+            new BasicEscapeDirective.FilterCspNonceValue(),
+            new BasicEscapeDirective.WhitespaceHtmlAttributesDirective(),
 
-        // Basic escape directives.
-        new BasicEscapeDirective.EscapeCssString(),
-        new BasicEscapeDirective.FilterCssValue(),
-        new BasicEscapeDirective.NormalizeHtml(),
-        new BasicEscapeDirective.EscapeHtmlRcdata(),
-        ESCAPE_HTML_ATTRIBUTE,
-        new BasicEscapeDirective.EscapeHtmlHtmlAttribute(),
-        new BasicEscapeDirective.EscapeHtmlAttributeNospace(),
-        new BasicEscapeDirective.FilterHtmlAttributes(),
-        new BasicEscapeDirective.FilterNumber(),
-        new BasicEscapeDirective.FilterHtmlElementName(),
-        new BasicEscapeDirective.EscapeJsRegex(),
-        new BasicEscapeDirective.EscapeJsString(),
-        new BasicEscapeDirective.EscapeJsValue(),
-        new BasicEscapeDirective.FilterNormalizeUri(),
-        new BasicEscapeDirective.FilterNormalizeMediaUri(),
-        new BasicEscapeDirective.FilterNormalizeRefreshUri(),
-        new BasicEscapeDirective.FilterTrustedResourceUri(),
-        new BasicEscapeDirective.NormalizeUri(),
-        new BasicEscapeDirective.EscapeUri(),
-        new BasicEscapeDirective.FilterHtmlScriptPhrasingData(),
-        new BasicEscapeDirective.FilterCspNonceValue(),
-        new BasicEscapeDirective.WhitespaceHtmlAttributesDirective(),
+            // Other directives.
+            new ChangeNewlineToBrDirective(),
+            new InsertWordBreaksDirective(),
+            new TruncateDirective(),
+            new TextDirective(),
+            new CleanHtmlDirective(),
+            new FilterImageDataUriDirective(),
+            new FilterSipUriDirective(),
+            new FilterTelUriDirective(),
+            new FilterLegacyUriBehaviorDirective()
+    };
 
-        // Other directives.
-        new ChangeNewlineToBrDirective(),
-        new InsertWordBreaksDirective(),
-        new TruncateDirective(),
-        new TextDirective(),
-        new CleanHtmlDirective(),
-        new FilterImageDataUriDirective(),
-        new FilterSipUriDirective(),
-        new FilterTelUriDirective(),
-        new FilterLegacyUriBehaviorDirective());
-  }
+    public static ImmutableSet<SoyPrintDirective> directives() {
+        return ImmutableSet.copyOf(ALL_DIRECTIVES);
+    }
 }
