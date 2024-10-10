@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -75,10 +77,26 @@ public final class StrStartsWithMethod
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    validateArgs(args);
     return factory.callStaticMethod(
         Methods.STR_STARTS_WITH,
         args.get(0),
         args.get(1),
         args.size() == 3 ? args.get(2) : factory.constant(0));
+  }
+
+  private void validateArgs(List<JavaValue> args) {
+    if (args == null || args.isEmpty()) {
+      throw new IllegalArgumentException("Arguments cannot be null or empty.");
+    }
+    if (args.size() < 2 || args.size() > 3) {
+      throw new IllegalArgumentException("Invalid number of arguments. Expected 2 or 3.");
+    }
+    if (!(args.get(0) instanceof JavaValue) || !(args.get(1) instanceof JavaValue)) {
+      throw new IllegalArgumentException("First two arguments must be strings.");
+    }
+    if (args.size() == 3 && !(args.get(2) instanceof NumberData)) {
+      throw new IllegalArgumentException("Third argument must be a number.");
+    }
   }
 }
