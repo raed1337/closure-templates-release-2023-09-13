@@ -1,18 +1,3 @@
-/*
- * Copyright 2012 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package com.google.template.soy.basicfunctions;
 
@@ -55,7 +40,7 @@ import java.util.List;
 @SoyPureFunction
 public final class StrIncludesFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
-  // lazy singleton pattern, allows other backends to avoid the work.
+  
   private static final class Methods {
     static final Method STR_CONTAINS =
         JavaValueFactory.createMethod(
@@ -78,25 +63,17 @@ public final class StrIncludesFunction
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
-    if (args.size() == 3) {
-      return args.get(1)
-          .coerceToString()
-          .in(
-              factory
-                  .global("runtime.str_substring")
-                  .call(args.get(0), args.get(2), factory.constantNull()));
-    }
-    return args.get(1).in(args.get(0));
+    return (args.size() == 3) 
+        ? args.get(1).coerceToString().in(factory.global("runtime.str_substring")
+            .call(args.get(0), args.get(2), factory.constantNull())) 
+        : args.get(1).in(args.get(0));
   }
 
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    if (args.size() == 3) {
-      return factory.callStaticMethod(
-          Methods.STR_CONTAINS_FROM_INDEX, args.get(0), args.get(1), args.get(2));
-    }
-    return factory.callStaticMethod(
-        Methods.STR_CONTAINS, args.get(0), args.get(1).coerceToSoyString());
+    return (args.size() == 3) 
+        ? factory.callStaticMethod(Methods.STR_CONTAINS_FROM_INDEX, args.get(0), args.get(1), args.get(2)) 
+        : factory.callStaticMethod(Methods.STR_CONTAINS, args.get(0), args.get(1).coerceToSoyString());
   }
 }
