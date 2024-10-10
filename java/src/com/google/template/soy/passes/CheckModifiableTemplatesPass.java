@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2022 Google Inc.
  *
@@ -78,17 +79,21 @@ final class CheckModifiableTemplatesPass implements CompilerFilePass {
     for (TemplateNode templateNode : file.getTemplates()) {
       if (templateNode instanceof TemplateBasicNode) {
         TemplateBasicNode templateBasicNode = (TemplateBasicNode) templateNode;
-        if (templateBasicNode.isModifiable() && file.getModName() != null) {
-          errorReporter.report(templateNode.getSourceLocation(), MODIFIABLE_WITH_MODNAME);
-        }
-        if (templateBasicNode.getModifiesExpr() != null
-            && templateBasicNode.getVariantExpr() == null
-            && file.getModName() == null) {
-          errorReporter.report(templateNode.getSourceLocation(), MODIFIES_WITHOUT_MODNAME);
-        }
+        checkModifiableInFile(templateBasicNode, file);
         validateModifiesAttribute(templateBasicNode, file, modifiedNamespaces);
         validateVariantExpr(templateBasicNode);
       }
+    }
+  }
+
+  private void checkModifiableInFile(TemplateBasicNode templateBasicNode, SoyFileNode file) {
+    if (templateBasicNode.isModifiable() && file.getModName() != null) {
+      errorReporter.report(templateBasicNode.getSourceLocation(), MODIFIABLE_WITH_MODNAME);
+    }
+    if (templateBasicNode.getModifiesExpr() != null
+        && templateBasicNode.getVariantExpr() == null
+        && file.getModName() == null) {
+      errorReporter.report(templateBasicNode.getSourceLocation(), MODIFIES_WITHOUT_MODNAME);
     }
   }
 
@@ -138,7 +143,6 @@ final class CheckModifiableTemplatesPass implements CompilerFilePass {
 
   private void validateSingleFileIsModded(
       TemplateBasicNode templateBasicNode, SoyFileNode file, Set<String> modifiedNamespaces) {
-    // Invariants checked in validateModifiesAttribute().
     Preconditions.checkNotNull(templateBasicNode.getModifiesExpr());
     Preconditions.checkState(
         templateBasicNode.getModifiesExpr().getRoot() instanceof TemplateLiteralNode);
