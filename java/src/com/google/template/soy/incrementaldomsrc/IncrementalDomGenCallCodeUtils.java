@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -29,6 +30,7 @@ import com.google.template.soy.soytree.CallParamContentNode;
  * creating Elements, Text and attributes rather than relying on innerHTML.
  */
 final class IncrementalDomGenCallCodeUtils extends GenCallCodeUtils {
+  
   IncrementalDomGenCallCodeUtils(
       IncrementalDomDelTemplateNamer incrementalDomDelTemplateNamer,
       IsComputableAsIncrementalDomExprsVisitor isComputableAsIncrementalDomExprsVisitor,
@@ -43,10 +45,13 @@ final class IncrementalDomGenCallCodeUtils extends GenCallCodeUtils {
   @Override
   protected Expression maybeWrapContent(
       CodeChunk.Generator generator, CallParamContentNode node, Expression content) {
-    SanitizedContentKind kind = node.getContentKind();
-    if (kind.isHtml() || kind == SanitizedContentKind.ATTRIBUTES) {
+    if (isContentKindSafe(node.getContentKind())) {
       return content;
     }
     return super.maybeWrapContent(generator, node, content);
+  }
+
+  private boolean isContentKindSafe(SanitizedContentKind kind) {
+    return kind.isHtml() || kind == SanitizedContentKind.ATTRIBUTES;
   }
 }
