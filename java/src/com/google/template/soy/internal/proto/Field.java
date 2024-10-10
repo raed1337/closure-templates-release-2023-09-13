@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -42,6 +43,13 @@ public abstract class Field {
   public static <T extends Field> ImmutableMap<String, T> getFieldsForType(
       Descriptor descriptor, Set<FieldDescriptor> extensions, Factory<T> factory) {
     ImmutableMap.Builder<String, T> fields = ImmutableMap.builder();
+    addFieldsToMap(descriptor, factory, fields);
+    addExtensionsToMap(extensions, factory, fields);
+    return fields.build();
+  }
+
+  private static <T extends Field> void addFieldsToMap(Descriptor descriptor, Factory<T> factory,
+      ImmutableMap.Builder<String, T> fields) {
     for (FieldDescriptor fieldDescriptor : descriptor.getFields()) {
       if (ProtoUtils.shouldJsIgnoreField(fieldDescriptor)) {
         continue;
@@ -49,14 +57,14 @@ public abstract class Field {
       T field = factory.create(fieldDescriptor);
       fields.put(field.getName(), field);
     }
+  }
 
+  private static <T extends Field> void addExtensionsToMap(Set<FieldDescriptor> extensions, Factory<T> factory,
+      ImmutableMap.Builder<String, T> fields) {
     for (FieldDescriptor extension : extensions) {
       T field = factory.create(extension);
-
-      // Store fully qualified name of extension fields.
       fields.put(field.getFullyQualifiedName(), field);
     }
-    return fields.build();
   }
 
   private final FieldDescriptor fieldDesc;
@@ -86,25 +94,29 @@ public abstract class Field {
   /** Converts snake case to lower camel case and appends 'List' or 'Map' if necessary. */
   public static String computeSoyName(FieldDescriptor field) {
     String result = CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, field.getName());
+    return formatName(result) + fieldSuffix(field);
+  }
+
+  private static String formatName(String name) {
     String lowerCamelCaseGuarantee =
-        Ascii.toLowerCase(result.substring(0, Math.min(1, result.length())))
-            + result.substring(Math.min(1, result.length()));
-    return lowerCamelCaseGuarantee + fieldSuffix(field);
+        Ascii.toLowerCase(name.substring(0, Math.min(1, name.length())))
+            + name.substring(Math.min(1, name.length()));
+    return lowerCamelCaseGuarantee;
   }
 
   public static String computeSoyFullyQualifiedName(FieldDescriptor field) {
-    String fieldPath;
-    if (!field.isExtension()) {
-      fieldPath = field.getContainingType().getFullName();
-    } else if (field.getExtensionScope() != null) {
-      // Regular extension field
-      fieldPath = field.getExtensionScope().getFullName();
-    } else {
-      // Floating extension
-      fieldPath = field.getFile().getPackage();
-    }
-
+    String fieldPath = determineFieldPath(field);
     return fieldPath + "." + computeSoyName(field);
+  }
+
+  private static String determineFieldPath(FieldDescriptor field) {
+    if (!field.isExtension()) {
+      return field.getContainingType().getFullName();
+    } else if (field.getExtensionScope() != null) {
+      return field.getExtensionScope().getFullName();
+    } else {
+      return field.getFile().getPackage();
+    }
   }
 
   private static String fieldSuffix(FieldDescriptor field) {
