@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -45,7 +46,7 @@ public abstract class LetNode extends AbstractCommandNode
       String localVarName,
       SourceLocation localVarNameLocation) {
     super(id, sourceLocation, "let");
-    this.var = new LocalVar(localVarName, localVarNameLocation, this, /* type= */ null);
+    this.var = createLocalVar(localVarName, localVarNameLocation);
   }
 
   /**
@@ -61,7 +62,7 @@ public abstract class LetNode extends AbstractCommandNode
 
   /** Gets a unique version of the local var name (e.g. appending "__soy##" if necessary). */
   public String getUniqueVarName() {
-    return getVarName() + "__soy" + getId();
+    return generateUniqueVarName(getVarName(), getId());
   }
 
   @SuppressWarnings("unchecked")
@@ -74,5 +75,13 @@ public abstract class LetNode extends AbstractCommandNode
   @Override
   public final LocalVar getVar() {
     return var;
+  }
+
+  private LocalVar createLocalVar(String localVarName, SourceLocation localVarNameLocation) {
+    return new LocalVar(localVarName, localVarNameLocation, this, /* type= */ null);
+  }
+
+  private String generateUniqueVarName(String varName, int id) {
+    return varName + "__soy" + id;
   }
 }
