@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -59,38 +60,47 @@ public final class TemplateElementNodeBuilder
     this.attrs = attrs;
     this.cmdText = templateName.identifier() + " " + Joiner.on(' ').join(attrs);
     setCommonCommandValues(attrs);
+    validateAttributes(attrs);
+    setTemplateNames(templateName, soyFileHeaderInfo.getNamespace());
+    return this;
+  }
 
+  private void validateAttributes(List<CommandTagAttribute> attrs) {
     for (CommandTagAttribute attribute : attrs) {
       Identifier name = attribute.getName();
       switch (name.identifier()) {
         case "kind":
-          if (!getContentKind().getSanitizedContentKind().isHtml()) {
-            errorReporter.report(attribute.getValueLocation(), INVALID_ELEMENT_KIND);
-          }
+          checkElementKind(attribute);
           break;
         default:
-          if (BANNED_ATTRIBUTE_NAMES.contains(name.identifier())) {
-            this.errorReporter.report(
-                name.location(), BANNED_ATTRIBUTE_NAMES_ERROR, name.identifier());
-
-          } else if (!COMMON_ATTRIBUTE_NAMES.contains(name.identifier())) {
-            errorReporter.report(
-                name.location(),
-                CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-                name.identifier(),
-                "element",
-                ImmutableList.builder()
-                    .addAll(
-                        COMMON_ATTRIBUTE_NAMES.stream()
-                            .filter(n -> !BANNED_ATTRIBUTE_NAMES.contains(n))
-                            .collect(ImmutableList.toImmutableList()))
-                    .build());
-          }
+          checkBannedAttributes(attribute, name);
       }
     }
+  }
 
-    setTemplateNames(templateName, soyFileHeaderInfo.getNamespace());
-    return this;
+  private void checkElementKind(CommandTagAttribute attribute) {
+    if (!getContentKind().getSanitizedContentKind().isHtml()) {
+      errorReporter.report(attribute.getValueLocation(), INVALID_ELEMENT_KIND);
+    }
+  }
+
+  private void checkBannedAttributes(CommandTagAttribute attribute, Identifier name) {
+    if (BANNED_ATTRIBUTE_NAMES.contains(name.identifier())) {
+      errorReporter.report(
+          name.location(), BANNED_ATTRIBUTE_NAMES_ERROR, name.identifier());
+    } else if (!COMMON_ATTRIBUTE_NAMES.contains(name.identifier())) {
+      errorReporter.report(
+          name.location(),
+          CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
+          name.identifier(),
+          "element",
+          ImmutableList.builder()
+              .addAll(
+                  COMMON_ATTRIBUTE_NAMES.stream()
+                      .filter(n -> !BANNED_ATTRIBUTE_NAMES.contains(n))
+                      .collect(ImmutableList.toImmutableList()))
+              .build());
+    }
   }
 
   @Override
