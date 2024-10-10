@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -56,6 +58,10 @@ public final class MapKeysFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return callNamespaceFunction(factory, args);
+  }
+
+  private JavaScriptValue callNamespaceFunction(JavaScriptValueFactory factory, List<JavaScriptValue> args) {
     // TODO(lukes) this could be callModuleFunction but other parts of soy don't generate aliased
     // requires so we can't generate one here without create a 'multiple require' error
     // this could be handled via more clever require handling in the compiler.
@@ -65,6 +71,10 @@ public final class MapKeysFunction
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
+    return convertDictKeysToList(factory, args);
+  }
+
+  private PythonValue convertDictKeysToList(PythonValueFactory factory, List<PythonValue> args) {
     // dict.keys() returns a view object, which is not iterable in the way we expect. So, we must
     // convert it to an iterable data structure first.
     PythonValue innerValue = args.get(0).getProp("keys").call();
