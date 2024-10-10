@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -37,7 +38,7 @@ public abstract class CaseOrDefaultNode extends AbstractBlockCommandNode {
   public CaseOrDefaultNode(
       int id, SourceLocation sourceLocation, SourceLocation openTagLocation, String commandName) {
     super(id, sourceLocation, openTagLocation, commandName);
-    Preconditions.checkArgument("case".equals(commandName) || "default".equals(commandName));
+    Preconditions.checkArgument(isValidCommand(commandName));
   }
 
   /**
@@ -49,10 +50,13 @@ public abstract class CaseOrDefaultNode extends AbstractBlockCommandNode {
     super(orig, copyState);
   }
 
+  private boolean isValidCommand(String commandName) {
+    return "case".equals(commandName) || "default".equals(commandName);
+  }
+
   @Override
   public String toSourceString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append(getTagString());
+    StringBuilder sb = new StringBuilder(getTagString());
     appendSourceStringForChildren(sb);
     // Note: No end tag.
     return sb.toString();
