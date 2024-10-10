@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -82,50 +83,26 @@ final class RewriteGenderMsgsPass implements CompilerFilePass {
     }
 
     // ------ Do the rewrite. ------
-
-    // Note: We process the genders in reverse order so that the first listed gender will end up
-    // being the outermost 'select' level.
     genderExprs = Lists.reverse(genderExprs);
-
     Checkpoint checkpoint = errorReporter.checkpoint();
-    List<String> baseSelectVarNames =
-        genNoncollidingBaseNamesForExprs(
-            ExprRootNode.unwrap(genderExprs), FALLBACK_BASE_SELECT_VAR_NAME, errorReporter);
+    List<String> baseSelectVarNames = generateBaseSelectVarNames(genderExprs, checkpoint, nodeIdGen);
     if (errorReporter.errorsSince(checkpoint)) {
       return; // To prevent an IndexOutOfBoundsException below.
     }
 
     for (int i = 0; i < genderExprs.size(); i++) {
-      ExprRootNode genderExpr = genderExprs.get(i);
-      String baseSelectVarName = baseSelectVarNames.get(i);
-
-      // Check whether the generated base name would be the same (both for the old naive algorithm
-      // and the new algorithm). If so, then there's no need to specify the baseSelectVarName.
-      if (genNaiveBaseNameForExpr(genderExpr.getRoot(), FALLBACK_BASE_SELECT_VAR_NAME)
-              .equals(baseSelectVarName)
-          && genShortestBaseNameForExpr(genderExpr.getRoot(), FALLBACK_BASE_SELECT_VAR_NAME)
-              .equals(baseSelectVarName)) {
-        baseSelectVarName = null;
-      }
-
-      splitMsgForGender(msg, genderExpr, baseSelectVarName, nodeIdGen);
+      splitMsgForGender(msg, genderExprs.get(i), baseSelectVarNames.get(i), nodeIdGen);
     }
 
     // ------ Verify from the re-written msg that gender restrictions are followed. ------
-
     checkExceedsMaxGenders((MsgSelectNode) msg.getChild(0), 1);
   }
 
-  /**
-   * Helper to split a msg for gender, by adding a 'select' node and cloning the msg's contents into
-   * all 3 cases of the 'select' node ('female'/'male'/default).
-   *
-   * @param msg The message to split.
-   * @param genderExpr The expression for the gender value.
-   * @param baseSelectVarName The base select var name to use, or null if it should be generated
-   *     from the gender expression.
-   * @param nodeIdGen The id generator for the current tree
-   */
+  private List<String> generateBaseSelectVarNames(List<ExprRootNode> genderExprs, Checkpoint checkpoint, IdGenerator nodeIdGen) {
+    return genNoncollidingBaseNamesForExprs(
+        ExprRootNode.unwrap(genderExprs), FALLBACK_BASE_SELECT_VAR_NAME, errorReporter);
+  }
+
   private static void splitMsgForGender(
       MsgNode msg,
       ExprRootNode genderExpr,
@@ -135,40 +112,42 @@ final class RewriteGenderMsgsPass implements CompilerFilePass {
     List<StandaloneNode> origChildren = ImmutableList.copyOf(msg.getChildren());
     msg.clearChildren();
 
-    MsgSelectCaseNode femaleCase =
-        new MsgSelectCaseNode(
-            nodeIdGen.genId(), msg.getSourceLocation(), msg.getOpenTagLocation(), "female");
-    femaleCase.addChildren(origChildren);
-    MsgSelectCaseNode maleCase =
-        new MsgSelectCaseNode(
-            nodeIdGen.genId(), msg.getSourceLocation(), msg.getOpenTagLocation(), "male");
-    maleCase.addChildren(copyWhilePresevingPlaceholderIdentity(origChildren, nodeIdGen));
-    MsgSelectDefaultNode defaultCase =
-        new MsgSelectDefaultNode(
-            nodeIdGen.genId(), msg.getSourceLocation(), msg.getOpenTagLocation());
-    defaultCase.addChildren(copyWhilePresevingPlaceholderIdentity(origChildren, nodeIdGen));
-
-    MsgSelectNode selectNode =
-        MsgSelectNode.fromGenderExpr(
-            nodeIdGen.genId(),
-            msg.getSourceLocation(),
-            msg.getOpenTagLocation(),
-            genderExpr,
-            baseSelectVarName);
-    selectNode.addChild(femaleCase);
-    selectNode.addChild(maleCase);
-    selectNode.addChild(defaultCase);
-
+    MsgSelectNode selectNode = createSelectNode(msg, genderExpr, baseSelectVarName, nodeIdGen);
     msg.addChild(selectNode);
   }
 
-  /**
-   * Copies the nodes with new ids but preserves the placeholder identity. This is important
-   * because, while we don't have a great algorithm for telling that certain placeholders are
-   * actually identical, in the special case of {@code genders=} messages we do know that
-   * placeholders are equivalent since we are actually cloning messages into multiple cases.
-   */
-  private static List<StandaloneNode> copyWhilePresevingPlaceholderIdentity(
+  private static MsgSelectNode createSelectNode(MsgNode msg, ExprRootNode genderExpr, @Nullable String baseSelectVarName, IdGenerator nodeIdGen) {
+    MsgSelectNode selectNode = MsgSelectNode.fromGenderExpr(
+        nodeIdGen.genId(),
+        msg.getSourceLocation(),
+        msg.getOpenTagLocation(),
+        genderExpr,
+        baseSelectVarName);
+    
+    selectNode.addChild(createGenderCase(msg, "female", nodeIdGen));
+    selectNode.addChild(createGenderCase(msg, "male", nodeIdGen));
+    selectNode.addChild(createDefaultCase(msg, nodeIdGen));
+    
+    return selectNode;
+  }
+
+  private static MsgSelectCaseNode createGenderCase(MsgNode msg, String gender, IdGenerator nodeIdGen) {
+    List<StandaloneNode> origChildren = ImmutableList.copyOf(msg.getChildren());
+    MsgSelectCaseNode caseNode = new MsgSelectCaseNode(
+        nodeIdGen.genId(), msg.getSourceLocation(), msg.getOpenTagLocation(), gender);
+    caseNode.addChildren(origChildren);
+    return caseNode;
+  }
+
+  private static MsgSelectDefaultNode createDefaultCase(MsgNode msg, IdGenerator nodeIdGen) {
+    List<StandaloneNode> origChildren = ImmutableList.copyOf(msg.getChildren());
+    MsgSelectDefaultNode defaultCase = new MsgSelectDefaultNode(
+        nodeIdGen.genId(), msg.getSourceLocation(), msg.getOpenTagLocation());
+    defaultCase.addChildren(copyWhilePreservingPlaceholderIdentity(origChildren, nodeIdGen));
+    return defaultCase;
+  }
+
+  private static List<StandaloneNode> copyWhilePreservingPlaceholderIdentity(
       List<StandaloneNode> nodes, IdGenerator nodeIdGen) {
     List<StandaloneNode> copy = SoyTreeUtils.cloneListWithNewIds(nodes, nodeIdGen);
     List<MsgPlaceholderNode> placeholders = allPlaceholders(nodes);
@@ -198,10 +177,8 @@ final class RewriteGenderMsgsPass implements CompilerFilePass {
     for (int caseNum = 0; caseNum < selectNode.numChildren(); caseNum++) {
       if (selectNode.getChild(caseNum).numChildren() > 0) {
         StandaloneNode caseNodeChild = selectNode.getChild(caseNum).getChild(0);
-        // Plural cannot contain plurals or selects, so no need to recurse further.
         if (caseNodeChild instanceof MsgPluralNode && depth >= 3) {
-          errorReporter.report(
-              selectNode.getSourceLocation(), MORE_THAN_TWO_GENDER_EXPRS_WITH_PLURAL);
+          errorReporter.report(selectNode.getSourceLocation(), MORE_THAN_TWO_GENDER_EXPRS_WITH_PLURAL);
           return false;
         }
         if (caseNodeChild instanceof MsgSelectNode) {
