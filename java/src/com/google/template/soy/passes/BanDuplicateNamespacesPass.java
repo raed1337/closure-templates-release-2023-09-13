@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -61,36 +62,49 @@ final class BanDuplicateNamespacesPass implements CompilerFileSetPass {
 
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator nodeIdGen) {
-    ImmutableSetMultimap<String, String> namespaceToFiles =
-        fileSetTemplateRegistry.get().getAllTemplates().stream()
-            .collect(
-                toImmutableSetMultimap(
-                    BanDuplicateNamespacesPass::namespace,
-                    t -> t.getSourceLocation().getFilePath().path()));
+    ImmutableSetMultimap<String, String> namespaceToFiles = createNamespaceToFilesMap();
+    checkDuplicateNamespaces(sourceFiles, namespaceToFiles);
+    checkNamespaceCollisions();
+    return Result.CONTINUE;
+  }
+
+  private ImmutableSetMultimap<String, String> createNamespaceToFilesMap() {
+    return fileSetTemplateRegistry.get().getAllTemplates().stream()
+        .collect(
+            toImmutableSetMultimap(
+                BanDuplicateNamespacesPass::namespace,
+                t -> t.getSourceLocation().getFilePath().path()));
+  }
+
+  private void checkDuplicateNamespaces(ImmutableList<SoyFileNode> sourceFiles, ImmutableSetMultimap<String, String> namespaceToFiles) {
     for (SoyFileNode sourceFile : sourceFiles) {
       ImmutableSet<String> filePaths = namespaceToFiles.get(sourceFile.getNamespace());
       if (filePaths.size() > 1) {
-        String filePath = sourceFile.getFilePath().path();
-        String otherFiles =
-            filePaths.stream().filter(path -> !path.equals(filePath)).collect(joining(", "));
-        if (NamespaceExemptions.isKnownDuplicateNamespace(sourceFile.getNamespace())) {
-          errorReporter.warn(
-              sourceFile.getNamespaceDeclaration().getSourceLocation(),
-              DUPLICATE_NAMESPACE_WARNING,
-              otherFiles);
-        } else {
-          errorReporter.report(
-              sourceFile.getNamespaceDeclaration().getSourceLocation(),
-              DUPLICATE_NAMESPACE,
-              otherFiles);
-        }
+        reportDuplicateNamespaceError(sourceFile, filePaths);
       }
     }
+  }
 
-    // Check for template/namespace collisions by sorting all template names. If a template matches
-    // all or some of a namespace, they will be adjacent in the sorted set.
-    TreeSet<TemplateMetadata> allTemplatesSortedByName =
-        new TreeSet<>(comparing(TemplateMetadata::getTemplateName));
+  private void reportDuplicateNamespaceError(SoyFileNode sourceFile, ImmutableSet<String> filePaths) {
+    String filePath = sourceFile.getFilePath().path();
+    String otherFiles = filePaths.stream()
+        .filter(path -> !path.equals(filePath))
+        .collect(joining(", "));
+    if (NamespaceExemptions.isKnownDuplicateNamespace(sourceFile.getNamespace())) {
+      errorReporter.warn(
+          sourceFile.getNamespaceDeclaration().getSourceLocation(),
+          DUPLICATE_NAMESPACE_WARNING,
+          otherFiles);
+    } else {
+      errorReporter.report(
+          sourceFile.getNamespaceDeclaration().getSourceLocation(),
+          DUPLICATE_NAMESPACE,
+          otherFiles);
+    }
+  }
+
+  private void checkNamespaceCollisions() {
+    TreeSet<TemplateMetadata> allTemplatesSortedByName = new TreeSet<>(comparing(TemplateMetadata::getTemplateName));
     allTemplatesSortedByName.addAll(fileSetTemplateRegistry.get().getAllTemplates());
     TemplateMetadata last = null;
     for (TemplateMetadata next : allTemplatesSortedByName) {
@@ -104,7 +118,6 @@ final class BanDuplicateNamespacesPass implements CompilerFileSetPass {
       }
       last = next;
     }
-    return Result.CONTINUE;
   }
 
   private static String namespace(TemplateMetadata meta) {
