@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -30,10 +31,10 @@ import com.google.template.soy.soytree.SoyNode.ParentSoyNode;
 import com.google.template.soy.soytree.TemplateNode;
 import com.google.template.soy.soytree.VeLogNode;
 import com.google.template.soy.types.SanitizedType.HtmlType;
+
 import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Checks for validity of skip nodes wrt their host node. */
 final class IncrementalDomKeysPass implements CompilerFilePass {
   private final boolean disableAllTypeChecking;
 
@@ -47,12 +48,6 @@ final class IncrementalDomKeysPass implements CompilerFilePass {
   }
 
   private static final class IncrementalDomKeysPassVisitor extends AbstractSoyNodeVisitor<Void> {
-    // Tracks the counter to use for a tag's generated key:
-    // - When encountering an open tag without a manual key, the counter at the top of the stack is
-    //   incremented.
-    // - When encountering an open tag with a manual key, a new counter is pushed onto the stack.
-    // - When encountering a close tag that corresponds to an open tag with a manual key, the
-    //   topmost counter is then popped from the stack.
     private ArrayDeque<AtomicInteger> keyCounterStack;
     private ArrayDeque<Boolean> htmlKeyStack;
     private TemplateNode template;
@@ -66,57 +61,46 @@ final class IncrementalDomKeysPass implements CompilerFilePass {
 
     @Override
     public void visitTemplateNode(TemplateNode templateNode) {
-      htmlKeyStack = new ArrayDeque<>();
-      keyCounterStack = new ArrayDeque<>();
-      keyCounterStack.push(new AtomicInteger());
+      initializeStacks();
       template = templateNode;
       templateContainsUnpredictableContent = false;
       visitBlockNode(templateNode);
     }
-    /**
-     * For all dynamic content, the exact number of nodes produced is unknown and could change from
-     * render to render. thus, we need to key all content within the block AND all content after the
-     * block.
-     */
-    private void visitBlockNode(ParentSoyNode<?> node) {
-      // Everything within and after the block node must be keyed as it may be conditionally
-      // rendered.
-      mustEmitKeyNodes = true;
-      visitChildren((ParentSoyNode) node);
+
+    private void initializeStacks() {
+      htmlKeyStack = new ArrayDeque<>();
+      keyCounterStack = new ArrayDeque<>();
+      keyCounterStack.push(new AtomicInteger());
     }
 
-    /**
-     * A print node could contain dynamic content that produces HTML of varying lengths, so key
-     * everything after a well.
-     */
+    private void visitBlockNode(ParentSoyNode<?> node) {
+      mustEmitKeyNodes = true;
+      visitChildren(node);
+    }
+
     @Override
     public void visitPrintNode(PrintNode node) {
-      if (!disableAllTypeChecking
-          && node.getExpr().getRoot().getType().isAssignableFromStrict(HtmlType.getInstance())) {
+      if (shouldEmitKeyForPrintNode(node)) {
         mustEmitKeyNodes = true;
         htmlKeyStack.push(true);
       }
     }
-    /**
-     * We don't know how this content is going to be used, so key everything. But because we haven't
-     * rendered this let block yet, we don't set any mustEmitKeyNodes values after.
-     */
+
+    private boolean shouldEmitKeyForPrintNode(PrintNode node) {
+      return !disableAllTypeChecking && node.getExpr().getRoot().getType().isAssignableFromStrict(HtmlType.getInstance());
+    }
+
     @Override
     public void visitLetContentNode(LetContentNode node) {
-      var oldMustEmitKeyNodes = mustEmitKeyNodes;
+      boolean oldMustEmitKeyNodes = mustEmitKeyNodes;
       mustEmitKeyNodes = true;
-      visitChildren((ParentSoyNode) node);
+      visitChildren(node);
       mustEmitKeyNodes = oldMustEmitKeyNodes;
     }
 
     @Override
     public void visitSoyNode(SoyNode node) {
-      var isTemplateNode = node instanceof TemplateNode || node instanceof VeLogNode;
-      var isHtmlContextBlock =
-          node instanceof HtmlContext.HtmlContextHolder
-              && node instanceof ParentSoyNode
-              && ((HtmlContext.HtmlContextHolder) node).getHtmlContext() == HtmlContext.HTML_PCDATA;
-      if (isTemplateNode || isHtmlContextBlock) {
+      if (isRelevantSoyNode(node)) {
         visitBlockNode((ParentSoyNode) node);
         return;
       }
@@ -125,38 +109,57 @@ final class IncrementalDomKeysPass implements CompilerFilePass {
       }
     }
 
+    private boolean isRelevantSoyNode(SoyNode node) {
+      return node instanceof TemplateNode || node instanceof VeLogNode || 
+             (node instanceof HtmlContext.HtmlContextHolder && 
+              ((HtmlContext.HtmlContextHolder) node).getHtmlContext() == HtmlContext.HTML_PCDATA);
+    }
+
     @Override
     public void visitHtmlOpenTagNode(HtmlOpenTagNode openTagNode) {
-      KeyNode keyNode = openTagNode.getKeyNode();
-      // Templates that contain unbalanced or dynamic tags are not eligible for key performance
-      // things, as
-      // we don't really have a good understanding of how the DOM will look.
-      if (!openTagNode.isSelfClosing()) {
-        templateContainsUnpredictableContent =
-            templateContainsUnpredictableContent || openTagNode.hasUnpredictableTagLocation();
-      }
-      if (keyNode != null) {
-        keyCounterStack.push(new AtomicInteger());
-      } else {
-        openTagNode.setIsDynamic(
-            mustEmitKeyNodes || templateContainsUnpredictableContent || openTagNode.isSkipRoot());
-        openTagNode.setKeyId(incrementKeyForTemplate(template, openTagNode.isElementRoot()));
-      }
+      processHtmlOpenTagNode(openTagNode);
       visitChildren(openTagNode);
       htmlKeyStack.push(mustEmitKeyNodes);
       mustEmitKeyNodes = false;
     }
 
+    private void processHtmlOpenTagNode(HtmlOpenTagNode openTagNode) {
+      KeyNode keyNode = openTagNode.getKeyNode();
+      updateTemplateUnpredictability(openTagNode);
+      if (keyNode != null) {
+        keyCounterStack.push(new AtomicInteger());
+      } else {
+        handleDynamicHtmlTag(openTagNode);
+      }
+    }
+
+    private void updateTemplateUnpredictability(HtmlOpenTagNode openTagNode) {
+      if (!openTagNode.isSelfClosing()) {
+        templateContainsUnpredictableContent = 
+            templateContainsUnpredictableContent || openTagNode.hasUnpredictableTagLocation();
+      }
+    }
+
+    private void handleDynamicHtmlTag(HtmlOpenTagNode openTagNode) {
+      openTagNode.setIsDynamic(
+          mustEmitKeyNodes || templateContainsUnpredictableContent || openTagNode.isSkipRoot());
+      openTagNode.setKeyId(incrementKeyForTemplate(template, openTagNode.isElementRoot()));
+    }
+
     @Override
     public void visitHtmlCloseTagNode(HtmlCloseTagNode closeTagNode) {
       if (closeTagNode.getTaggedPairs().size() == 1) {
-        HtmlOpenTagNode openTag = (HtmlOpenTagNode) closeTagNode.getTaggedPairs().get(0);
-        if (openTag.getKeyNode() != null && !(openTag.getParent() instanceof SkipNode)) {
-          keyCounterStack.pop();
-        }
-        if (!htmlKeyStack.isEmpty()) {
-          mustEmitKeyNodes = htmlKeyStack.pop();
-        }
+        handleHtmlCloseTagNode(closeTagNode);
+      }
+    }
+
+    private void handleHtmlCloseTagNode(HtmlCloseTagNode closeTagNode) {
+      HtmlOpenTagNode openTag = (HtmlOpenTagNode) closeTagNode.getTaggedPairs().get(0);
+      if (openTag.getKeyNode() != null && !(openTag.getParent() instanceof SkipNode)) {
+        keyCounterStack.pop();
+      }
+      if (!htmlKeyStack.isEmpty()) {
+        mustEmitKeyNodes = htmlKeyStack.pop();
       }
     }
 
