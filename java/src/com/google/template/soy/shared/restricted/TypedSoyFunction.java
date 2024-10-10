@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -7,8 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -33,29 +33,41 @@ public abstract class TypedSoyFunction implements SoyFunction {
   @Override
   public final String getName() {
     String name = getSignature().name();
+    validateName(name);
+    return name;
+  }
+
+  private void validateName(String name) {
     if (name.isEmpty()) {
       throw new AbstractMethodError(
           getClass() + "should either override getName() or specify a name in the signature.");
     }
-    return name;
   }
 
   @Override
   public final Set<Integer> getValidArgsSizes() {
     Map<Integer, Signature> validArgs = new HashMap<>();
+    collectValidArgs(validArgs);
+    return ImmutableSortedSet.copyOf(validArgs.keySet());
+  }
+
+  private void collectValidArgs(Map<Integer, Signature> validArgs) {
     for (Signature signature : getSignature().value()) {
       int argSize = signature.parameterTypes().length;
-      if (validArgs.containsKey(argSize)) {
-        throw new IllegalArgumentException(
-            String.format(
-                "TypedSoyFunction can only have exactly one signature for a given"
-                    + " number of parameters. Found more than one signatures that specify "
-                    + "%s parameters:\n  %s\n  %s",
-                argSize, validArgs.get(argSize), signature));
-      }
+      checkDuplicateSignatures(validArgs, argSize, signature);
       validArgs.put(argSize, signature);
     }
-    return ImmutableSortedSet.copyOf(validArgs.keySet());
+  }
+
+  private void checkDuplicateSignatures(Map<Integer, Signature> validArgs, int argSize, Signature signature) {
+    if (validArgs.containsKey(argSize)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "TypedSoyFunction can only have exactly one signature for a given"
+                  + " number of parameters. Found more than one signatures that specify "
+                  + "%s parameters:\n  %s\n  %s",
+              argSize, validArgs.get(argSize), signature));
+    }
   }
 
   private SoyFunctionSignature getSignature() {
