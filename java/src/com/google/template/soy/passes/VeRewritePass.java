@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -38,9 +39,17 @@ final class VeRewritePass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
+    rewriteVeLogNodes(file);
+    rewriteVeDataNodes(file);
+  }
+
+  private void rewriteVeLogNodes(SoyFileNode file) {
     for (VeLogNode node : SoyTreeUtils.getAllNodesOfType(file, VeLogNode.class)) {
       maybeRewriteVeLogNode(node);
     }
+  }
+
+  private void rewriteVeDataNodes(SoyFileNode file) {
     SoyTreeUtils.allFunctionInvocations(file, BuiltinFunction.VE_DATA)
         .forEach(this::maybeRewriteVeDataNode);
   }
@@ -48,25 +57,31 @@ final class VeRewritePass implements CompilerFilePass {
   private void maybeRewriteVeLogNode(VeLogNode node) {
     if (node.getVeDataExpression().getRoot().getKind() == Kind.GLOBAL_NODE) {
       GlobalNode veName = (GlobalNode) node.getVeDataExpression().getRoot();
-      FunctionNode veData =
-          FunctionNode.newPositional(
-              Identifier.create(BuiltinFunction.VE_DATA.getName(), veName.getSourceLocation()),
-              BuiltinFunction.VE_DATA,
-              veName.getSourceLocation());
-      veData.addChild(veName);
-      // Adding veName as a child of veData above removes veName as a child of the VeLogNode's
-      // VeDataExpression. So we can just add a child back here, instead of replacing.
+      FunctionNode veData = createVeDataFunctionNode(veName);
       node.getVeDataExpression().addChild(veData);
     }
   }
 
+  private FunctionNode createVeDataFunctionNode(GlobalNode veName) {
+    FunctionNode veData =
+        FunctionNode.newPositional(
+            Identifier.create(BuiltinFunction.VE_DATA.getName(), veName.getSourceLocation()),
+            BuiltinFunction.VE_DATA,
+            veName.getSourceLocation());
+    veData.addChild(veName);
+    return veData;
+  }
+
   private void maybeRewriteVeDataNode(FunctionNode node) {
-    if (node.numChildren() < 1 || node.numChildren() > 2) {
+    if (isInvalidVeDataNode(node)) {
       return; // an error has already been reported
     }
     if (node.numChildren() < 2) {
-      // For ve_data(MyVe) set the data parameter to null.
       node.addChild(new NullNode(node.getSourceLocation().getEndLocation()));
     }
+  }
+
+  private boolean isInvalidVeDataNode(FunctionNode node) {
+    return node.numChildren() < 1 || node.numChildren() > 2;
   }
 }
