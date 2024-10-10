@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -46,5 +47,18 @@ public final class FloatType extends PrimitiveType {
   /** Return the single instance of this type. */
   public static FloatType getInstance() {
     return INSTANCE;
+  }
+
+  // Added additional utility methods to enhance cohesion
+  public static boolean isFloat(Object obj) {
+    return obj instanceof Float;
+  }
+
+  public static Float parseFloat(String str) {
+    return Float.parseFloat(str);
+  }
+
+  public static String floatToString(Float value) {
+    return value.toString();
   }
 }
