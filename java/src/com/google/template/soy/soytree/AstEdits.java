@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -52,30 +53,33 @@ public final class AstEdits {
 
   /** Apply all edits. */
   public void apply() {
+    processRemovals();
+    processNewChildren();
+    clear();
+  }
+
+  private void processRemovals() {
     for (StandaloneNode nodeToRemove : toRemove) {
       ParentSoyNode<StandaloneNode> parent = nodeToRemove.getParent();
       int index = parent.getChildIndex(nodeToRemove);
-      // NOTE:  we need to remove the child before adding the new children  to handle the case
-      // where we are doing a no-op replacement or the replacement nodes contains nodeToRemove.
-      // no-op replacements can occur when there are pcdata sections that contain no tags
       parent.removeChild(index);
       List<StandaloneNode> children = replacements.get(nodeToRemove);
       if (!children.isEmpty()) {
         parent.addChildren(index, children);
       }
     }
+  }
+
+  private void processNewChildren() {
     for (Map.Entry<ParentSoyNode<StandaloneNode>, List<StandaloneNode>> entry :
         asMap(newChildren).entrySet()) {
       entry.getKey().addChildren(entry.getValue());
     }
-    clear();
   }
 
   /** Mark a node for removal. */
   public void remove(StandaloneNode node) {
     checkNotNull(node);
-    // only record this if the node is actually in the tree already.  Sometimes we call remove
-    // on new nodes that don't have parents yet.
     if (node.getParent() != null) {
       toRemove.add(node);
     }
