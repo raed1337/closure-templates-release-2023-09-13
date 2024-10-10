@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -52,6 +53,10 @@ public abstract class RecordTypeNode extends TypeNode {
 
     @Override
     public final String toString() {
+      return formatPropertyString();
+    }
+
+    private String formatPropertyString() {
       return name() + (optional() ? "?" : "") + ": " + type();
     }
 
@@ -64,6 +69,10 @@ public abstract class RecordTypeNode extends TypeNode {
 
   @Override
   public final String toString() {
+    return formatRecordString();
+  }
+
+  private String formatRecordString() {
     if (properties().size() < 3) {
       return "[" + Joiner.on(", ").join(properties()) + "]";
     }
@@ -77,12 +86,21 @@ public abstract class RecordTypeNode extends TypeNode {
 
   @Override
   public RecordTypeNode copy() {
+    return createCopy();
+  }
+
+  private RecordTypeNode createCopy() {
+    ImmutableList<Property> newProperties = copyProperties();
+    RecordTypeNode copy = create(sourceLocation(), newProperties);
+    copy.copyResolvedTypeFrom(this);
+    return copy;
+  }
+
+  private ImmutableList<Property> copyProperties() {
     ImmutableList.Builder<Property> newProperties = ImmutableList.builder();
     for (Property property : properties()) {
       newProperties.add(property.copy());
     }
-    RecordTypeNode copy = create(sourceLocation(), newProperties.build());
-    copy.copyResolvedTypeFrom(this);
-    return copy;
+    return newProperties.build();
   }
 }
