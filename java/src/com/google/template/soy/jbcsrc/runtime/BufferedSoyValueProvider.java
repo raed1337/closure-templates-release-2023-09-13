@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -44,10 +45,8 @@ public final class BufferedSoyValueProvider implements SoyValueProvider {
 
   @Override
   public SoyValue resolve() {
-    if (resolvedValue == null) {
-      resolvedValue = buffer.getAsSoyValue();
-    }
-    return resolvedValue;
+    // Directly return the resolved value, simplifying the logic
+    return resolvedValue != null ? resolvedValue : (resolvedValue = buffer.getAsSoyValue());
   }
 
   @Override
