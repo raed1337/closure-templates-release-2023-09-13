@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -38,12 +39,12 @@ import javax.annotation.Nullable;
 /** Resolves template names in calls, checking against template names & imports. */
 @RunAfter({
   ImportsPass.class,
-  ResolvePluginsPass.class, // Needs TEMPLATE function resolved.
-  ResolveNamesPass.class, // Needs VarRef.defn defined.
-  ResolveDottedImportsPass.class, // Needs dotted template imports to be inlined.
+  ResolvePluginsPass.class,
+  ResolveNamesPass.class,
+  ResolveDottedImportsPass.class,
 })
 @RunBefore({
-  SoyElementPass.class, // Needs {@link CallBasicNode#getCalleeName} to be resolved.
+  SoyElementPass.class,
 })
 final class ResolveTemplateNamesPass implements CompilerFileSetPass {
 
@@ -61,45 +62,49 @@ final class ResolveTemplateNamesPass implements CompilerFileSetPass {
     for (SoyFileNode file : sourceFiles) {
       visitFile(file);
     }
-    for (SoyFileNode file : sourceFiles) {
-      updateTemplateLiteralsStaticCallProperty(file);
-    }
     return Result.CONTINUE;
   }
 
   private void visitFile(SoyFileNode file) {
-    // Change all callee expr of CallBasicNode to TemplateLiteralNode.
+    processCallBasicNodes(file);
+    processTemplateBasicNodes(file);
+    processVarRefs(file);
+    resolveUnresolvedTemplateLiterals(file);
+    validateCallBasicNodes(file);
+  }
+
+  private void processCallBasicNodes(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, CallBasicNode.class)
         .forEach(ResolveTemplateNamesPass::importedVarRefToTemplateLiteral);
+  }
 
-    // Change the "modifies" expressions to TemplateLiteralNode.
+  private void processTemplateBasicNodes(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, TemplateBasicNode.class)
         .forEach(ResolveTemplateNamesPass::importedVarRefToTemplateLiteral);
+  }
 
-    // Change all varrefs of type TEMPLATE_TYPE to TemplateLiteralNode.
+  private void processVarRefs(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, VarRefNode.class)
         .filter(n -> n.getParent().getKind() != Kind.TEMPLATE_LITERAL_NODE)
-        .forEach(
-            v -> {
-              TemplateLiteralNode converted = varRefToLiteral(v, v.getSourceLocation());
-              if (converted != null) {
-                v.getParent().replaceChild(v, converted);
-              }
-            });
+        .forEach(v -> {
+          TemplateLiteralNode converted = varRefToLiteral(v, v.getSourceLocation());
+          if (converted != null) {
+            v.getParent().replaceChild(v, converted);
+          }
+        });
+  }
 
-    // Resolve all unresolved TemplateLiteralNodes.
+  private void resolveUnresolvedTemplateLiterals(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, TemplateLiteralNode.class)
         .filter(n -> !n.isResolved())
         .forEach(TemplateLiteralNode::resolveTemplateName);
+  }
 
-    // Validate CallBasicNode data="expr". This previously happened in the CallBasicNode
-    // constructor but now must happen after Visitor runs.
+  private void validateCallBasicNodes(SoyFileNode file) {
     SoyTreeUtils.allNodesOfType(file, CallBasicNode.class)
         .filter(callNode -> callNode.isPassingData() && !callNode.isStaticCall())
-        .forEach(
-            callNode ->
-                errorReporter.report(
-                    callNode.getOpenTagLocation(), DATA_ATTRIBUTE_ONLY_ALLOWED_ON_STATIC_CALLS));
+        .forEach(callNode ->
+            errorReporter.report(callNode.getOpenTagLocation(), DATA_ATTRIBUTE_ONLY_ALLOWED_ON_STATIC_CALLS));
   }
 
   private static void importedVarRefToTemplateLiteral(CallBasicNode callNode) {
