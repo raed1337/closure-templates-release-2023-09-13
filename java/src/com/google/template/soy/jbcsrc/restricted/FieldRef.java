@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -50,22 +51,8 @@ public abstract class FieldRef {
   public static final FieldRef STACK_FRAME_STATE_NUMBER =
       instanceFieldReference(StackFrame.class, "stateNumber");
 
-  public static FieldRef create(
-      TypeInfo owner, String name, Type type, int modifiers, boolean isNullable) {
-    if ((Modifier.fieldModifiers() & modifiers) != modifiers) {
-      throw new IllegalArgumentException(
-          "invalid modifiers, expected: "
-              + Modifier.toString(Modifier.fieldModifiers())
-              + " ("
-              + Modifier.fieldModifiers()
-              + ")"
-              + " got: "
-              + Modifier.toString(modifiers)
-              + " ("
-              + modifiers
-              + ")");
-    }
-
+  public static FieldRef create(TypeInfo owner, String name, Type type, int modifiers, boolean isNullable) {
+    validateModifiers(modifiers);
     FieldRef ref = new AutoValue_FieldRef(owner, name, type);
     ref.accessFlags = modifiers;
     ref.isNullable = isNullable;
@@ -77,42 +64,27 @@ public abstract class FieldRef {
   }
 
   public static FieldRef instanceFieldReference(Class<?> owner, String name) {
-    Class<?> fieldType;
-    int modifiers = 0;
-    try {
-      Field declaredField = owner.getDeclaredField(name);
-      // mask to remove jvm private bits
-      modifiers = declaredField.getModifiers() & Modifier.fieldModifiers();
-      if (Modifier.isStatic(modifiers)) {
-        throw new IllegalStateException("Field: " + declaredField + " is static");
-      }
-      fieldType = declaredField.getType();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    Field declaredField = getDeclaredField(owner, name);
+    validateInstanceField(declaredField);
     return create(
-        TypeInfo.create(owner), name, Type.getType(fieldType), modifiers, !fieldType.isPrimitive());
+        TypeInfo.create(owner),
+        declaredField.getName(),
+        Type.getType(declaredField.getType()),
+        declaredField.getModifiers() & Modifier.fieldModifiers(),
+        !declaredField.getType().isPrimitive());
   }
 
   public static FieldRef staticFieldReference(Class<?> owner, String name) {
-    Field declaredField;
-    try {
-      declaredField = owner.getDeclaredField(name);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    Field declaredField = getDeclaredField(owner, name);
     return staticFieldReference(declaredField);
   }
 
   public static FieldRef staticFieldReference(Field field) {
-    if (!Modifier.isStatic(field.getModifiers())) {
-      throw new IllegalStateException("Field: " + field + " is not static");
-    }
+    validateStaticField(field);
     return create(
         TypeInfo.create(field.getDeclaringClass()),
         field.getName(),
         Type.getType(field.getType()),
-        // mask to remove jvm private bits
         field.getModifiers() & Modifier.fieldModifiers(),
         /* isNullable= */ false);
   }
@@ -132,17 +104,12 @@ public abstract class FieldRef {
 
   /** The type that owns this field. */
   public abstract TypeInfo owner();
-
+  
   public abstract String name();
 
   public abstract Type type();
 
-  /**
-   * The field access flags. This is a bit set of things like {@link Opcodes#ACC_STATIC} and {@link
-   * Opcodes#ACC_PRIVATE}.
-   */
   private int accessFlags;
-
   private boolean isNullable;
 
   public final boolean isStatic() {
@@ -181,20 +148,8 @@ public abstract class FieldRef {
 
   /** Returns an accessor that accesses this field on the given owner. */
   public Expression accessor(Expression owner) {
-    checkState(!isStatic());
-    checkArgument(
-        owner.resultType().equals(this.owner().type()),
-        "Unexpected type: %s expected %s",
-        owner.resultType(),
-        owner().type());
-
-    Features features = Features.of();
-    if (owner.isCheap()) {
-      features = features.plus(Feature.CHEAP);
-    }
-    if (!isNullable) {
-      features = features.plus(Feature.NON_JAVA_NULLABLE);
-    }
+    validateAccessor(owner);
+    Features features = createFeatures(owner);
     return new Expression(type(), features) {
       @Override
       protected void doGen(CodeBuilder mv) {
@@ -232,9 +187,7 @@ public abstract class FieldRef {
    * @throws IllegalStateException if this is a static field
    */
   public Statement putInstanceField(Expression instance, Expression value) {
-    checkState(!isStatic(), "This field is static!");
-    instance.checkAssignableTo(owner().type());
-    value.checkAssignableTo(type());
+    validatePutInstanceField(instance, value);
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
@@ -252,8 +205,7 @@ public abstract class FieldRef {
    * @throws IllegalStateException if this is a static field
    */
   public Statement putStaticField(Expression value) {
-    checkState(isStatic(), "This field is not static!");
-    value.checkAssignableTo(type());
+    validatePutStaticField(value);
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
@@ -271,5 +223,73 @@ public abstract class FieldRef {
   public void putUnchecked(CodeBuilder adapter) {
     checkState(!isStatic(), "This field is static!");
     adapter.putField(owner().type(), name(), type());
+  }
+
+  private static void validateModifiers(int modifiers) {
+    if ((Modifier.fieldModifiers() & modifiers) != modifiers) {
+      throw new IllegalArgumentException(
+          "invalid modifiers, expected: "
+              + Modifier.toString(Modifier.fieldModifiers())
+              + " ("
+              + Modifier.fieldModifiers()
+              + ")"
+              + " got: "
+              + Modifier.toString(modifiers)
+              + " ("
+              + modifiers
+              + ")");
+    }
+  }
+
+  private static Field getDeclaredField(Class<?> owner, String name) {
+    try {
+      return owner.getDeclaredField(name);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static void validateInstanceField(Field declaredField) {
+    int modifiers = declaredField.getModifiers() & Modifier.fieldModifiers();
+    if (Modifier.isStatic(modifiers)) {
+      throw new IllegalStateException("Field: " + declaredField + " is static");
+    }
+  }
+
+  private static void validateStaticField(Field field) {
+    if (!Modifier.isStatic(field.getModifiers())) {
+      throw new IllegalStateException("Field: " + field + " is not static");
+    }
+  }
+
+  private void validateAccessor(Expression owner) {
+    checkState(!isStatic());
+    checkArgument(
+        owner.resultType().equals(this.owner().type()),
+        "Unexpected type: %s expected %s",
+        owner.resultType(),
+        owner().type());
+  }
+
+  private Features createFeatures(Expression owner) {
+    Features features = Features.of();
+    if (owner.isCheap()) {
+      features = features.plus(Feature.CHEAP);
+    }
+    if (!isNullable) {
+      features = features.plus(Feature.NON_JAVA_NULLABLE);
+    }
+    return features;
+  }
+
+  private void validatePutInstanceField(Expression instance, Expression value) {
+    checkState(!isStatic(), "This field is static!");
+    instance.checkAssignableTo(owner().type());
+    value.checkAssignableTo(type());
+  }
+
+  private void validatePutStaticField(Expression value) {
+    checkState(isStatic(), "This field is not static!");
+    value.checkAssignableTo(type());
   }
 }
