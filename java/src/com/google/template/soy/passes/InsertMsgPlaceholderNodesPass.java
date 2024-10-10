@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -91,6 +92,10 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
       isValidMsgPlaceholderPosition = true;
       visitChildren(msgNode);
       isValidMsgPlaceholderPosition = false;
+      replaceNodesInMsgBlock(msgNode);
+    }
+
+    private void replaceNodesInMsgBlock(MsgNode msgNode) {
       for (SoyNode node : nodesToReplace) {
         ParentSoyNode<?> parent = node.getParent();
         if (!(parent instanceof MsgBlockNode)) {
@@ -104,30 +109,27 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
         }
         int index = parent.getChildIndex(node);
         parent.removeChild(index);
-        MsgPlaceholderInitialNode newNode;
-        if (node instanceof HtmlTagNode) {
-          VeLogNode veLogParent = null;
-          // If it is the open tag of a VeLogNode, then make sure the placeholder knows about it.
-          // NOTE: we don't tell the close tags that they are part of a velog because it isn't
-          // necessary, close tags are all the same, even when it comes to velogging. (all we need
-          // to do is call exitLoggableElement()).
-          if (parent instanceof VeLogNode && index == 0) {
-            veLogParent = (VeLogNode) parent;
-          }
-          newNode =
-              MsgHtmlTagNode.fromNode(
-                  nodeIdGen.genId(), (HtmlTagNode) node, veLogParent, errorReporter);
-        } else {
-          // print, and call nodes don't get additional wrappers.
-          newNode = (MsgPlaceholderInitialNode) node;
-        }
+        MsgPlaceholderInitialNode newNode = createNewPlaceholderNode(node, parent);
         ((MsgBlockNode) parent).addChild(index, new MsgPlaceholderNode(nodeIdGen.genId(), newNode));
       }
       nodesToReplace.clear();
     }
 
-    // these two are overridden simply to avoid reporting errors in visitSoyNode (they aren't
-    // technically MsgBlockNodes, but their children are)
+    private MsgPlaceholderInitialNode createNewPlaceholderNode(SoyNode node, ParentSoyNode<?> parent) {
+      if (node instanceof HtmlTagNode) {
+        return createHtmlTagPlaceholderNode((HtmlTagNode) node, parent);
+      }
+      return (MsgPlaceholderInitialNode) node;
+    }
+
+    private MsgPlaceholderInitialNode createHtmlTagPlaceholderNode(HtmlTagNode htmlNode, ParentSoyNode<?> parent) {
+      VeLogNode veLogParent = null;
+      if (parent instanceof VeLogNode && parent.getChildIndex(htmlNode) == 0) {
+        veLogParent = (VeLogNode) parent;
+      }
+      return MsgHtmlTagNode.fromNode(nodeIdGen.genId(), htmlNode, veLogParent, errorReporter);
+    }
+
     @Override
     protected void visitMsgPluralNode(MsgPluralNode node) {
       visitChildren(node);
@@ -140,19 +142,16 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
 
     @Override
     protected void visitPrintNode(PrintNode node) {
-      maybeAddPlaceholderAndVisitChildren(node);
-      checkPlaceholderNode(node);
+      handlePlaceholderAndVisitChildren(node);
     }
 
     @Override
     protected void visitCallNode(CallNode node) {
-      maybeAddPlaceholderAndVisitChildren(node);
-      checkPlaceholderNode(node);
+      handlePlaceholderAndVisitChildren(node);
     }
 
     @Override
     protected void visitVeLogNode(VeLogNode node) {
-      // visit children directly since they are still 'in' the message
       visitChildren(node);
     }
 
@@ -163,18 +162,17 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
 
     @Override
     protected void visitHtmlOpenTagNode(HtmlOpenTagNode node) {
-      maybeAddPlaceholderAndVisitChildren(node);
-      // NOTE: it is OK for these nodes to have phname attrs outside of msg blocks for backwards
-      // compatibility
+      handlePlaceholderAndVisitChildren(node);
     }
 
     @Override
     protected void visitHtmlCloseTagNode(HtmlCloseTagNode node) {
-      maybeAddPlaceholderAndVisitChildren(node);
+      handlePlaceholderAndVisitChildren(node);
+      validateCloseTagAttributes(node);
+    }
 
+    private void validateCloseTagAttributes(HtmlCloseTagNode node) {
       if (!isValidMsgPlaceholderPosition) {
-        // phname and phex are the only allowed close tag attribute, and even then it is only
-        // allowed inside of messages
         for (String name : Arrays.asList("phname", "phex")) {
           HtmlAttributeNode attr = node.getDirectAttributeNamed(name);
           if (attr != null) {
@@ -187,23 +185,15 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
     @Override
     protected void visitRawTextNode(RawTextNode node) {
       // do nothing
-      // overridden so it doesn't default to visitSoyNode and report an error.
     }
 
     @Override
     protected void visitHtmlAttributeNode(HtmlAttributeNode node) {
-      // TODO(lukes): This will happen for cases like: <a {msg desc="..."}class=var{/msg}>  which
-      // is actually reported as an error later on in the autoescaper, consider if it makes sense to
-      // move that logic here.  For now we just traverse the node to prevent reporting an error
       visitChildren(node);
     }
 
     @Override
     protected void visitHtmlAttributeValueNode(HtmlAttributeValueNode node) {
-      // TODO(lukes): This will happen for cases like: <a title={msg desc="..."}Hello{/msg}>  which
-      // is actually reported as an error later on in the autoescaper, consider if it makes sense to
-      // move that logic here.  For now we just traverse the node to prevent reporting an error
-      // overridden so it doesn't default to visitSoyNode and report an error.
       visitChildren(node);
     }
 
@@ -212,12 +202,11 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
       throw new AssertionError("Unexpected node: " + node.toSourceString());
     }
 
-    private void maybeAddPlaceholderAndVisitChildren(SoyNode node) {
+    private void handlePlaceholderAndVisitChildren(SoyNode node) {
       if (isValidMsgPlaceholderPosition) {
         nodesToReplace.add(node);
       }
       if (node instanceof ParentSoyNode<?>) {
-        // inside of a potential placeholder node, we shouldn't find other placeholder nodes.
         boolean oldIsValidMsgPlaceholderPosition = isValidMsgPlaceholderPosition;
         isValidMsgPlaceholderPosition = false;
         visitChildren((ParentSoyNode<?>) node);
@@ -227,13 +216,8 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
 
     @Override
     protected void visitSoyNode(SoyNode node) {
-      // If we are in a message node, and this isn't a block node (like {plural} or {select} or a
-      // {case} inside of one of those), then report an error. All commands that aren't an error
-      // have been overridden above.
       if (isValidMsgPlaceholderPosition && !(node instanceof MsgBlockNode)) {
         errorReporter.report(node.getSourceLocation(), UNEXPECTED_COMMAND_IN_MSG);
-        // don't visit children, otherwise every child will report an error also (happens with
-        // ifnode and ifcondnode in particular)
         return;
       }
       if (node instanceof MsgPlaceholderInitialNode) {
@@ -251,27 +235,30 @@ final class InsertMsgPlaceholderNodesPass implements CompilerFilePass {
       boolean hasUserSuppliedName = node.getPlaceholder().userSuppliedName().isPresent();
       boolean hasExample = node.getPlaceholder().example().isPresent();
       if (hasUserSuppliedName || hasExample) {
-        MsgNode msg = node.getNearestAncestor(MsgNode.class);
-        String extra = "";
-        if (msg != null) {
-          // this means we are in a message, just not in a placeholder position, this is likely
-          // because we are the child of another placeholder node, most likely an html tag
-          // See b/135952248
-          SoyNode current = node.getParent();
-          while (current != msg && !(current instanceof HtmlTagNode)) {
-            current = current.getParent();
-          }
-          if (current != msg) {
-            extra = " Did you mean to put this attribute on the surrounding html tag?";
-          }
-        }
-        if (hasUserSuppliedName) {
-          errorReporter.report(node.getSourceLocation(), INVALID_PLACEHOLDER, PHNAME_ATTR, extra);
-        }
-        if (hasExample) {
-          errorReporter.report(node.getSourceLocation(), INVALID_PLACEHOLDER, PHEX_ATTR, extra);
-        }
+        reportInvalidPlaceholder(node, hasUserSuppliedName, hasExample);
       }
+    }
+
+    private void reportInvalidPlaceholder(MsgPlaceholderInitialNode node, boolean hasUserSuppliedName, boolean hasExample) {
+      MsgNode msg = node.getNearestAncestor(MsgNode.class);
+      String extra = "";
+      if (msg != null) {
+        extra = checkParentNodeForPlaceholder(node, msg);
+      }
+      if (hasUserSuppliedName) {
+        errorReporter.report(node.getSourceLocation(), INVALID_PLACEHOLDER, PHNAME_ATTR, extra);
+      }
+      if (hasExample) {
+        errorReporter.report(node.getSourceLocation(), INVALID_PLACEHOLDER, PHEX_ATTR, extra);
+      }
+    }
+
+    private String checkParentNodeForPlaceholder(MsgPlaceholderInitialNode node, MsgNode msg) {
+      SoyNode current = node.getParent();
+      while (current != msg && !(current instanceof HtmlTagNode)) {
+        current = current.getParent();
+      }
+      return current != msg ? " Did you mean to put this attribute on the surrounding html tag?" : "";
     }
   }
 }
