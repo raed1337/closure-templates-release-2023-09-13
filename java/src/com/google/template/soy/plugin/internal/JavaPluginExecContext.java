@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -37,21 +38,13 @@ import com.google.template.soy.types.SoyType;
  */
 public final class JavaPluginExecContext {
 
-  /**
-   * A method node referencing a @SoyMethodSignature that is implemented with a
-   * SoyJavaSourceFunction will pass as arguments to the function 1. the method receiver followed by
-   * 2. the method arguments.
-   */
   public static JavaPluginExecContext forMethodCallNode(
       MethodCallNode methodNode, SoySourceFunctionMethod method) {
     return new JavaPluginExecContext(
         (SoyJavaSourceFunction) method.getImpl(),
         methodNode,
         methodNode.getMethodName().identifier(),
-        ImmutableList.<SoyType>builder()
-            .add(method.getBaseType())
-            .addAll(method.getArgTypes())
-            .build());
+        buildParamTypes(method.getBaseType(), method.getArgTypes()));
   }
 
   public static JavaPluginExecContext forFieldAccessNode(
@@ -66,6 +59,13 @@ public final class JavaPluginExecContext {
   public static JavaPluginExecContext forFunctionNode(FunctionNode node, SoyJavaSourceFunction fn) {
     return new JavaPluginExecContext(
         fn, node, node.getStaticFunctionName(), node.getAllowedParamTypes());
+  }
+
+  private static ImmutableList<SoyType> buildParamTypes(SoyType baseType, ImmutableList<SoyType> argTypes) {
+    return ImmutableList.<SoyType>builder()
+        .add(baseType)
+        .addAll(argTypes)
+        .build();
   }
 
   private final SoyJavaSourceFunction sourceFunction;
