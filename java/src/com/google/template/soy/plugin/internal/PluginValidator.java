@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -68,42 +69,43 @@ public final class PluginValidator {
     SoyFunctionSignature fnSig = fn.getClass().getAnnotation(SoyFunctionSignature.class);
     String fnName = fnSig.name();
     SourceLocation location = new SourceLocation(SourceFilePath.create(fn.getClass().getName()));
-    methodSignatureValidator.validate(
-        fnName, fn, location, /* includeTriggeredInTemplateMsg= */ false);
-    ValidatorErrorReporter validatorReporter =
-        new ValidatorErrorReporter(
-            errorReporter,
-            fnName,
-            fn.getClass(),
-            location,
-            /* includeTriggeredInTemplateMsg= */ false);
+    methodSignatureValidator.validate(fnName, fn, location, false);
+    ValidatorErrorReporter validatorReporter = createValidatorErrorReporter(fnName, fn, location);
+    
     for (Signature sig : fnSig.value()) {
-      Checkpoint checkpoint = errorReporter.checkpoint();
-      List<SoyType> paramTypes =
-          Arrays.stream(sig.parameterTypes())
-              .map(p -> typeFor(p, fn, validatorReporter))
-              .collect(toImmutableList());
-      SoyType returnType = typeFor(sig.returnType(), fn, validatorReporter);
-      // If we errored just getting the types, then don't bother reporting more errors during
-      // validation.
-      if (!errorReporter.errorsSince(checkpoint)) {
-        javaValidator.validate(
-            fnName,
-            fn,
-            paramTypes,
-            returnType,
-            location,
-            /* includeTriggeredInTemplateMsg= */ false);
-      }
+      validateSignature(fn, validatorReporter, fnName, sig, location);
     }
+  }
+
+  private ValidatorErrorReporter createValidatorErrorReporter(String fnName, SoyJavaSourceFunction fn, SourceLocation location) {
+    return new ValidatorErrorReporter(
+        errorReporter,
+        fnName,
+        fn.getClass(),
+        location,
+        false);
+  }
+
+  private void validateSignature(SoyJavaSourceFunction fn, ValidatorErrorReporter validatorReporter, String fnName, Signature sig, SourceLocation location) {
+    Checkpoint checkpoint = errorReporter.checkpoint();
+    List<SoyType> paramTypes = getParameterTypes(sig, fn, validatorReporter);
+    SoyType returnType = typeFor(sig.returnType(), fn, validatorReporter);
+
+    if (!errorReporter.errorsSince(checkpoint)) {
+      javaValidator.validate(fnName, fn, paramTypes, returnType, location, false);
+    }
+  }
+
+  private List<SoyType> getParameterTypes(Signature sig, SoyJavaSourceFunction fn, ValidatorErrorReporter validatorReporter) {
+    return Arrays.stream(sig.parameterTypes())
+        .map(p -> typeFor(p, fn, validatorReporter))
+        .collect(toImmutableList());
   }
 
   private SoyType typeFor(
       String typeStr, SoyJavaSourceFunction fn, ValidatorErrorReporter validatorReporter) {
     ErrorReporter localReporter = ErrorReporter.create(ImmutableMap.of());
     SoyType type = parseType(typeStr, fn, localReporter, typeRegistry);
-    // If any errors occurred while parsing the signature, wrap the errors in a more meaningful
-    // message tailored to the plugin implementation.
     validatorReporter.wrapErrors(localReporter.getErrors());
     validatorReporter.wrapWarnings(localReporter.getWarnings());
 
