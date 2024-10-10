@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -51,11 +52,15 @@ public final class SwitchCaseNode extends CaseOrDefaultNode
    */
   private SwitchCaseNode(SwitchCaseNode orig, CopyState copyState) {
     super(orig, copyState);
+    this.exprList = copyExprList(orig.exprList, copyState);
+  }
+
+  private ImmutableList<ExprRootNode> copyExprList(ImmutableList<ExprRootNode> origExprList, CopyState copyState) {
     ImmutableList.Builder<ExprRootNode> builder = ImmutableList.builder();
-    for (ExprRootNode origExpr : orig.exprList) {
+    for (ExprRootNode origExpr : origExprList) {
       builder.add(origExpr.copy(copyState));
     }
-    this.exprList = builder.build();
+    return builder.build();
   }
 
   @Override
