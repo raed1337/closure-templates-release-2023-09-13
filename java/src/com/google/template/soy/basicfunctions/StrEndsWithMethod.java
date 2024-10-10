@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -52,6 +53,10 @@ public final class StrEndsWithMethod
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return invokeEndsWith(args);
+  }
+
+  private JavaScriptValue invokeEndsWith(List<JavaScriptValue> args) {
     return args.get(0).invokeMethod("endsWith", args.subList(1, args.size()));
   }
 
@@ -75,6 +80,10 @@ public final class StrEndsWithMethod
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return callStrEndsWith(factory, args);
+  }
+
+  private JavaValue callStrEndsWith(JavaValueFactory factory, List<JavaValue> args) {
     return factory.callStaticMethod(
         Methods.STR_ENDS_WITH,
         args.get(0),
