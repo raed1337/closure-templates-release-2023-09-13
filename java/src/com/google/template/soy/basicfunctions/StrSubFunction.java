@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -64,17 +65,24 @@ public final class StrSubFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return invokeSubstringMethod(args, factory);
+  }
+
+  private JavaScriptValue invokeSubstringMethod(List<JavaScriptValue> args, JavaScriptValueFactory factory) {
     return args.get(0).coerceToString().invokeMethod("substring", args.subList(1, args.size()));
   }
 
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
-    // Coerce SanitizedContent args to strings.
     PythonValue str = args.get(0).coerceToString();
     return factory
         .global("runtime.str_substring")
-        .call(str, args.get(1), args.size() == 3 ? args.get(2) : factory.constantNull());
+        .call(str, args.get(1), getThirdArg(args, factory));
+  }
+
+  private PythonValue getThirdArg(List<PythonValue> args, PythonValueFactory factory) {
+    return args.size() == 3 ? args.get(2) : factory.constantNull();
   }
 
   // lazy singleton pattern, allows other backends to avoid the work.
@@ -94,9 +102,14 @@ public final class StrSubFunction
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    if (args.size() == 2) {
-      return factory.callStaticMethod(Methods.STR_SUB_START, args.get(0), args.get(1));
-    }
+    return args.size() == 2 ? callStrSubStart(factory, args) : callStrSubStartEnd(factory, args);
+  }
+
+  private JavaValue callStrSubStart(JavaValueFactory factory, List<JavaValue> args) {
+    return factory.callStaticMethod(Methods.STR_SUB_START, args.get(0), args.get(1));
+  }
+
+  private JavaValue callStrSubStartEnd(JavaValueFactory factory, List<JavaValue> args) {
     return factory.callStaticMethod(
         Methods.STR_SUB_START_END, args.get(0), args.get(1), args.get(2));
   }
