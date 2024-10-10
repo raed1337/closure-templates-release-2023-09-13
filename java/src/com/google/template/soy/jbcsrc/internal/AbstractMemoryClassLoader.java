@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -27,8 +28,7 @@ import java.security.ProtectionDomain;
 import javax.annotation.Nullable;
 
 /** Base class to share code between our custom memory based classloader implementations. */
-public abstract class AbstractMemoryClassLoader extends ClassLoader
-    implements DebuggingClassLoader {
+public abstract class AbstractMemoryClassLoader extends ClassLoader implements DebuggingClassLoader {
   private static final ProtectionDomain DEFAULT_PROTECTION_DOMAIN;
 
   static {
@@ -38,8 +38,6 @@ public abstract class AbstractMemoryClassLoader extends ClassLoader
   }
 
   protected AbstractMemoryClassLoader() {
-    // We want our loaded classes to be a child classloader of ours to make sure they have access
-    // to the same classes that we do.
     this(AbstractMemoryClassLoader.class.getClassLoader());
   }
 
@@ -60,26 +58,24 @@ public abstract class AbstractMemoryClassLoader extends ClassLoader
 
   @Override
   public final Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-    // we need to override parent delegation if we are loading a generated class, since the parent
-    // may contain a reference to the same class (if it is running with precompiled soy templates),
-    // but we don't want to use it in this case.
-    // This replicates part of super.loadClass.
     if (Names.isGenerated(name)) {
       synchronized (getClassLoadingLock(name)) {
-        // First, check if the class has already been loaded
-        Class<?> c = findLoadedClass(name);
-        // Unlike super.loadClass we don't call parent.loadClass here
-        if (c == null) {
-          c = findClass(name);
-        }
+        Class<?> loadedClass = findLoadedClassOrDefine(name);
         if (resolve) {
-          resolveClass(c);
+          resolveClass(loadedClass);
         }
-        return c;
+        return loadedClass;
       }
     }
-    // otherwise use normal parent delegation
     return super.loadClass(name, resolve);
+  }
+
+  private Class<?> findLoadedClassOrDefine(String name) throws ClassNotFoundException {
+    Class<?> loadedClass = findLoadedClass(name);
+    if (loadedClass == null) {
+      loadedClass = findClass(name);
+    }
+    return loadedClass;
   }
 
   @Override
@@ -88,11 +84,13 @@ public abstract class AbstractMemoryClassLoader extends ClassLoader
     if (classDef == null) {
       throw new ClassNotFoundException(name);
     }
+    return defineClassWithHandling(name, classDef);
+  }
+
+  private Class<?> defineClassWithHandling(String name, ClassData classDef) throws ClassNotFoundException {
     try {
-      return super.defineClass(
-          name, classDef.data(), 0, classDef.data().length, DEFAULT_PROTECTION_DOMAIN);
+      return super.defineClass(name, classDef.data(), 0, classDef.data().length, DEFAULT_PROTECTION_DOMAIN);
     } catch (Throwable t) {
-      // Attach additional information in a suppressed exception to make debugging easier.
       t.addSuppressed(new RuntimeException("Failed to load generated class:\n" + classDef));
       Throwables.propagateIfInstanceOf(t, ClassNotFoundException.class);
       throw Throwables.propagate(t);
@@ -104,11 +102,12 @@ public abstract class AbstractMemoryClassLoader extends ClassLoader
     if (!name.endsWith(".class")) {
       return null;
     }
-    String className = name.substring(0, name.length() - ".class".length()).replace('/', '.');
+    String className = extractClassName(name);
     ClassData classDef = getClassData(className);
-    if (classDef == null) {
-      return null;
-    }
-    return classDef.asUrl();
+    return classDef != null ? classDef.asUrl() : null;
+  }
+
+  private String extractClassName(String resourceName) {
+    return resourceName.substring(0, resourceName.length() - ".class".length()).replace('/', '.');
   }
 }
