@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -55,11 +56,15 @@ public abstract class HtmlMatcherGraphNode {
 
   /** Returns the active edge kind. */
   public EdgeKind getActiveEdgeKind() {
-    return EdgeKind.TRUE_EDGE;
+    return EdgeKind.TRUE_EDGE; // Default to TRUE_EDGE
   }
 
   /** Links this node to the given node along this node's active edge. */
   public void linkActiveEdgeToNode(HtmlMatcherGraphNode node) {
-    linkEdgeToNode(getActiveEdgeKind(), node);
+    if (node != null) { // Null check for safety
+      linkEdgeToNode(getActiveEdgeKind(), node);
+    } else {
+      throw new IllegalArgumentException("Node cannot be null");
+    }
   }
 }
