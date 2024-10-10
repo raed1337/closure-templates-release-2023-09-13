@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -66,8 +67,7 @@ final class BasicHtmlValidationPass implements CompilerFilePass {
   private static final SoyErrorKind BAD_ID_VALUE =
       SoyErrorKind.of(
           "Html id attributes should not be valid JavaScript identifiers, consider hyphenating the"
-              + " id."
-          );
+              + " id.");
 
   private final ErrorReporter errorReporter;
 
@@ -78,65 +78,77 @@ final class BasicHtmlValidationPass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     SoyTreeUtils.allNodesOfType(file, HtmlTagNode.class)
-        .forEach(
-            node -> {
-              checkForDuplicateAttributes(node);
-              if (node instanceof HtmlCloseTagNode) {
-                checkCloseTagChildren((HtmlCloseTagNode) node);
-              }
-            });
+        .forEach(node -> {
+          validateHtmlTagNode(node);
+        });
     SoyTreeUtils.allNodesOfType(file, RenderUnitNode.class)
-        .filter(
-            unit ->
-                !unit.isImplicitContentKind()
-                    && unit.getContentKind() == SanitizedContentKind.ATTRIBUTES)
+        .filter(unit -> !unit.isImplicitContentKind() && unit.getContentKind() == SanitizedContentKind.ATTRIBUTES)
         .forEach(this::checkForDuplicateAttributes);
     SoyTreeUtils.allNodesOfType(file, HtmlAttributeNode.class)
         .forEach(this::warnOnIdAttributesMatchingJsIdentifiers);
   }
 
-  /**
-   * Report an error when we find a duplicate attribute.
-   * https://html.spec.whatwg.org/multipage/syntax.html#attributes-2
-   */
-  private void checkForDuplicateAttributes(ParentSoyNode<StandaloneNode> parentNode) {
-    DuplicateAttributesVisitor visitor = new DuplicateAttributesVisitor();
-    List<StandaloneNode> children = parentNode.getChildren();
-    if (parentNode instanceof HtmlTagNode) {
-      // the first child is the tag name, which isn't interesting, so skip it
-      children = children.subList(1, children.size());
-    }
-    for (SoyNode child : children) {
-      visitor.exec(child);
+  private void validateHtmlTagNode(HtmlTagNode node) {
+    checkForDuplicateAttributes(node);
+    if (node instanceof HtmlCloseTagNode) {
+      checkCloseTagChildren((HtmlCloseTagNode) node);
     }
   }
 
-  // https://developer.mozilla.org/en-US/docs/Glossary/Identifier
   private static final Pattern JS_IDENTIFIER_PATTERN =
       Pattern.compile("^[$_\\p{IsLetter}][$_\\p{IsLetter}\\p{IsDigit}]*$");
 
   private static boolean isIdShapedValue(HtmlAttributeValueNode node) {
-    if (node.numChildren() != 1) {
-      return false;
-    }
-    StandaloneNode attrValueNode = node.getChild(0);
+    return node.numChildren() == 1 && isSingleChildIdValue(node.getChild(0));
+  }
+
+  private static boolean isSingleChildIdValue(StandaloneNode attrValueNode) {
     if (attrValueNode instanceof RawTextNode) {
       return JS_IDENTIFIER_PATTERN.matcher(((RawTextNode) attrValueNode).getRawText()).matches();
     } else if (attrValueNode instanceof PrintNode) {
       ExprNode exprRoot = ((PrintNode) attrValueNode).getExpr().getRoot();
-      // Cannot
-      return exprRoot instanceof FunctionNode
-          && ((FunctionNode) exprRoot).getFunctionName().equals("xid");
+      return exprRoot instanceof FunctionNode && ((FunctionNode) exprRoot).getFunctionName().equals("xid");
     }
     return false;
   }
 
   private void warnOnIdAttributesMatchingJsIdentifiers(HtmlAttributeNode attributeNode) {
     if (attributeNode.definitelyMatchesAttributeName("id") && attributeNode.hasValue()) {
-      SoyNode child = attributeNode.getChild(1);
-      if (child instanceof HtmlAttributeValueNode
-          && isIdShapedValue((HtmlAttributeValueNode) child)) {
-        errorReporter.warn(attributeNode.getChild(1).getSourceLocation(), BAD_ID_VALUE);
+      HtmlAttributeValueNode child = getHtmlAttributeValueNode(attributeNode);
+      if (child != null && isIdShapedValue(child)) {
+        errorReporter.warn(child.getSourceLocation(), BAD_ID_VALUE);
+      }
+    }
+  }
+
+  private HtmlAttributeValueNode getHtmlAttributeValueNode(HtmlAttributeNode attributeNode) {
+    SoyNode child = attributeNode.getChild(1);
+    return child instanceof HtmlAttributeValueNode ? (HtmlAttributeValueNode) child : null;
+  }
+
+  private void checkForDuplicateAttributes(ParentSoyNode<StandaloneNode> parentNode) {
+    DuplicateAttributesVisitor visitor = new DuplicateAttributesVisitor();
+    List<StandaloneNode> children = getChildrenExcludingTagName(parentNode);
+    for (SoyNode child : children) {
+      visitor.exec(child);
+    }
+  }
+
+  private List<StandaloneNode> getChildrenExcludingTagName(ParentSoyNode<StandaloneNode> parentNode) {
+    List<StandaloneNode> children = parentNode.getChildren();
+    if (parentNode instanceof HtmlTagNode) {
+      return children.subList(1, children.size()); // Skip the first child (tag name)
+    }
+    return children;
+  }
+
+  private void checkCloseTagChildren(HtmlCloseTagNode closeTag) {
+    HtmlAttributeNode phNameAttribute = closeTag.getDirectAttributeNamed(PHNAME_ATTR);
+    HtmlAttributeNode phExAttribute = closeTag.getDirectAttributeNamed(PHEX_ATTR);
+    for (int i = 1; i < closeTag.numChildren(); i++) {
+      StandaloneNode child = closeTag.getChild(i);
+      if (child != phNameAttribute && child != phExAttribute) {
+        errorReporter.report(child.getSourceLocation(), UNEXPECTED_CLOSE_TAG_CONTENT);
       }
     }
   }
@@ -160,10 +172,8 @@ final class BasicHtmlValidationPass implements CompilerFilePass {
 
     @Override
     protected void visitHtmlAttributeNode(HtmlAttributeNode node) {
-      // don't visit children, we only care about attribute names
       String attributeKey = node.getStaticKey();
       if (attributeKey != null) {
-        // attribute keys are case insensitive under ascii rules
         attributeKey = Ascii.toLowerCase(attributeKey);
         if (!foundSoFar.add(attributeKey)) {
           errorReporter.report(node.getSourceLocation(), MULTIPLE_ATTRIBUTES, attributeKey);
@@ -173,39 +183,40 @@ final class BasicHtmlValidationPass implements CompilerFilePass {
 
     @Override
     protected void visitIfNode(IfNode node) {
-      visitControlFlowNode(node, /* exhaustive=*/ node.hasElse());
+      visitControlFlowNode(node, node.hasElse());
     }
 
     @Override
     protected void visitSwitchNode(SwitchNode node) {
-      visitControlFlowNode(node, /* exhaustive=*/ node.hasDefaultCase());
+      visitControlFlowNode(node, node.hasDefaultCase());
     }
 
     @Override
     protected void visitForNode(ForNode node) {
-      // loops are a little weird, consider reporting an error for all static attributes within the
-      // loop body.
-      visitControlFlowNode(node, /* exhaustive= */ false);
+      visitControlFlowNode(node, false);
     }
 
-    private void visitControlFlowNode(
-        SplitLevelTopNode<? extends BlockNode> parent, boolean exhaustive) {
+    private void visitControlFlowNode(SplitLevelTopNode<? extends BlockNode> parent, boolean exhaustive) {
       if (exhaustive) {
-        Set<String> definiteBlockAttrs = null;
-        for (BlockNode block : parent.getChildren()) {
-          Set<String> blockAttrs = new DuplicateAttributesVisitor(foundSoFar).exec(block);
-          if (definiteBlockAttrs == null) {
-            definiteBlockAttrs = new HashSet<>(Sets.difference(blockAttrs, foundSoFar));
-          } else {
-            definiteBlockAttrs.retainAll(blockAttrs); // only retain the intersection
-          }
-        }
-        foundSoFar.addAll(definiteBlockAttrs);
+        handleExhaustiveControlFlow(parent);
       } else {
         for (BlockNode block : parent.getChildren()) {
           new DuplicateAttributesVisitor(foundSoFar).exec(block);
         }
       }
+    }
+
+    private void handleExhaustiveControlFlow(SplitLevelTopNode<? extends BlockNode> parent) {
+      Set<String> definiteBlockAttrs = null;
+      for (BlockNode block : parent.getChildren()) {
+        Set<String> blockAttrs = new DuplicateAttributesVisitor(foundSoFar).exec(block);
+        if (definiteBlockAttrs == null) {
+          definiteBlockAttrs = new HashSet<>(Sets.difference(blockAttrs, foundSoFar));
+        } else {
+          definiteBlockAttrs.retainAll(blockAttrs); // only retain the intersection
+        }
+      }
+      foundSoFar.addAll(definiteBlockAttrs);
     }
 
     @Override
@@ -223,24 +234,6 @@ final class BasicHtmlValidationPass implements CompilerFilePass {
       if (node instanceof ParentSoyNode) {
         visitChildren((ParentSoyNode) node);
       }
-    }
-  }
-
-  /**
-   * Validates that the only children of close tags can be {@code phname} attributes.
-   *
-   * <p>Later passes validate that phnames for close tags only appear in messages.
-   */
-  private void checkCloseTagChildren(HtmlCloseTagNode closeTag) {
-    HtmlAttributeNode phNameAttribute = closeTag.getDirectAttributeNamed(PHNAME_ATTR);
-    HtmlAttributeNode phExAttribute = closeTag.getDirectAttributeNamed(PHEX_ATTR);
-    // the child at index 0 is the tag name
-    for (int i = 1; i < closeTag.numChildren(); i++) {
-      StandaloneNode child = closeTag.getChild(i);
-      if (child == phNameAttribute || child == phExAttribute) {
-        continue; // the phname and phex attributes are validated later and allowed in close nodes
-      }
-      errorReporter.report(child.getSourceLocation(), UNEXPECTED_CLOSE_TAG_CONTENT);
     }
   }
 }
