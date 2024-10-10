@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -34,7 +35,13 @@ public final class SoyGeneralOptions implements Cloneable {
     this.experimentalFeatures = ImmutableSet.copyOf(orig.experimentalFeatures);
   }
 
-  /** Sets experimental features. These features are unreleased and are not generally available. */
+  /**
+   * Sets experimental features. These features are unreleased and are not generally available.
+   * Consider documenting the parameter to clarify expected input and its impact on state.
+   *
+   * @param experimentalFeatures a collection of experimental feature names
+   * @return this instance for method chaining
+   */
   @CanIgnoreReturnValue
   public SoyGeneralOptions setExperimentalFeatures(Iterable<String> experimentalFeatures) {
     this.experimentalFeatures = ImmutableSet.copyOf(experimentalFeatures);
