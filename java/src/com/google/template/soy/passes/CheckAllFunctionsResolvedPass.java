@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -34,7 +35,11 @@ final class CheckAllFunctionsResolvedPass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     SoyTreeUtils.allNodesOfType(file, FunctionNode.class)
-        .filter(fct -> !fct.isResolved() && !fct.allowedToInvokeAsFunction())
+        .filter(this::isUnresolvedFunction)
         .forEach(resolver::reportUnresolved);
+  }
+
+  private boolean isUnresolvedFunction(FunctionNode functionNode) {
+    return !functionNode.isResolved() && !functionNode.allowedToInvokeAsFunction();
   }
 }
