@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -31,6 +32,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -45,6 +47,9 @@ import java.util.List;
 class PowFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method MATH_POW = 
+      JavaValueFactory.createMethod(Math.class, "pow", double.class, double.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -57,15 +62,9 @@ class PowFunction
     return factory.global("math.pow").call(args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method MATH_POW =
-        JavaValueFactory.createMethod(Math.class, "pow", double.class, double.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.MATH_POW, args.get(0), args.get(1));
+    return factory.callStaticMethod(MATH_POW, args.get(0), args.get(1));
   }
 }
