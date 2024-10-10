@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -39,11 +40,15 @@ public final class UnknownType extends PrimitiveType {
   boolean doIsAssignableFromNonUnionType(SoyType srcType) {
     // Allow assigning from all types except the map and ve types.
     // For maps, bracket access on "?"-typed values generates JS bracket access, which works
-    // whether the actual value is a an array or an object. But this doesn't work for ES6 Maps
+    // whether the actual value is an array or an object. But this doesn't work for ES6 Maps
     // or jspb.Maps. Flag this at compile time so people upgrading from legacy_object_map
     // aren't surprised at runtime.
     // For ve and ve_data, usage is limited to prevent abuse of VEs. The unknown type can't be used
     // as these types, so disallow converting them to unknown as there's no reason to do this.
+    return isAssignableFromAllowedTypes(srcType);
+  }
+
+  private boolean isAssignableFromAllowedTypes(SoyType srcType) {
     return srcType.getKind() != Kind.MAP
         && srcType.getKind() != Kind.VE
         && srcType.getKind() != Kind.VE_DATA;
@@ -56,8 +61,10 @@ public final class UnknownType extends PrimitiveType {
 
   @Override
   void doToProto(SoyTypeP.Builder builder) {
+    // Set the primitive type to UNKNOWN in the protocol buffer builder.
     builder.setPrimitive(SoyTypeP.PrimitiveTypeP.UNKNOWN);
   }
+
   /** Return the single instance of this type. */
   public static UnknownType getInstance() {
     return INSTANCE;
