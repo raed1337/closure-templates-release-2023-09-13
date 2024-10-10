@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -87,7 +88,7 @@ public final class SoyToPySrcCompiler extends AbstractSoyCompiler {
   @Option(
     name = "--outputNamespaceManifest",
     usage =
-        "The name fo the manifest file containing a map of all soy namespaces to their Python paths"
+        "The name of the manifest file containing a map of all soy namespaces to their Python paths"
             + " to write. Default is to not write this file."
   )
   private String outputNamespaceManifest = null;
@@ -111,10 +112,9 @@ public final class SoyToPySrcCompiler extends AbstractSoyCompiler {
 
   @Override
   protected void validateFlags() {
-    if (runtimePath.length() == 0) {
+    if (runtimePath.isEmpty()) {
       exitWithError("Must provide the Python runtime library path.");
     }
-
     outputFiles.validateFlags();
   }
 
@@ -128,23 +128,25 @@ public final class SoyToPySrcCompiler extends AbstractSoyCompiler {
     SoyFileSet sfs = sfsBuilder.build();
     // Load the manifest if available.
     ImmutableMap<String, String> manifest = loadNamespaceManifest(namespaceManifestPaths);
-    if (!manifest.isEmpty() && outputNamespaceManifest == null) {
+    if (outputNamespaceManifest == null && !manifest.isEmpty()) {
       exitWithError("Namespace manifests provided without outputting a new manifest.");
     }
 
     // Create SoyPySrcOptions.
-    SoyPySrcOptions pySrcOptions =
-        new SoyPySrcOptions(
-            runtimePath,
-            environmentModulePath,
-            bidiIsRtlFn,
-            translationClass,
-            manifest,
-            outputFiles.getOutputFilePathsForInputs(sfs.getSourceFilePaths()),
-            outputFiles.getOutputDirectoryFlag(),
-            outputNamespaceManifest);
-
+    SoyPySrcOptions pySrcOptions = createPySrcOptions(manifest, sfs);
     outputFiles.writeFiles(srcs, sfs.compileToPySrcFiles(pySrcOptions));
+  }
+
+  private SoyPySrcOptions createPySrcOptions(ImmutableMap<String, String> manifest, SoyFileSet sfs) {
+    return new SoyPySrcOptions(
+        runtimePath,
+        environmentModulePath,
+        bidiIsRtlFn,
+        translationClass,
+        manifest,
+        outputFiles.getOutputFilePathsForInputs(sfs.getSourceFilePaths()),
+        outputFiles.getOutputDirectoryFlag(),
+        outputNamespaceManifest);
   }
 
   /**
@@ -156,19 +158,23 @@ public final class SoyToPySrcCompiler extends AbstractSoyCompiler {
       return ImmutableMap.of();
     }
 
-    ImmutableMap.Builder<String, String> manifest = new ImmutableMap.Builder<>();
+    ImmutableMap.Builder<String, String> manifest = ImmutableMap.builder();
     for (String manifestPath : namespaceManifestPaths) {
-      try (Reader manifestFile = Files.newReader(new File(manifestPath), StandardCharsets.UTF_8)) {
-        Properties prop = new Properties();
-        prop.load(manifestFile);
-        for (String namespace : prop.stringPropertyNames()) {
-          manifest.put(namespace, prop.getProperty(namespace));
-        }
-      } catch (IOException e) {
-        exitWithError("Unable to read the namespaceManifest file at " + manifestPath);
-      }
+      readManifestFile(manifestPath, manifest);
     }
 
     return manifest.buildOrThrow();
+  }
+
+  private void readManifestFile(String manifestPath, ImmutableMap.Builder<String, String> manifest) {
+    try (Reader manifestFile = Files.newReader(new File(manifestPath), StandardCharsets.UTF_8)) {
+      Properties prop = new Properties();
+      prop.load(manifestFile);
+      for (String namespace : prop.stringPropertyNames()) {
+        manifest.put(namespace, prop.getProperty(namespace));
+      }
+    } catch (IOException e) {
+      exitWithError("Unable to read the namespaceManifest file at " + manifestPath);
+    }
   }
 }
