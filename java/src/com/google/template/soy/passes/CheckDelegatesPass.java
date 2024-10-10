@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -96,55 +97,48 @@ final class CheckDelegatesPass implements CompilerFileSetPass {
 
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
-    // Perform checks that only involve templates (uses fileset templateRegistry only, no traversal
-    // and no imports context needed).
     checkTemplates(templateRegistryFull.get().getDelTemplateSelector());
 
     for (SoyFileNode fileNode : sourceFiles) {
       LocalVariables localVariables = LocalVariablesNodeVisitor.getFileScopeVariables(fileNode);
       for (TemplateNode template : fileNode.getTemplates()) {
-        if (template instanceof TemplateDelegateNode
-            && isNullOrEmpty(((TemplateDelegateNode) template).getDelTemplateVariant())
-            && isNullOrEmpty(template.getModName())) {
-          errorReporter.report(template.getSourceLocation(), DELTEMPLATES_DEPRECATED);
-        }
+        checkTemplateForDeprecation(template);
         String currTemplateNameForUserMsgs = template.getTemplateNameForUserMsgs();
         String currModName = template.getModName();
-        for (TemplateLiteralNode templateLiteralNode :
-            SoyTreeUtils.getAllNodesOfType(template, TemplateLiteralNode.class)) {
-          checkTemplateLiteralNode(templateLiteralNode, currModName, currTemplateNameForUserMsgs);
-        }
-        for (CallDelegateNode callNode :
-            SoyTreeUtils.getAllNodesOfType(template, CallDelegateNode.class)) {
-          checkCallDelegateNode(
-              callNode, localVariables, templateRegistryFull.get().getDelTemplateSelector());
-        }
+        checkTemplateLiterals(template, currModName, currTemplateNameForUserMsgs);
+        checkCallDelegateNodes(template, localVariables);
       }
     }
     return Result.CONTINUE;
   }
 
-  /** Performs checks that only involve templates (uses templateRegistry only). */
-  private void checkTemplates(DelTemplateSelector<TemplateMetadata> fileSetDelTemplateSelector) {
+  private void checkTemplateForDeprecation(TemplateNode template) {
+    if (template instanceof TemplateDelegateNode
+        && isNullOrEmpty(((TemplateDelegateNode) template).getDelTemplateVariant())
+        && isNullOrEmpty(template.getModName())) {
+      errorReporter.report(template.getSourceLocation(), DELTEMPLATES_DEPRECATED);
+    }
+  }
 
-    // Check that all delegate templates with the same name have the same declared params,
-    // content kind, and strict html mode.
+  private void checkTemplateLiterals(TemplateNode template, String currModName, String currTemplateNameForUserMsgs) {
+    for (TemplateLiteralNode templateLiteralNode :
+        SoyTreeUtils.getAllNodesOfType(template, TemplateLiteralNode.class)) {
+      checkTemplateLiteralNode(templateLiteralNode, currModName, currTemplateNameForUserMsgs);
+    }
+  }
+
+  private void checkCallDelegateNodes(TemplateNode template, LocalVariables localVariables) {
+    for (CallDelegateNode callNode :
+        SoyTreeUtils.getAllNodesOfType(template, CallDelegateNode.class)) {
+      checkCallDelegateNode(callNode, localVariables, templateRegistryFull.get().getDelTemplateSelector());
+    }
+  }
+
+  private void checkTemplates(DelTemplateSelector<TemplateMetadata> fileSetDelTemplateSelector) {
     for (Collection<TemplateMetadata> delTemplateGroup :
         fileSetDelTemplateSelector.delTemplateNameToValues().asMap().values()) {
-      TemplateMetadata firstDelTemplate = null;
-      // loop over all members of the deltemplate group looking for a source template.
-      for (TemplateMetadata delTemplate : delTemplateGroup) {
-        if (firstDelTemplate == null) {
-          firstDelTemplate = delTemplate;
-        }
-        // preferentially use a source template
-        if (delTemplate.getSoyFileKind() == SoyFileKind.SRC) {
-          firstDelTemplate = delTemplate;
-          break;
-        }
-      }
+      TemplateMetadata firstDelTemplate = findFirstSourceTemplate(delTemplateGroup);
       if (firstDelTemplate == null) {
-        // group must be empty
         continue;
       }
       Set<Parameter> firstRequiredParamSet = getRequiredParamSet(firstDelTemplate);
@@ -152,76 +146,91 @@ final class CheckDelegatesPass implements CompilerFileSetPass {
           firstDelTemplate.getTemplateType().getContentKind().getSanitizedContentKind();
       boolean firstStrictHtml =
           firstDelTemplate.getTemplateType().isStrictHtml() && firstContentKind.isHtml();
-      // loop over all members of the deltemplate group.
-      for (TemplateMetadata delTemplate : delTemplateGroup) {
-        if (firstDelTemplate == delTemplate) {
-          continue; // skip
-        }
-        // Not first template encountered.
-        Set<Parameter> currRequiredParamSet = getRequiredParamSet(delTemplate);
-        if (!paramSetsEqual(currRequiredParamSet, firstRequiredParamSet)
-            && !delTemplate.getTemplateType().isModifiable()
-            && !delTemplate.getTemplateType().isModifying()) {
-          // param compatability for modifiable templates is already caught by
-          // CheckModifiableTemplatesPass.
-          List<Parameter> firstParamList = firstDelTemplate.getTemplateType().getParameters();
-          List<Parameter> currParamList = delTemplate.getTemplateType().getParameters();
-          Set<Parameter> missingParamSet =
-              getRequiredParamsDifference(firstParamList, currParamList);
-          Set<Parameter> unexpectedParamSet =
-              getRequiredParamsDifference(currParamList, firstParamList);
-          errorReporter.report(
-              delTemplate.getSourceLocation(),
-              DELTEMPLATES_WITH_DIFFERENT_PARAM_DECLARATIONS,
-              delTemplate.getDelTemplateName(),
-              firstDelTemplate.getSourceLocation().toString(),
-              getInconsistentParamMessage(missingParamSet, unexpectedParamSet));
-        }
-        if (delTemplate.getTemplateType().getContentKind().getSanitizedContentKind()
-            != firstContentKind) {
-          // TODO: This is only *truly* a requirement if the strict mode deltemplates are
-          // being called by contextual templates. For a strict-to-strict call, everything
-          // is escaped at runtime at the call sites. You could imagine delegating between
-          // either a plain-text or rich-html template. However, most developers will write
-          // their deltemplates in a parallel manner, and will want to know when the
-          // templates differ. Plus, requiring them all to be the same early-on will allow
-          // future optimizations to avoid the run-time checks, so it's better to start out
-          // as strict as possible and only open up if needed.
-          errorReporter.report(
-              firstDelTemplate.getSourceLocation(),
-              STRICT_DELTEMPLATES_WITH_DIFFERENT_CONTENT_KIND,
-              String.valueOf(
-                  delTemplate.getTemplateType().getContentKind().getSanitizedContentKind()),
-              String.valueOf(firstContentKind),
-              delTemplate.getSourceLocation().toString());
-        }
-        // Check if all del templates have the same settings of strict HTML mode.
-        // We do not need to check {@code ContentKind} again since we already did that earlier
-        // in this pass.
-        if (delTemplate.getTemplateType().isStrictHtml() != firstStrictHtml) {
-          errorReporter.report(
-              firstDelTemplate.getSourceLocation(),
-              DELTEMPLATES_WITH_DIFFERENT_STRICT_HTML_MODE,
-              delTemplate.getDelTemplateName(),
-              delTemplate.getSourceLocation().toString());
-        }
+      checkDelegateTemplateGroup(delTemplateGroup, firstDelTemplate, firstRequiredParamSet, firstContentKind, firstStrictHtml);
+    }
+  }
+
+  private TemplateMetadata findFirstSourceTemplate(Collection<TemplateMetadata> delTemplateGroup) {
+    for (TemplateMetadata delTemplate : delTemplateGroup) {
+      if (delTemplate.getSoyFileKind() == SoyFileKind.SRC) {
+        return delTemplate;
       }
-      TemplateMetadata defaultTemplate = getDefault(delTemplateGroup);
-      if (defaultTemplate != null
-          && defaultTemplate.getTemplateType().isModifiable()
-          && defaultTemplate.getTemplateType().getLegacyDeltemplateNamespace().isEmpty()) {
-        for (TemplateMetadata template : delTemplateGroup) {
-          if (template != defaultTemplate && !template.getTemplateType().isModifying()) {
-            errorReporter.report(
-                template.getSourceLocation(), CANNOT_DELTEMPLATE_WITHOUT_LEGACY_NAMESPACE);
-          }
+    }
+    return delTemplateGroup.isEmpty() ? null : delTemplateGroup.iterator().next();
+  }
+
+  private void checkDelegateTemplateGroup(Collection<TemplateMetadata> delTemplateGroup, 
+                                          TemplateMetadata firstDelTemplate,
+                                          Set<Parameter> firstRequiredParamSet,
+                                          SanitizedContentKind firstContentKind,
+                                          boolean firstStrictHtml) {
+    for (TemplateMetadata delTemplate : delTemplateGroup) {
+      if (firstDelTemplate == delTemplate) {
+        continue;
+      }
+      checkParamSets(delTemplate, firstDelTemplate, firstRequiredParamSet);
+      checkContentKind(delTemplate, firstDelTemplate, firstContentKind);
+      checkStrictHtmlMode(delTemplate, firstDelTemplate, firstStrictHtml);
+    }
+    checkLegacyNamespace(delTemplateGroup);
+  }
+
+  private void checkParamSets(TemplateMetadata delTemplate, TemplateMetadata firstDelTemplate, Set<Parameter> firstRequiredParamSet) {
+    Set<Parameter> currRequiredParamSet = getRequiredParamSet(delTemplate);
+    if (!paramSetsEqual(currRequiredParamSet, firstRequiredParamSet)
+        && !delTemplate.getTemplateType().isModifiable()
+        && !delTemplate.getTemplateType().isModifying()) {
+      List<Parameter> firstParamList = firstDelTemplate.getTemplateType().getParameters();
+      List<Parameter> currParamList = delTemplate.getTemplateType().getParameters();
+      Set<Parameter> missingParamSet =
+          getRequiredParamsDifference(firstParamList, currParamList);
+      Set<Parameter> unexpectedParamSet =
+          getRequiredParamsDifference(currParamList, firstParamList);
+      errorReporter.report(
+          delTemplate.getSourceLocation(),
+          DELTEMPLATES_WITH_DIFFERENT_PARAM_DECLARATIONS,
+          delTemplate.getDelTemplateName(),
+          firstDelTemplate.getSourceLocation().toString(),
+          getInconsistentParamMessage(missingParamSet, unexpectedParamSet));
+    }
+  }
+
+  private void checkContentKind(TemplateMetadata delTemplate, TemplateMetadata firstDelTemplate, SanitizedContentKind firstContentKind) {
+    if (delTemplate.getTemplateType().getContentKind().getSanitizedContentKind() != firstContentKind) {
+      errorReporter.report(
+          firstDelTemplate.getSourceLocation(),
+          STRICT_DELTEMPLATES_WITH_DIFFERENT_CONTENT_KIND,
+          String.valueOf(delTemplate.getTemplateType().getContentKind().getSanitizedContentKind()),
+          String.valueOf(firstContentKind),
+          delTemplate.getSourceLocation().toString());
+    }
+  }
+
+  private void checkStrictHtmlMode(TemplateMetadata delTemplate, TemplateMetadata firstDelTemplate, boolean firstStrictHtml) {
+    if (delTemplate.getTemplateType().isStrictHtml() != firstStrictHtml) {
+      errorReporter.report(
+          firstDelTemplate.getSourceLocation(),
+          DELTEMPLATES_WITH_DIFFERENT_STRICT_HTML_MODE,
+          delTemplate.getDelTemplateName(),
+          delTemplate.getSourceLocation().toString());
+    }
+  }
+
+  private void checkLegacyNamespace(Collection<TemplateMetadata> delTemplateGroup) {
+    TemplateMetadata defaultTemplate = getDefault(delTemplateGroup);
+    if (defaultTemplate != null
+        && defaultTemplate.getTemplateType().isModifiable()
+        && defaultTemplate.getTemplateType().getLegacyDeltemplateNamespace().isEmpty()) {
+      for (TemplateMetadata template : delTemplateGroup) {
+        if (template != defaultTemplate && !template.getTemplateType().isModifying()) {
+          errorReporter.report(
+              template.getSourceLocation(), CANNOT_DELTEMPLATE_WITHOUT_LEGACY_NAMESPACE);
         }
       }
     }
   }
 
   private static boolean paramSetsEqual(Set<Parameter> s1, Set<Parameter> s2) {
-    // We can use Set equality because we normalize parameters with toComparable().
     return s1.equals(s2);
   }
 
@@ -235,18 +244,20 @@ final class CheckDelegatesPass implements CompilerFileSetPass {
   private void checkTemplateLiteralNode(
       TemplateLiteralNode node, @Nullable String currModName, String currTemplateNameForUserMsgs) {
     String calleeName = node.getResolvedName();
-
-    // Check that the callee is either in a file without modname, or in the same mod.
     TemplateMetadata callee = templateRegistryFull.get().getBasicTemplateOrElement(calleeName);
     if (callee != null) {
-      String calleeModName = callee.getModName();
-      if (calleeModName != null && !calleeModName.equals(currModName)) {
-        errorReporter.report(
-            node.getSourceLocation(),
-            CROSS_PACKAGE_DELCALL,
-            currTemplateNameForUserMsgs,
-            callee.getTemplateName());
-      }
+      checkCalleeModName(node, currModName, currTemplateNameForUserMsgs, callee);
+    }
+  }
+
+  private void checkCalleeModName(TemplateLiteralNode node, String currModName, String currTemplateNameForUserMsgs, TemplateMetadata callee) {
+    String calleeModName = callee.getModName();
+    if (calleeModName != null && !calleeModName.equals(currModName)) {
+      errorReporter.report(
+          node.getSourceLocation(),
+          CROSS_PACKAGE_DELCALL,
+          currTemplateNameForUserMsgs,
+          callee.getTemplateName());
     }
   }
 
@@ -268,15 +279,26 @@ final class CheckDelegatesPass implements CompilerFileSetPass {
     TemplateMetadata defaultTemplate =
         getDefault(fileSetDelTemplateSelector.delTemplateNameToValues().get(delCalleeName));
     if (defaultTemplate != null && defaultTemplate.getTemplateType().isModifiable()) {
-      if (defaultTemplate.getTemplateType().getLegacyDeltemplateNamespace().equals(delCalleeName)) {
-        return;
-      }
-      errorReporter.report(node.getSourceLocation(), CANNOT_DELCALL_WITHOUT_LEGACY_NAMESPACE);
+      checkLegacyNamespaceForCall(node, defaultTemplate);
     }
-    VarDefn collision = localVariables.lookup(delCalleeName);
-    if (collision == null) {
+    checkForVariableCollision(node, localVariables, delCalleeName);
+  }
+
+  private void checkLegacyNamespaceForCall(CallDelegateNode node, TemplateMetadata defaultTemplate) {
+    if (defaultTemplate.getTemplateType().getLegacyDeltemplateNamespace().equals(node.getDelCalleeName())) {
       return;
     }
+    errorReporter.report(node.getSourceLocation(), CANNOT_DELCALL_WITHOUT_LEGACY_NAMESPACE);
+  }
+
+  private void checkForVariableCollision(CallDelegateNode node, LocalVariables localVariables, String delCalleeName) {
+    VarDefn collision = localVariables.lookup(delCalleeName);
+    if (collision != null) {
+      checkCollisionType(node, collision);
+    }
+  }
+
+  private void checkCollisionType(CallDelegateNode node, VarDefn collision) {
     if (collision.kind() == Kind.TEMPLATE
         || (collision.kind() == Kind.IMPORT_VAR
             && collision.hasType()
@@ -323,12 +345,9 @@ final class CheckDelegatesPass implements CompilerFileSetPass {
         .filter(
             (param) -> {
               String paramName = param.getName();
-              // Check that a required parameter in the first list exists in the second list.
               if (!nameToParamMap.containsKey(paramName)) {
                 return param.isRequired();
               }
-              // Check that at least one of the parameters are required and that parameters lists
-              // with the same name differ in either the type or isRequired.
               Parameter param2 = nameToParamMap.get(paramName);
               return !param.equals(param2) && (param.isRequired() || param2.isRequired());
             })
