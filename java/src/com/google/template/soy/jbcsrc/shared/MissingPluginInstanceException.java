@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -25,7 +26,12 @@ public final class MissingPluginInstanceException extends IllegalStateException 
     this.functionName = functionName;
   }
 
-  public String functionName() {
+  public String getFunctionName() {
     return functionName;
+  }
+
+  @Override
+  public String getMessage() {
+    return String.format("Function: %s - %s", functionName, super.getMessage());
   }
 }
