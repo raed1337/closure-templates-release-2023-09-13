@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -65,6 +66,10 @@ public final class CallDelegateNode extends CallNode {
     this.delCalleeName = delCalleeName.identifier();
     this.sourceDelCalleeName = delCalleeName;
 
+    validateAttributes(attributes, errorReporter);
+  }
+
+  private void validateAttributes(List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
     for (CommandTagAttribute attr : attributes) {
       String name = attr.getName().identifier();
 
@@ -73,8 +78,6 @@ public final class CallDelegateNode extends CallNode {
         case "key":
         case PHNAME_ATTR:
         case PHEX_ATTR:
-          // Parsed in CallNode.
-          break;
         case "variant":
           break;
         default:
@@ -123,24 +126,35 @@ public final class CallDelegateNode extends CallNode {
   @Override
   public String getCommandText() {
     StringBuilder commandText = new StringBuilder(delCalleeName);
+    appendData(commandText);
+    appendPlaceholder(commandText);
+    appendVariant(commandText);
 
+    return commandText.toString();
+  }
+
+  private void appendData(StringBuilder commandText) {
     if (isPassingAllData()) {
       commandText.append(" data=\"all\"");
     } else if (getDataExpr() != null) {
       commandText.append(" data=\"").append(getDataExpr().toSourceString()).append('"');
     }
+  }
+
+  private void appendPlaceholder(StringBuilder commandText) {
     getPlaceholder()
         .userSuppliedName()
         .ifPresent(phname -> commandText.append(" phname=\"").append(phname).append('"'));
     getPlaceholder()
         .example()
         .ifPresent(phex -> commandText.append(" phex=\"").append(phex).append('"'));
+  }
+
+  private void appendVariant(StringBuilder commandText) {
     ExprRootNode variantExpr = getDelCalleeVariantExpr();
     if (variantExpr != null) {
       commandText.append(" variant=\"").append(variantExpr.toSourceString()).append('"');
     }
-
-    return commandText.toString();
   }
 
   @Override
