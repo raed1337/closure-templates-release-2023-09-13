@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -39,6 +40,10 @@ public final class MessageType extends SoyType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType fromType) {
+    return isMessageOrProto(fromType);
+  }
+
+  private boolean isMessageOrProto(SoyType fromType) {
     SoyType.Kind kind = fromType.getKind();
     return kind == SoyType.Kind.MESSAGE || kind == SoyType.Kind.PROTO;
   }
