@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -90,12 +91,9 @@ public final class SoyTypeRegistryBuilder {
   @AutoValue
   abstract static class DescriptorKey {
     public static DescriptorKey of(GenericDescriptor d) {
-      if (d instanceof FileDescriptor) {
-        return new AutoValue_SoyTypeRegistryBuilder_DescriptorKey(d.getName(), "");
-      } else {
-        return new AutoValue_SoyTypeRegistryBuilder_DescriptorKey(
-            d.getFile().getName(), d.getFullName());
-      }
+      return new AutoValue_SoyTypeRegistryBuilder_DescriptorKey(
+          d instanceof FileDescriptor ? d.getName() : d.getFile().getName(),
+          d instanceof FileDescriptor ? "" : d.getFullName());
     }
 
     abstract String filePath();
@@ -125,22 +123,10 @@ public final class SoyTypeRegistryBuilder {
     }
 
     public ProtoTypeRegistry build(SoyTypeRegistry interner) {
-      Set<FileDescriptor> fileInputs =
-          inputs.stream()
-              .filter(FileDescriptor.class::isInstance)
-              .map(FileDescriptor.class::cast)
-              .collect(toImmutableSet()); // maintain order
-
-      // Visit all the file descriptors explicitly passed.
+      Set<FileDescriptor> fileInputs = getFileInputs();
       fileInputs.forEach(this::visitFile);
-      // Visit all descriptors explicitly passed not descending from any of the file inputs.
       inputs.stream().filter(d -> !fileInputs.contains(d.getFile())).forEach(this::visitGeneric);
-      // Visit to collect extensions any file of any input not already visited.
-      inputs.stream()
-          .map(GenericDescriptor::getFile)
-          .distinct()
-          .filter(d -> !fileInputs.contains(d))
-          .forEach(this::visitFileForExtensions);
+      visitFilesForExtensions();
 
       if (errorReporter.hasErrors()) {
         throw new SoyInternalCompilerException(errorReporter.getErrors(), null);
@@ -153,20 +139,38 @@ public final class SoyTypeRegistryBuilder {
           importPathToDepKind);
     }
 
+    private Set<FileDescriptor> getFileInputs() {
+      return inputs.stream()
+          .filter(FileDescriptor.class::isInstance)
+          .map(FileDescriptor.class::cast)
+          .collect(toImmutableSet()); // maintain order
+    }
+
+    private void visitFilesForExtensions() {
+      inputs.stream()
+          .map(GenericDescriptor::getFile)
+          .distinct()
+          .filter(d -> !getFileInputs().contains(d))
+          .forEach(this::visitFileForExtensions);
+    }
+
     private void visitGeneric(GenericDescriptor descriptor) {
       if (descriptor instanceof Descriptor) {
         visitMessage((Descriptor) descriptor);
       } else if (descriptor instanceof FieldDescriptor) {
-        FieldDescriptor fd = (FieldDescriptor) descriptor;
-        if (fd.isExtension()) {
-          visitExtension(fd);
-        }
-        visitField(fd);
+        visitFieldDescriptor((FieldDescriptor) descriptor);
       } else if (descriptor instanceof EnumDescriptor) {
         visitEnum((EnumDescriptor) descriptor);
       } else if (descriptor instanceof FileDescriptor) {
         throw new IllegalArgumentException();
-      } // services, etc. not needed thus far so neither gathered nor dispatched
+      }
+    }
+
+    private void visitFieldDescriptor(FieldDescriptor fd) {
+      if (fd.isExtension()) {
+        visitExtension(fd);
+      }
+      visitField(fd);
     }
 
     private void visitFile(FileDescriptor fd) {
@@ -230,7 +234,6 @@ public final class SoyTypeRegistryBuilder {
     }
 
     private void putAndWarnCollision(GenericDescriptor d) {
-      // Since we use FQN as a primary key in several data structures, collisions are errors.
       GenericDescriptor previous = msgAndEnumFqnToDesc.put(d.getFullName(), d);
       if (previous != null) {
         errorReporter.report(
