@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -60,7 +61,6 @@ import java.util.ArrayDeque;
  */
 final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
 
-
   private final ArrayDeque<HtmlContext> stateStack = new ArrayDeque<>();
 
   private static final ImmutableMap<TagName.RcDataTagName, HtmlContext> TAG_TO_CONTENT_TYPE =
@@ -74,8 +74,7 @@ final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
   @Override
   protected void visitTemplateNode(TemplateNode node) {
     checkState(stateStack.isEmpty());
-    SanitizedContentKind contentKind = node.getContentKind();
-    pushState(contextForKind(contentKind));
+    pushState(contextForKind(node.getContentKind()));
     visitChildren(node);
     popState();
     checkState(stateStack.isEmpty());
@@ -107,7 +106,10 @@ final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
 
   @Override
   protected void visitHtmlOpenTagNode(HtmlOpenTagNode node) {
+    processHtmlOpenTag(node);
+  }
 
+  private void processHtmlOpenTag(HtmlOpenTagNode node) {
     pushState(HtmlContext.HTML_TAG_NAME);
     visit(node.getChild(0));
     popState();
@@ -130,16 +132,18 @@ final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
     visit(node.getChild(0)); // visit the name (or dynamic attribute)
     if (hasValue) {
       popState();
-      for (int i = 1; i < node.numChildren(); i++) {
-        visit(node.getChild(i));
-      }
+      visitAttributeValueNodes(node);
+    }
+  }
+
+  private void visitAttributeValueNodes(HtmlAttributeNode node) {
+    for (int i = 1; i < node.numChildren(); i++) {
+      visit(node.getChild(i));
     }
   }
 
   @Override
   protected void visitHtmlAttributeValueNode(HtmlAttributeValueNode node) {
-    // This is consistent with the old HtmlTransformVisitor, but doesn't really make sense, sometime
-    // this is JS, URL or CSS...
     pushState(HtmlContext.HTML_NORMAL_ATTR_VALUE);
     super.visitHtmlAttributeValueNode(node);
     popState();
@@ -147,7 +151,6 @@ final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
 
   @Override
   protected void visitLogNode(LogNode node) {
-    // The contents of a {log} statement are always text.
     pushState(HtmlContext.TEXT);
     visitChildren(node);
     popState();
@@ -172,7 +175,6 @@ final class HtmlContextVisitor extends AbstractSoyNodeVisitor<Void> {
 
   @Override
   protected void visitHtmlCommentNode(HtmlCommentNode node) {
-    // This is technically RCDATA but for our purposes TEXT is fine.
     pushState(HtmlContext.TEXT);
     visitChildren(node);
     popState();
