@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -56,6 +57,10 @@ abstract class AbstractParentCommandNode<N extends SoyNode> extends AbstractComm
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
     sb.append(getTagString());
     appendSourceStringForChildren(sb);
