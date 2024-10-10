@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -42,11 +43,7 @@ import org.objectweb.asm.Type;
  * parameter index to a local variable index).
  */
 public final class LocalVariable extends Expression {
-  // TODO(lukes): the fact that you need to specify the start and end labels during construction
-  // ends up being awkward... Due to the fact that it is unclear who is responsible for actually
-  // visiting the labels.  Maybe this object should be label agnostic and the labels should just be
-  // parameters to tableEntry?
-
+  
   public static LocalVariable createThisVar(TypeInfo owner, Label start, Label end) {
     return new LocalVariable(
         "this",
@@ -122,20 +119,24 @@ public final class LocalVariable extends Expression {
 
   @Override
   public LocalVariable asNonJavaNullable() {
-    if (isNonJavaNullable()) {
-      return this;
-    }
-    return new LocalVariable(
-        variableName, resultType(), state, start, end, features().plus(Feature.NON_JAVA_NULLABLE));
+    return createNonNullVariable(Feature.NON_JAVA_NULLABLE);
   }
 
   @Override
   public LocalVariable asNonSoyNullish() {
-    if (isNonSoyNullish()) {
+    return createNonNullVariable(Feature.NON_SOY_NULLISH);
+  }
+
+  private LocalVariable createNonNullVariable(Feature feature) {
+    if (isFeatureEnabled(feature)) {
       return this;
     }
     return new LocalVariable(
-        variableName, resultType(), state, start, end, features().plus(Feature.NON_SOY_NULLISH));
+        variableName, resultType(), state, start, end, features().plus(feature));
+  }
+
+  private boolean isFeatureEnabled(Feature feature) {
+    return feature == Feature.NON_JAVA_NULLABLE ? isNonJavaNullable() : isNonSoyNullish();
   }
 
   /**
@@ -144,11 +145,7 @@ public final class LocalVariable extends Expression {
    */
   public void tableEntry(CodeBuilder mv) {
     state.markRead();
-    if (Flags.DEBUG) {
-      // calling getOffSet will throw if the label has not been visited
-      start.getOffset();
-      end.getOffset();
-    }
+    validateLabelOffsets();
     mv.visitLocalVariable(
         variableName(),
         resultType().getDescriptor(),
@@ -158,8 +155,15 @@ public final class LocalVariable extends Expression {
         index());
   }
 
+  private void validateLabelOffsets() {
+    if (Flags.DEBUG) {
+      start.getOffset();
+      end.getOffset();
+    }
+  }
+
   @Override
-  protected void doGen(CodeBuilder cb) {
+  public void doGen(CodeBuilder cb) {
     cb.visitVarInsn(resultType().getOpcode(Opcodes.ILOAD), index());
   }
 
@@ -206,14 +210,11 @@ public final class LocalVariable extends Expression {
 
   @Override
   public String toString() {
-    // Make sure reading tostring (e.g. as debuggers do) doesn't set the read bit.
     boolean indexHasBeenRead = state.indexHasBeenRead;
     try {
       return super.toString();
     } finally {
-      if (!indexHasBeenRead) {
-        state.indexHasBeenRead = false;
-      }
+      state.indexHasBeenRead = indexHasBeenRead;
     }
   }
 
