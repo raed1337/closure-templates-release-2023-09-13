@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -77,48 +78,40 @@ final class AppendableExpression extends Expression {
       MethodRef.create(LoggingAdvisingAppendable.class, "flushBuffers", int.class);
 
   static AppendableExpression forExpression(Expression delegate) {
-    return new AppendableExpression(
-        delegate, /* hasSideEffects= */ false, /* supportsSoftLimiting= */ true);
+    return new AppendableExpression(delegate, false, true);
   }
 
   static AppendableExpression forStringBuilder(Expression delegate) {
     checkArgument(delegate.resultType().equals(LOGGING_ADVISING_BUILDER_TYPE));
     return new AppendableExpression(
-        BytecodeUtils.LOGGING_ADVISING_BUILDER_TYPE,
-        delegate,
-        /* hasSideEffects= */ false,
-        /* supportsSoftLimiting= */ false);
+        LOGGING_ADVISING_BUILDER_TYPE, delegate, false, false);
   }
 
   static AppendableExpression logger() {
-    return new AppendableExpression(
-        MethodRef.RUNTIME_LOGGER.invoke(),
-        /* hasSideEffects= */ false,
-        /* supportsSoftLimiting= */ false);
+    return new AppendableExpression(MethodRef.RUNTIME_LOGGER.invoke(), false, false);
   }
 
   private final Expression delegate;
-  // Whether or not the expression contains operations with side effects (e.g. appends)
   private final boolean hasSideEffects;
-  // Whether or not the appendable could ever return true from softLimitReached
   private final boolean supportsSoftLimiting;
 
-  private AppendableExpression(
-      Expression delegate, boolean hasSideEffects, boolean supportsSoftLimiting) {
+  private AppendableExpression(Expression delegate, boolean hasSideEffects, boolean supportsSoftLimiting) {
     this(LOGGING_ADVISING_APPENDABLE_TYPE, delegate, hasSideEffects, supportsSoftLimiting);
   }
 
-  private AppendableExpression(
-      Type resultType, Expression delegate, boolean hasSideEffects, boolean supportsSoftLimiting) {
+  private AppendableExpression(Type resultType, Expression delegate, boolean hasSideEffects, boolean supportsSoftLimiting) {
     super(resultType, delegate.features());
-    delegate.checkAssignableTo(LOGGING_ADVISING_APPENDABLE_TYPE);
-    checkArgument(
-        delegate.isNonJavaNullable(),
-        "advising appendable expressions should always be non nullable: %s",
-        delegate);
+    validateDelegate(delegate);
     this.delegate = delegate;
     this.hasSideEffects = hasSideEffects;
     this.supportsSoftLimiting = supportsSoftLimiting;
+  }
+
+  private void validateDelegate(Expression delegate) {
+    delegate.checkAssignableTo(LOGGING_ADVISING_APPENDABLE_TYPE);
+    checkArgument(delegate.isNonJavaNullable(),
+        "advising appendable expressions should always be non nullable: %s",
+        delegate);
   }
 
   @Override
@@ -126,47 +119,33 @@ final class AppendableExpression extends Expression {
     delegate.gen(adapter);
   }
 
-  /**
-   * Returns a similar {@link AppendableExpression} but with the given (string valued) expression
-   * appended to it.
-   */
   AppendableExpression appendString(Expression exp) {
-    return withNewDelegate(delegate.invoke(APPEND, exp), true);
+    return createNewDelegate(delegate.invoke(APPEND, exp), true);
   }
 
-  /**
-   * Returns a similar {@link AppendableExpression} but with the given (char valued) expression
-   * appended to it.
-   */
   AppendableExpression appendChar(Expression exp) {
-    return withNewDelegate(delegate.invoke(APPEND_CHAR, exp), true);
+    return createNewDelegate(delegate.invoke(APPEND_CHAR, exp), true);
   }
 
-  /** Returns an expression with the result of {@link AppendableExpression#softLimitReached}. */
   Expression softLimitReached() {
     checkArgument(supportsSoftLimiting);
     return delegate.invoke(SOFT_LIMITED);
   }
 
-  /** Invokes {@link LoggingAdvisingAppendable#enterLoggableElement} on the appendable. */
   AppendableExpression enterLoggableElement(Expression logStatement) {
-    return withNewDelegate(delegate.invoke(ENTER_LOGGABLE_STATEMENT, logStatement), true);
+    return createNewDelegate(delegate.invoke(ENTER_LOGGABLE_STATEMENT, logStatement), true);
   }
 
-  /** Invokes {@link LoggingAdvisingAppendable#enterLoggableElement} on the appendable. */
   AppendableExpression exitLoggableElement() {
-    return withNewDelegate(delegate.invoke(EXIT_LOGGABLE_STATEMENT), true);
+    return createNewDelegate(delegate.invoke(EXIT_LOGGABLE_STATEMENT), true);
   }
 
-  /**
-   * Invokes {@link LoggingAdvisingAppendable#appendLoggingFunctionInvocation} on the appendable.
-   */
   AppendableExpression appendLoggingFunctionInvocation(
       String functionName,
       String placeholderValue,
       List<SoyExpression> args,
       List<Expression> escapingDirectives) {
-    return withNewDelegate(
+    return createNewDelegate(
         delegate.invoke(
             APPEND_LOGGING_FUNCTION_INVOCATION,
             LOGGING_FUNCTION_INVOCATION_CREATE.invoke(
@@ -177,9 +156,8 @@ final class AppendableExpression extends Expression {
         true);
   }
 
-  /** Invokes {@link LoggingAdvisingAppendable#setSanitizedContentKind} on the appendable. */
   AppendableExpression setSanitizedContentKindAndDirectionality(SanitizedContentKind kind) {
-    return withNewDelegate(
+    return createNewDelegate(
         delegate.invoke(
             SET_SANITIZED_CONTENT_KIND_AND_DIRECTIONALITY,
             BytecodeUtils.constantSanitizedContentKindAsContentKind(kind)),
@@ -192,30 +170,18 @@ final class AppendableExpression extends Expression {
 
   @Override
   public AppendableExpression labelStart(Label label) {
-    return withNewDelegate(delegate.labelStart(label), this.hasSideEffects);
+    return createNewDelegate(delegate.labelStart(label), hasSideEffects);
   }
 
   @Override
   public Statement toStatement() {
-    // .toStatement() by default just generates the expression and adds a 'POP' instruction
-    // to clear the stack. However, this is only necessary when the expression in question has a
-    // side effect worth preserving.  If we know that it does not we can just return the empty
-    // statement
-    if (hasSideEffects) {
-      return super.toStatement();
-    }
-    return Statement.NULL_STATEMENT;
+    return hasSideEffects ? super.toStatement() : Statement.NULL_STATEMENT;
   }
 
-  private AppendableExpression withNewDelegate(Expression newDelegate, boolean hasSideEffects) {
+  private AppendableExpression createNewDelegate(Expression newDelegate, boolean hasSideEffects) {
     return new AppendableExpression(newDelegate, hasSideEffects, supportsSoftLimiting);
   }
 
-  /**
-   * Returns {@code true} if this expression requires detach logic to be generated based on runtime
-   * calls to {@link
-   * com.google.template.soy.jbcsrc.api.AdvisingAppendableAdvisingAppendable#softLimitReached()}.
-   */
   boolean supportsSoftLimiting() {
     return supportsSoftLimiting;
   }
