@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -69,7 +70,6 @@ public final class RenderResult {
   }
 
   private final Type type;
-
   @Nullable
   private final Future<?> future;
 
@@ -80,7 +80,7 @@ public final class RenderResult {
 
   private RenderResult(Future<?> future) {
     this.type = Type.DETACH;
-    this.future = checkNotNull(future);
+    this.future = checkNotNull(future, "Future must not be null");
   }
 
   /** Returns the {@link Type} of this result. */
@@ -96,7 +96,7 @@ public final class RenderResult {
   /** Throws an IllegalStateException if this result is not {@link #isDone done}. */
   public void assertDone() {
     if (!isDone()) {
-      throw new IllegalStateException("Expected " + this + " to be done");
+      throw new IllegalStateException("Expected result to be done, but it was: " + toString());
     }
   }
 
@@ -106,12 +106,10 @@ public final class RenderResult {
    * @throws IllegalStateException if {@link #type()} is not {@link Type#DETACH}.
    */
   public Future<?> future() {
-    Future<?> f = future;
-    if (f == null) {
-      throw new IllegalStateException(
-          "Result.future() can only be called if type() is DETACH, type was: " + type);
+    if (future == null) {
+      throw new IllegalStateException("Result.future() can only be called if type() is DETACH, type was: " + type);
     }
-    return f;
+    return future;
   }
 
   @Override
