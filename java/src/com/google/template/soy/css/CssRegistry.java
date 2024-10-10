@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -25,6 +26,7 @@ import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.errorprone.annotations.Immutable;
+
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,15 +65,15 @@ public abstract class CssRegistry {
   }
 
   public ImmutableList<String> allowedSymbolsToUse(String nsOrPath) {
-    return classMap().get().get(nsOrPath);
+    return classMap().map(map -> map.get(nsOrPath)).orElse(ImmutableList.of());
   }
 
   public Optional<String> maybeGetRequireCss(String className) {
-    return Optional.ofNullable(classToNamespaceMap().getOrDefault(className, null));
+    return Optional.ofNullable(classToNamespaceMap().get(className));
   }
 
   public Optional<String> maybeGetRequireCssPath(String className) {
-    return Optional.ofNullable(classToFilePathMap().getOrDefault(className, null));
+    return Optional.ofNullable(classToFilePathMap().get(className));
   }
 
   public boolean containsClassMap() {
