@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -47,7 +48,6 @@ public final class SwitchNode extends AbstractParentCommandNode<CaseOrDefaultNod
 
   /** The parsed expression. */
   private final ExprRootNode expr;
-
   private final SourceLocation openTagLocation;
 
   @Nullable private HtmlContext htmlContext;
