@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -33,14 +34,21 @@ public abstract class TemplateModuleImportType extends ImportType {
     return new AutoValue_TemplateModuleImportType(
         namespace,
         path,
-        ImmutableSet.<String>builder()
-            .addAll(constantNames)
-            .addAll(externNames)
-            .addAll(templateNames)
-            .build(),
+        buildSymbols(constantNames, externNames, templateNames),
         constantNames,
         externNames,
         templateNames);
+  }
+
+  private static ImmutableSet<String> buildSymbols(
+      ImmutableSet<String> constantNames,
+      ImmutableSet<String> externNames,
+      ImmutableSet<String> templateNames) {
+    return ImmutableSet.<String>builder()
+        .addAll(constantNames)
+        .addAll(externNames)
+        .addAll(templateNames)
+        .build();
   }
 
   public abstract String getNamespace();
