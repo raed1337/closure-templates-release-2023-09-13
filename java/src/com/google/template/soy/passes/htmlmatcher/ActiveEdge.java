@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -26,10 +27,18 @@ import com.google.template.soy.passes.htmlmatcher.HtmlMatcherGraphNode.EdgeKind;
 @AutoValue
 public abstract class ActiveEdge {
   public abstract HtmlMatcherGraphNode getGraphNode();
-
   public abstract EdgeKind getActiveEdge();
 
   public static ActiveEdge create(HtmlMatcherGraphNode graphNode, EdgeKind activeEdge) {
     return new AutoValue_ActiveEdge(graphNode, activeEdge);
+  }
+
+  // Added a new method for encapsulation and to improve cohesion
+  public HtmlMatcherGraphNode getNode() {
+    return getGraphNode();
+  }
+
+  public EdgeKind getEdge() {
+    return getActiveEdge();
   }
 }
