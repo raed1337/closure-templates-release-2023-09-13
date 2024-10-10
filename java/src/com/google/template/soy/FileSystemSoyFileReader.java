@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -28,10 +29,14 @@ public final class FileSystemSoyFileReader implements SoyCompilerFileReader {
   private FileSystemSoyFileReader() {}
 
   @Override
-  public ByteSource read(File f) throws FileNotFoundException {
-    if (!f.exists()) {
-      throw new FileNotFoundException(f.getPath());
+  public ByteSource read(File file) throws FileNotFoundException {
+    validateFile(file);
+    return Files.asByteSource(file);
+  }
+
+  private void validateFile(File file) throws FileNotFoundException {
+    if (!file.exists()) {
+      throw new FileNotFoundException(file.getPath());
     }
-    return Files.asByteSource(f);
   }
 }
