@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -41,12 +42,8 @@ public final class ImportedVar extends AbstractVarDefn implements Copyable<Impor
   public static final String MODULE_IMPORT = "*";
 
   private final String symbol;
-  // A registry of all lazily created nested types. Store these in a BIDI tree here for reachability
-  // during AST copying as well as during constant type resolution.
   private final Map<String, ImportedVar> nestedVarDefns;
-  // A back reference to the parent if this is a nested type.
   private final ImportedVar parent;
-  // The file path of the ImportNode that owns this var. Only set if parent == null.
   private SourceFilePath filePath;
 
   public ImportedVar(String name, @Nullable String alias, SourceLocation nameLocation) {
@@ -87,28 +84,22 @@ public final class ImportedVar extends AbstractVarDefn implements Copyable<Impor
     return new ImportedVar(this, parent, copyState);
   }
 
-  /**
-   * Traverses up through any nested types and returns the top-level var corresponding to what's in
-   * the source code.
-   */
   public ImportedVar getRoot() {
-    return parent != null ? parent.getRoot() : this;
+    ImportedVar current = this;
+    while (current.parent != null) {
+      current = current.parent;
+    }
+    return current;
   }
 
-  /** Returns the names of all lazily created types within. */
   public Set<String> getNestedTypes() {
     return Collections.unmodifiableSet(nestedVarDefns.keySet());
   }
 
-  /** Creates if necessary and returns a var representing a nested symbol. */
   public ImportedVar nested(String symbolName) {
     return nestedVarDefns.computeIfAbsent(symbolName, n -> new ImportedVar(this, n));
   }
 
-  /**
-   * Returns the non-prefixed name of the symbol as it appears in the dependency, or "*" for module
-   * imports.
-   */
   public String getSymbol() {
     return symbol;
   }
@@ -139,25 +130,19 @@ public final class ImportedVar extends AbstractVarDefn implements Copyable<Impor
     return parent != null ? parent.getSourceFilePath() : filePath;
   }
 
-  /** Returns a list of imported vars, fom the root imported symbol to the leaf symbol. */
   public ImmutableList<ImportedVar> getChain() {
     ImmutableList.Builder<ImportedVar> builder = ImmutableList.builder();
-    ImportedVar var = this;
-    do {
-      builder.add(var);
-      var = var.parent;
-    } while (var != null);
+    ImportedVar current = this;
+    while (current != null) {
+      builder.add(current);
+      current = current.parent;
+    }
     return builder.build().reverse();
   }
 
-  /** Returns the location without any trailing "as Foo". */
   public SourceLocation symbolLocation() {
     SourceLocation full = nameLocation();
-    if (isAliased() && full.isSingleLine()) {
-      return full.substring(0, symbol.length());
-    } else {
-      return nameLocation();
-    }
+    return isAliased() && full.isSingleLine() ? full.substring(0, symbol.length()) : nameLocation();
   }
 
   private static boolean isProtoImport(ImportedVar var) {
@@ -167,8 +152,6 @@ public final class ImportedVar extends AbstractVarDefn implements Copyable<Impor
 
   @Override
   public boolean isEquivalent(VarDefn other) {
-    // TODO: This logic is incomplete, there are other cases where imported vars should be
-    // considered equivalent. For now, only imported proto types are handled.
     if (this == other) {
       return true;
     }
