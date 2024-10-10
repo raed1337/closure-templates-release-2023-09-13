@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -53,7 +54,10 @@ public final class SoyToIncrementalDomInteropSrcCompiler extends AbstractSoyComp
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) {
     SoyFileSet sfs = sfsBuilder.build();
-    outputFiles.writeFiles(
-        srcs, sfs.compileToIncrementalDomInteropSrcInternal(), /* locale= */ null);
+    writeOutputFiles(sfs);
+  }
+
+  private void writeOutputFiles(SoyFileSet sfs) {
+    outputFiles.writeFiles(srcs, sfs.compileToIncrementalDomInteropSrcInternal(), /* locale= */ null);
   }
 }
