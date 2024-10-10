@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -37,40 +38,14 @@ import javax.annotation.Nullable;
 public abstract class HtmlTagNode extends AbstractParentSoyNode<StandaloneNode>
     implements StandaloneNode {
 
-  /**
-   * Indicates whether this tag was created organically from the template source, or if it is a a
-   * synthetic tag node, created by injecting it into the AST during a validation phase, such as
-   * {@link StrictHtmlValidationPass}
-   *
-   * <p>Some backends do not render synthetic tags, others (like iDOM) do special processing on
-   * synthetic tags.
-   *
-   * <ul>
-   *   <li>{@code IN_TEMPLATE} tags come from parsing the original template.
-   *   <li>{@code SYNTHETIC} tags are injected during an AST rewrite.
-   * </ul>
-   */
   public enum TagExistence {
     IN_TEMPLATE,
     SYNTHETIC
   }
 
   private final TagName tagName;
-
   private final TagExistence tagExistence;
-
-  /**
-   * Whether or not the node is a self closing tag because it ends with {@code />} instead of {@code
-   * >}.
-   */
   private final boolean selfClosing;
-
-  /**
-   * Represents a list of tags that this HtmlTagNode might be paired with. For example, if we have
-   * an element `<div></div>`, the HTMLOpenTagNode would have the HTMLCloseTagNode in its
-   * taggedPairs (and vice versa). This is a list because an open tag node might have multiple close
-   * tag nodes (and vice versa) depending on control flow.
-   */
   private final List<HtmlTagNode> taggedPairs = new ArrayList<>();
 
   protected HtmlTagNode(
@@ -91,16 +66,7 @@ public abstract class HtmlTagNode extends AbstractParentSoyNode<StandaloneNode>
   protected HtmlTagNode(HtmlTagNode orig, CopyState copyState) {
     super(orig, copyState);
     this.tagExistence = orig.tagExistence;
-    //  Rebuild the TagName object
-    if (numChildren() > 0) {
-      StandaloneNode tagChild = getChild(0);
-      this.tagName = tagNameFromNode(tagChild);
-    } else {
-      this.tagName = null;
-    }
-    // The taggedPairs field contains references to other tag nodes.
-    // We need to register ourselves so that people who reference us get updated and we need to
-    // listen to updates
+    this.tagName = rebuildTagName(orig);
     copyState.updateRefs(orig, this);
     for (HtmlTagNode matchingNode : orig.taggedPairs) {
       copyState.registerRefListener(matchingNode, taggedPairs::add);
@@ -132,9 +98,14 @@ public abstract class HtmlTagNode extends AbstractParentSoyNode<StandaloneNode>
     if (!getTagName().isStatic()) {
       return true;
     }
-    if (isSelfClosing() || getTagName().isDefinitelyVoid()) {
-      return false;
-    }
+    return isSelfClosingOrDefinitelyVoid() ? false : checkTaggedPairsLocation();
+  }
+
+  private boolean isSelfClosingOrDefinitelyVoid() {
+    return isSelfClosing() || getTagName().isDefinitelyVoid();
+  }
+
+  private boolean checkTaggedPairsLocation() {
     if (getTaggedPairs().size() != 1 || getTaggedPairs().get(0).getTaggedPairs().size() != 1) {
       return true;
     }
@@ -144,22 +115,17 @@ public abstract class HtmlTagNode extends AbstractParentSoyNode<StandaloneNode>
     return parent != otherParent;
   }
 
-  /** Returns true if this node was inserted by the {@code StrictHtmlValidationPass}. */
   public boolean isSynthetic() {
     return tagExistence == TagExistence.SYNTHETIC;
   }
 
-  /** Returns an attribute with the given static name if it is a direct child. */
   @Nullable
   public HtmlAttributeNode getDirectAttributeNamed(String attrName) {
-    // the child at index 0 is the tag name
     for (int i = 1; i < numChildren(); i++) {
       StandaloneNode child = getChild(i);
-      if (child instanceof HtmlAttributeNode) {
-        HtmlAttributeNode attr = (HtmlAttributeNode) child;
-        if (attr.definitelyMatchesAttributeName(attrName)) {
-          return attr;
-        }
+      if (child instanceof HtmlAttributeNode && 
+          ((HtmlAttributeNode) child).definitelyMatchesAttributeName(attrName)) {
+        return (HtmlAttributeNode) child;
       }
     }
     return null;
@@ -175,5 +141,13 @@ public abstract class HtmlTagNode extends AbstractParentSoyNode<StandaloneNode>
     return rawTextOrPrintNode instanceof RawTextNode
         ? new TagName((RawTextNode) rawTextOrPrintNode)
         : new TagName((PrintNode) rawTextOrPrintNode);
+  }
+
+  private TagName rebuildTagName(HtmlTagNode orig) {
+    if (orig.numChildren() > 0) {
+      StandaloneNode tagChild = orig.getChild(0);
+      return tagNameFromNode(tagChild);
+    }
+    return null;
   }
 }
