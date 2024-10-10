@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -27,6 +28,10 @@ public abstract class TemplateTypeNode extends TypeNode {
 
   public static TemplateTypeNode create(
       SourceLocation sourceLocation, Iterable<Parameter> parameters, TypeNode returnType) {
+    // Validate input parameters
+    if (sourceLocation == null || returnType == null) {
+      throw new IllegalArgumentException("SourceLocation and returnType cannot be null");
+    }
     return new AutoValue_TemplateTypeNode(
         sourceLocation, ImmutableList.copyOf(parameters), returnType);
   }
@@ -40,6 +45,10 @@ public abstract class TemplateTypeNode extends TypeNode {
         String sourceName,
         ParameterKind kind,
         TypeNode type) {
+      // Validate input parameters
+      if (nameLocation == null || name == null || sourceName == null || kind == null || type == null) {
+        throw new IllegalArgumentException("All parameters must be non-null");
+      }
       return new AutoValue_TemplateTypeNode_Parameter(nameLocation, name, sourceName, kind, type);
     }
 
@@ -55,6 +64,10 @@ public abstract class TemplateTypeNode extends TypeNode {
 
     @Override
     public final String toString() {
+      return buildString();
+    }
+
+    private String buildString() {
       return sourceName() + ": " + type();
     }
 
@@ -69,6 +82,10 @@ public abstract class TemplateTypeNode extends TypeNode {
 
   @Override
   public final String toString() {
+    return formatTemplateTypeNode();
+  }
+
+  private String formatTemplateTypeNode() {
     if (parameters().size() < 3) {
       return "(" + Joiner.on(", ").join(parameters()) + ") => " + returnType();
     }
@@ -82,12 +99,17 @@ public abstract class TemplateTypeNode extends TypeNode {
 
   @Override
   public TemplateTypeNode copy() {
+    ImmutableList<Parameter> newParameters = copyParameters();
+    TemplateTypeNode copy = create(sourceLocation(), newParameters, returnType().copy());
+    copy.copyResolvedTypeFrom(this);
+    return copy;
+  }
+
+  private ImmutableList<Parameter> copyParameters() {
     ImmutableList.Builder<Parameter> newParameters = ImmutableList.builder();
     for (Parameter parameter : parameters()) {
       newParameters.add(parameter.copy());
     }
-    TemplateTypeNode copy = create(sourceLocation(), newParameters.build(), returnType().copy());
-    copy.copyResolvedTypeFrom(this);
-    return copy;
+    return newParameters.build();
   }
 }
