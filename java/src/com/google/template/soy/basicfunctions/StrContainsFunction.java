@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -50,6 +52,13 @@ import java.util.List;
 public final class StrContainsFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method STR_CONTAINS = createStrContainsMethod();
+
+  private static Method createStrContainsMethod() {
+    return JavaValueFactory.createMethod(
+        BasicFunctionsRuntime.class, "strContains", SoyValue.class, String.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -63,17 +72,10 @@ public final class StrContainsFunction
     return args.get(1).coerceToString().in(args.get(0).coerceToString());
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method STR_CONTAINS =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class, "strContains", SoyValue.class, String.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(
-        Methods.STR_CONTAINS, args.get(0), args.get(1).coerceToSoyString());
+        STR_CONTAINS, args.get(0), args.get(1).coerceToSoyString());
   }
 }
