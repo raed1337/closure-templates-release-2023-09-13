@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -47,17 +48,20 @@ public final class MapValuesMethod
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    // TODO(lukes) this could be callModuleFunction but other parts of soy don't generate aliased
-    // requires so we can't generate one here without create a 'multiple require' error
-    // this could be handled via more clever require handling in the compiler.
+    return getMapValues(factory, args);
+  }
+
+  private JavaScriptValue getMapValues(JavaScriptValueFactory factory, List<JavaScriptValue> args) {
     return factory.callNamespaceFunction("soy.map", "soy.map.$$getMapValues", args.get(0));
   }
 
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
-    // dict.values() returns a view object, which is not iterable in the way we expect. So, we must
-    // convert it to an iterable data structure first.
+    return convertToIterable(factory, args);
+  }
+
+  private PythonValue convertToIterable(PythonValueFactory factory, List<PythonValue> args) {
     PythonValue innerValue = args.get(0).getProp("values").call();
     return factory.global("list").call(innerValue);
   }
@@ -71,6 +75,10 @@ public final class MapValuesMethod
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return callMapValues(factory, args);
+  }
+
+  private JavaValue callMapValues(JavaValueFactory factory, List<JavaValue> args) {
     return factory.callStaticMethod(Methods.MAP_VALUES_FN, args.get(0));
   }
 }
