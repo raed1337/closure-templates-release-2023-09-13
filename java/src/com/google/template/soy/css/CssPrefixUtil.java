@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2023 Google Inc.
  *
@@ -28,9 +29,21 @@ public class CssPrefixUtil {
 
   @Nullable
   public static String getNamespacePrefix(SoyFileNode file) {
-    if (file.getCssPrefix() != null) {
-      return file.getCssPrefix();
-    } else if (file.getCssBaseNamespace() != null) {
+    String cssPrefix = getCssPrefix(file);
+    if (cssPrefix != null) {
+      return cssPrefix;
+    }
+    return getBaseNamespaceOrRequired(file);
+  }
+
+  @Nullable
+  private static String getCssPrefix(SoyFileNode file) {
+    return file.getCssPrefix();
+  }
+
+  @Nullable
+  private static String getBaseNamespaceOrRequired(SoyFileNode file) {
+    if (file.getCssBaseNamespace() != null) {
       return toCamelCase(file.getCssBaseNamespace());
     } else if (!file.getRequiredCssNamespaces().isEmpty()) {
       return toCamelCase(file.getRequiredCssNamespaces().get(0));
@@ -40,10 +53,9 @@ public class CssPrefixUtil {
 
   @Nullable
   public static String getTemplatePrefix(TemplateNode template, @Nullable String namespacePrefix) {
-    if (template.getCssBaseNamespace() != null) {
-      return toCamelCase(template.getCssBaseNamespace());
-    }
-    return namespacePrefix;
+    return template.getCssBaseNamespace() != null 
+        ? toCamelCase(template.getCssBaseNamespace()) 
+        : namespacePrefix;
   }
 
   private static String toCamelCase(String packageName) {
