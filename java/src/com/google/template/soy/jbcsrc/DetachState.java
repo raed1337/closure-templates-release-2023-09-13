@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -139,7 +140,6 @@ final class DetachState implements ExpressionDetacher.Factory {
    */
   @Override
   public ExpressionDetacher createExpressionDetacher(Label reattachPoint) {
-    // Lazily allocate the save restore state since it isnt always needed.
     return new ExpressionDetacher.BasicDetacher(() -> addState(reattachPoint));
   }
 
@@ -147,7 +147,7 @@ final class DetachState implements ExpressionDetacher.Factory {
    * Returns a Statement that will conditionally detach if the given {@link AdvisingAppendable} has
    * been {@link AdvisingAppendable#softLimitReached() output limited}.
    *
-   * <p>This is only valid to call at the begining of templates. It does not allocate a save/restore
+   * <p>This is only valid to call at the beginning of templates. It does not allocate a save/restore
    * block since there should be nothing to save or restore.
    */
   Statement detachLimited(AppendableExpression appendable) {
@@ -158,6 +158,10 @@ final class DetachState implements ExpressionDetacher.Factory {
     }
     Expression isSoftLimited = appendable.softLimitReached();
     Statement returnLimited = returnExpression(MethodRef.RENDER_RESULT_LIMITED.invoke());
+    return createDetachLimitedStatement(isSoftLimited, returnLimited);
+  }
+
+  private Statement createDetachLimitedStatement(Expression isSoftLimited, Statement returnLimited) {
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
@@ -204,15 +208,17 @@ final class DetachState implements ExpressionDetacher.Factory {
     checkArgument(render.resultType().equals(RENDER_RESULT_TYPE));
     Label reattachPoint = new Label();
     Statement saveState = addState(reattachPoint);
+    return createDetachForRenderStatement(render, reattachPoint, saveState);
+  }
+
+  private Statement createDetachForRenderStatement(Expression render, Label reattachPoint, Statement saveState) {
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
         adapter.mark(reattachPoint);
-        // Legend: RR = RenderResult, Z = boolean
         render.gen(adapter); // Stack: RR
         adapter.dup(); // Stack: RR, RR
         MethodRef.RENDER_RESULT_IS_DONE.invokeUnchecked(adapter); // Stack: RR, Z
-        // if isDone goto Done
         Label end = new Label();
         adapter.ifZCmp(Opcodes.IFNE, end); // Stack: RR
         saveState.gen(adapter);
@@ -233,79 +239,60 @@ final class DetachState implements ExpressionDetacher.Factory {
       return Statement.NULL_STATEMENT;
     }
     var stackFrameScope = variables.enterScope();
-    LocalVariable stackFrameVar =
-        stackFrameScope.createTemporary(StandardNames.STACK_FRAME, BytecodeUtils.STACK_FRAME_TYPE);
+    LocalVariable stackFrameVar = stackFrameScope.createTemporary(StandardNames.STACK_FRAME, BytecodeUtils.STACK_FRAME_TYPE);
     Statement initStackFrame = stackFrameVar.initialize(renderContextExpression.get().popFrame());
     Expression readStateNumber = FieldRef.STACK_FRAME_STATE_NUMBER.accessor(stackFrameVar);
-    // Generate a switch table.  Note, while it might be preferable to just 'goto state',
-    // Java doesn't allow computable gotos (probably because it makes verification impossible).
-    // So instead we emulate that with a jump table.  And anyway we still need to execute
-    // 'restore' logic to repopulate the local variable tables, so the 'case' statements are a
-    // natural place for that logic to live.
+    
     Label unexpectedState = new Label();
     Label end = new Label();
     List<Label> caseLabels = new ArrayList<>();
     List<Statement> casesToGen = new ArrayList<>();
-    // handle case 0, this is the initial state of the template. Just jump to the bottom of the
-    // switch.  equivalent to `case 0: break;`
+    
     caseLabels.add(end);
     for (ReattachState reattachState : reattaches) {
-      if (reattachState.restoreStatement().isPresent()) {
-        Statement restoreState = reattachState.restoreStatement().get().apply(stackFrameVar);
-        Label caseLabel = new Label();
-        // execute the restore and jump to the reattach point
-        casesToGen.add(
-            new Statement() {
-              @Override
-              protected void doGen(CodeBuilder cb) {
-                cb.mark(caseLabel);
-                restoreState.gen(cb);
-                cb.goTo(reattachState.reattachPoint());
-              }
-            });
-        caseLabels.add(caseLabel);
-      } else {
-        // if there is no restore statement we can jump directly to the reattach point
-        caseLabels.add(reattachState.reattachPoint());
-      }
+      generateReattachCases(reattachState, stackFrameVar, caseLabels, casesToGen);
     }
-    // we throw a generic assertion error, if we wanted a potentially better error message we could
-    // augment 'restoreState' to take the expected max state and move this logic in there.
-    casesToGen.add(
-        Statement.throwExpression(MethodRef.RUNTIME_UNEXPECTED_STATE_ERROR.invoke(stackFrameVar))
-            .labelStart(unexpectedState));
+    
+    casesToGen.add(Statement.throwExpression(MethodRef.RUNTIME_UNEXPECTED_STATE_ERROR.invoke(stackFrameVar)).labelStart(unexpectedState));
     var scopeExit = stackFrameScope.exitScope();
+    
     return Statement.concat(
             initStackFrame,
             new Statement() {
               @Override
               protected void doGen(CodeBuilder adapter) {
                 readStateNumber.gen(adapter);
-                // we need to mark the end of the stackFrameVar somewhere, this isn't exactly
-                // accurate since it does extend into the beginning of some of the cases, but there
-                // is no consistent end point. This means that our debugging information will be
-                // slightly off, e.g. a debugger may think that this variable is out of scope before
-                // it technically is.  But the most any case will access it is exactly once as the
-                // first instruction... so this is fine, if odd.
                 scopeExit.gen(adapter);
-                adapter.visitTableSwitchInsn(
-                    /* min= */ 0,
-                    /* max= */ reattaches.size(),
-                    /* dflt= */ unexpectedState,
-                    caseLabels.toArray(new Label[0]));
+                adapter.visitTableSwitchInsn(0, reattaches.size(), unexpectedState, caseLabels.toArray(new Label[0]));
               }
             },
             Statement.concat(casesToGen))
         .labelEnd(end);
   }
 
-  /** Add a new state item and return the statment that saves state. */
+  private void generateReattachCases(ReattachState reattachState, LocalVariable stackFrameVar, List<Label> caseLabels, List<Statement> casesToGen) {
+    if (reattachState.restoreStatement().isPresent()) {
+      Statement restoreState = reattachState.restoreStatement().get().apply(stackFrameVar);
+      Label caseLabel = new Label();
+      casesToGen.add(new Statement() {
+        @Override
+        protected void doGen(CodeBuilder cb) {
+          cb.mark(caseLabel);
+          restoreState.gen(cb);
+          cb.goTo(reattachState.reattachPoint());
+        }
+      });
+      caseLabels.add(caseLabel);
+    } else {
+      caseLabels.add(reattachState.reattachPoint());
+    }
+  }
+
+  /** Add a new state item and return the statement that saves state. */
   private Statement addState(Label reattachPoint) {
     checkDetachesAllowed();
-    // the index of the ReattachState in the list + 1, 0 is reserved for 'initial state'.
     int stateNumber = reattaches.size() + 1;
-    SaveRestoreState saveRestoreState =
-        variables.saveRestoreState(renderContextExpression.get(), stateNumber);
+    SaveRestoreState saveRestoreState = variables.saveRestoreState(renderContextExpression.get(), stateNumber);
     ReattachState create = ReattachState.create(reattachPoint, saveRestoreState.restore());
     reattaches.add(create);
     return saveRestoreState.save();
@@ -313,8 +300,7 @@ final class DetachState implements ExpressionDetacher.Factory {
 
   @AutoValue
   abstract static class ReattachState {
-    static ReattachState create(
-        Label reattachPoint, Optional<Function<LocalVariable, Statement>> restore) {
+    static ReattachState create(Label reattachPoint, Optional<Function<LocalVariable, Statement>> restore) {
       return new AutoValue_DetachState_ReattachState(reattachPoint, restore);
     }
 
