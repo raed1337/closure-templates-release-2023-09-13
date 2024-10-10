@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -59,7 +60,7 @@ final class VeDefValidationPass implements CompilerFileSetPass {
 
   private static final SoyErrorKind BAD_VE_DEF_METADATA =
       SoyErrorKind.of(
-          "The fourth argument to ve_def() must be an proto init expression of "
+          "The fourth argument to ve_def() must be a proto init expression of "
               + "LoggableElementMetadata. All fields must be literals.");
 
   private final ErrorReporter errorReporter;
@@ -78,22 +79,28 @@ final class VeDefValidationPass implements CompilerFileSetPass {
     List<VisualElement> vedefs = new ArrayList<>();
 
     for (SoyFileNode file : sourceFiles) {
-      // Find all ve_defs() that are assigned to a {const}, all others are errors.
-      SoyTreeUtils.allNodesOfType(file, ConstNode.class)
-          .forEach(c -> maybeAddVeDefFromConst(c, vedefsInConstNodes));
-
-      SoyTreeUtils.allNodesOfType(file, FunctionNode.class)
-          .filter(VeDefValidationPass::isVeDef)
-          .forEach(
-              func -> {
-                if (!vedefsInConstNodes.contains(func)) {
-                  errorReporter.report(func.getSourceLocation(), VE_DEF_OUTSIDE_CONST);
-                }
-                buildVeDefAndValidate(func, vedefs);
-              });
+      collectVeDefsInConst(file, vedefsInConstNodes);
+      validateVeDefs(file, vedefsInConstNodes, vedefs);
     }
+    
     LoggingConfigValidator.validate(vedefs, errorReporter);
     return Result.CONTINUE;
+  }
+
+  private void collectVeDefsInConst(SoyFileNode file, Set<ExprNode> veDefsInConstNodes) {
+    SoyTreeUtils.allNodesOfType(file, ConstNode.class)
+        .forEach(c -> maybeAddVeDefFromConst(c, veDefsInConstNodes));
+  }
+
+  private void validateVeDefs(SoyFileNode file, Set<ExprNode> vedefsInConstNodes, List<VisualElement> vedefs) {
+    SoyTreeUtils.allNodesOfType(file, FunctionNode.class)
+        .filter(VeDefValidationPass::isVeDef)
+        .forEach(func -> {
+          if (!vedefsInConstNodes.contains(func)) {
+            errorReporter.report(func.getSourceLocation(), VE_DEF_OUTSIDE_CONST);
+          }
+          buildVeDefAndValidate(func, vedefs);
+        });
   }
 
   private void maybeAddVeDefFromConst(ConstNode constNode, Set<ExprNode> veDefsInConstNodes) {
@@ -104,47 +111,57 @@ final class VeDefValidationPass implements CompilerFileSetPass {
 
   private void buildVeDefAndValidate(FunctionNode func, List<VisualElement> vedefs) {
     if (func.numChildren() < 2) {
-      // Wrong # argument errors are already thrown.
       return;
     }
 
-    if (!(func.getChild(0) instanceof StringNode)) {
-      errorReporter.report(func.getChild(0).getSourceLocation(), BAD_VE_DEF_NAME);
-      return;
-    }
-    String veName = ((StringNode) func.getChild(0)).getValue();
-
-    if (!(func.getChild(1) instanceof IntegerNode)) {
-      errorReporter.report(func.getChild(1).getSourceLocation(), BAD_VE_DEF_ID);
-      return;
-    }
-    long id = ((IntegerNode) func.getChild(1)).getValue();
-
-    Optional<String> dataProtoType;
-    if (func.getChildren().size() < 3 || func.getChild(2) instanceof NullNode) {
-      dataProtoType = Optional.empty();
-    } else {
-      if (!(func.getChild(2).getType() instanceof ProtoImportType)) {
-        errorReporter.report(func.getChild(2).getSourceLocation(), BAD_VE_DEF_DATA_PROTO_TYPE);
-        return;
-      }
-      dataProtoType = Optional.of(func.getChild(2).getType().toString());
-    }
-
-    Optional<Object> staticMetadata;
-    if (func.getChildren().size() < 4) {
-      staticMetadata = Optional.empty();
-    } else {
-      if (!func.getChild(3).getType().toString().equals("soy.LoggableElementMetadata")) {
-        errorReporter.report(func.getChild(3).getSourceLocation(), BAD_VE_DEF_METADATA);
-        return;
-      }
-      staticMetadata = Optional.of(exprEquivalence.wrap(func.getChild(3).copy(copyState)));
-    }
+    validateVeDefName(func);
+    validateVeDefId(func);
+    Optional<String> dataProtoType = validateDataProtoType(func);
+    Optional<Object> staticMetadata = validateStaticMetadata(func);
 
     vedefs.add(
         LoggingConfigValidator.VisualElement.create(
-            veName, id, dataProtoType, staticMetadata, func.getSourceLocation()));
+            ((StringNode) func.getChild(0)).getValue(),
+            ((IntegerNode) func.getChild(1)).getValue(),
+            dataProtoType,
+            staticMetadata,
+            func.getSourceLocation()));
+  }
+
+  private void validateVeDefName(FunctionNode func) {
+    if (!(func.getChild(0) instanceof StringNode)) {
+      errorReporter.report(func.getChild(0).getSourceLocation(), BAD_VE_DEF_NAME);
+    }
+  }
+
+  private void validateVeDefId(FunctionNode func) {
+    if (!(func.getChild(1) instanceof IntegerNode)) {
+      errorReporter.report(func.getChild(1).getSourceLocation(), BAD_VE_DEF_ID);
+    }
+  }
+
+  private Optional<String> validateDataProtoType(FunctionNode func) {
+    if (func.getChildren().size() < 3 || func.getChild(2) instanceof NullNode) {
+      return Optional.empty();
+    } else {
+      if (!(func.getChild(2).getType() instanceof ProtoImportType)) {
+        errorReporter.report(func.getChild(2).getSourceLocation(), BAD_VE_DEF_DATA_PROTO_TYPE);
+        return Optional.empty();
+      }
+      return Optional.of(func.getChild(2).getType().toString());
+    }
+  }
+
+  private Optional<Object> validateStaticMetadata(FunctionNode func) {
+    if (func.getChildren().size() < 4) {
+      return Optional.empty();
+    } else {
+      if (!func.getChild(3).getType().toString().equals("soy.LoggableElementMetadata")) {
+        errorReporter.report(func.getChild(3).getSourceLocation(), BAD_VE_DEF_METADATA);
+        return Optional.empty();
+      }
+      return Optional.of(exprEquivalence.wrap(func.getChild(3).copy(copyState)));
+    }
   }
 
   private static boolean isVeDef(ExprNode node) {
