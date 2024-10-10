@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2023 Google Inc.
  *
@@ -24,8 +25,7 @@ import com.google.template.soy.base.SourceFilePath;
 @AutoValue
 public abstract class CssImportType extends ImportType {
 
-  public static CssImportType create(
-      SourceFilePath path, ImmutableMap<String, String> shortClassMap) {
+  public static CssImportType create(SourceFilePath path, ImmutableMap<String, String> shortClassMap) {
     return new AutoValue_CssImportType(path, shortClassMap);
   }
 
@@ -44,7 +44,7 @@ public abstract class CssImportType extends ImportType {
 
   @Override
   public final String toString() {
-    return CssModuleImportType.CLASSES + " from " + getPath().path();
+    return String.format("%s from %s", CssModuleImportType.CLASSES, getPath().path());
   }
 
   @Override
