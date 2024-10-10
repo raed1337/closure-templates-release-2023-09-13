@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -49,7 +50,9 @@ public interface PluginLoader extends Closeable {
 
     @Override
     public void close() throws IOException {
+      // Close the class loader if it is closeable
       if (closeable) {
+        // Typecast to Closeable and call close method
         ((Closeable) classLoader).close();
       }
     }
