@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -41,14 +42,15 @@ import java.util.List;
 @SoyFunctionSignature(
     name = "min",
     value =
-        // TODO(b/70946095):these should all be number. The ResolveExpressionTypesPass narrows the
-        // type.
         @Signature(
             returnType = "?",
             parameterTypes = {"?", "?"}))
 @SoyPureFunction
 public final class MinFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
+
+  private static final Method MIN_FN = 
+      JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "min", SoyValue.class, SoyValue.class);
 
   @Override
   public JavaScriptValue applyForJavaScriptSource(
@@ -62,16 +64,9 @@ public final class MinFunction
     return factory.global("min").call(args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method MIN_FN =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class, "min", SoyValue.class, SoyValue.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.MIN_FN, args.get(0), args.get(1));
+    return factory.callStaticMethod(MIN_FN, args.get(0), args.get(1));
   }
 }
