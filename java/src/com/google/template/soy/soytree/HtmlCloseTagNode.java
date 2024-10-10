@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -47,8 +48,18 @@ public final class HtmlCloseTagNode extends HtmlTagNode {
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
     sb.append("</");
+    appendChildrenToSourceString(sb);
+    sb.append('>');
+    return sb.toString();
+  }
+
+  private void appendChildrenToSourceString(StringBuilder sb) {
     for (int i = 0; i < numChildren(); i++) {
       StandaloneNode child = getChild(i);
       if (i != 0) {
@@ -56,7 +67,5 @@ public final class HtmlCloseTagNode extends HtmlTagNode {
       }
       sb.append(child.toSourceString());
     }
-    sb.append('>');
-    return sb.toString();
   }
 }
