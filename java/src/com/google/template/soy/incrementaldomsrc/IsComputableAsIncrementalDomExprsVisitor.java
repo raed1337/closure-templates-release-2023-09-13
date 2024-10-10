@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -30,23 +31,29 @@ import com.google.template.soy.soytree.SoyNode;
  */
 final class IsComputableAsIncrementalDomExprsVisitor extends IsComputableAsJsExprsVisitor {
 
-
   @Override
   protected Boolean visitCallParamContentNode(CallParamContentNode node) {
+    return isHtmlOrAttributes(node) ? false : super.visitCallParamContentNode(node);
+  }
+
+  private boolean isHtmlOrAttributes(CallParamContentNode node) {
     switch (node.getContentKind()) {
       case HTML:
       case ATTRIBUTES:
-        return false;
+        return true;
       default:
-        return super.visitCallParamContentNode(node);
+        return false;
     }
   }
 
   @Override
   protected Boolean visitPrintNode(PrintNode node) {
     // idom prints HTML & attributes values by emitting function calls, not concatenable strings.
-    return node.getHtmlContext() != HtmlContext.HTML_TAG
-        && node.getHtmlContext() != HtmlContext.HTML_PCDATA;
+    return isNotHtmlTagOrPcdata(node.getHtmlContext());
+  }
+
+  private boolean isNotHtmlTagOrPcdata(HtmlContext context) {
+    return context != HtmlContext.HTML_TAG && context != HtmlContext.HTML_PCDATA;
   }
 
   @Override
