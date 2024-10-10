@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -21,15 +22,20 @@ import com.google.common.collect.ImmutableSet;
 /** A list of all allowed duplicate namespaces and a simple predicate for querying it. */
 public final class NamespaceExemptions {
 
-  public static boolean isKnownDuplicateNamespace(String namespace) {
-    return ALLOWED_DUPLICATE_NAMESPACES.contains(namespace);
-  }
-
   private static final ImmutableSet<String> ALLOWED_DUPLICATE_NAMESPACES =
       ImmutableSet.of(
           "testing.duplicate.namespaces",
           "_I_LIKE_TRAILING_COMMAS_");
 
+  /** 
+   * Checks if the given namespace is a known duplicate namespace.
+   * 
+   * @param namespace the namespace to check
+   * @return true if the namespace is allowed as a duplicate, false otherwise
+   */
+  public static boolean isKnownDuplicateNamespace(String namespace) {
+    return ALLOWED_DUPLICATE_NAMESPACES.contains(namespace);
+  }
+
   private NamespaceExemptions() {}
 }
-
