@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -40,6 +41,12 @@ import java.util.List;
 public final class StrTrimMethod
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method STR_TRIM = createStrTrimMethod();
+
+  private static Method createStrTrimMethod() {
+    return JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "strTrim", String.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -52,15 +59,9 @@ public final class StrTrimMethod
     return factory.global("runtime.str_trim").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method STR_TRIM =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "strTrim", String.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.STR_TRIM, args.get(0));
+    return factory.callStaticMethod(STR_TRIM, args.get(0));
   }
 }
