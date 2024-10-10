@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -117,11 +118,9 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
       String value,
       SourceLocation valueLocation,
       SourceLocation wholeAttributeLocation) {
-    checkArgument(
-        key.type() == Identifier.Type.SINGLE_IDENT, "expected a single identifier, got: %s", key);
+    checkArgument(key.type() == Identifier.Type.SINGLE_IDENT, "expected a single identifier, got: %s", key);
     this.key = checkNotNull(key);
-    checkArgument(
-        quoteStyle == QuoteStyle.SINGLE || quoteStyle == QuoteStyle.DOUBLE,
+    checkArgument(quoteStyle == QuoteStyle.SINGLE || quoteStyle == QuoteStyle.DOUBLE,
         "CommandTagAttribute quote style must be SINGLE or DOUBLE");
     this.quoteStyle = checkNotNull(quoteStyle);
     this.sourceLocation = wholeAttributeLocation;
@@ -135,12 +134,10 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
       QuoteStyle quoteStyle,
       ImmutableList<ExprNode> valueExprList,
       SourceLocation sourceLocation) {
-    checkArgument(
-        key.type() == Identifier.Type.SINGLE_IDENT, "expected a single identifier, got: %s", key);
+    checkArgument(key.type() == Identifier.Type.SINGLE_IDENT, "expected a single identifier, got: %s", key);
     checkArgument(valueExprList.size() >= 1);
     this.key = checkNotNull(key);
-    checkArgument(
-        quoteStyle == QuoteStyle.SINGLE || quoteStyle == QuoteStyle.DOUBLE,
+    checkArgument(quoteStyle == QuoteStyle.SINGLE || quoteStyle == QuoteStyle.DOUBLE,
         "CommandTagAttribute quote style must be SINGLE or DOUBLE");
     this.quoteStyle = checkNotNull(quoteStyle);
     this.sourceLocation = sourceLocation;
@@ -197,7 +194,10 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
 
   public OptionalInt valueAsOptionalInt(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseOptionalInt(value, errorReporter);
+  }
 
+  private OptionalInt parseOptionalInt(String value, ErrorReporter errorReporter) {
     try {
       return OptionalInt.of(Integer.parseInt(value));
     } catch (NumberFormatException e) {
@@ -213,7 +213,10 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
 
   public OptionalLong valueAsOptionalLong(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseOptionalLong(value, errorReporter);
+  }
 
+  private OptionalLong parseOptionalLong(String value, ErrorReporter errorReporter) {
     try {
       return OptionalLong.of(Long.parseLong(value));
     } catch (NumberFormatException e) {
@@ -224,33 +227,31 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
 
   boolean valueAsEnabled(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
-
-    if ("true".equals(value)) {
-      return true;
-    } else if ("false".equals(value)) {
-      errorReporter.report(valueLocation, EXPLICIT_DEFAULT_ATTRIBUTE, key.identifier(), "false");
-    } else {
-      errorReporter.report(valueLocation, INVALID_ATTRIBUTE, key.identifier(), "true");
-    }
-    return false;
+    return parseBoolean(value, errorReporter, true);
   }
 
   boolean valueAsDisabled(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseBoolean(value, errorReporter, false);
+  }
 
-    if ("false".equals(value)) {
+  private boolean parseBoolean(String value, ErrorReporter errorReporter, boolean expected) {
+    if (String.valueOf(expected).equals(value)) {
       return true;
-    } else if ("true".equals(value)) {
-      errorReporter.report(valueLocation, EXPLICIT_DEFAULT_ATTRIBUTE, key.identifier(), "true");
+    } else if (String.valueOf(!expected).equals(value)) {
+      errorReporter.report(valueLocation, EXPLICIT_DEFAULT_ATTRIBUTE, key.identifier(), String.valueOf(!expected));
     } else {
-      errorReporter.report(valueLocation, INVALID_ATTRIBUTE, key.identifier(), "false");
+      errorReporter.report(valueLocation, INVALID_ATTRIBUTE, key.identifier(), String.valueOf(expected));
     }
     return false;
   }
 
   ImmutableList<String> valueAsRequireCss(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseRequireCss(value, errorReporter);
+  }
 
+  private ImmutableList<String> parseRequireCss(String value, ErrorReporter errorReporter) {
     Iterable<String> namespaces = SPLITTER.split(value);
     boolean hasError = false;
     for (String namespace : namespaces) {
@@ -264,18 +265,20 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
 
   ImmutableList<String> valueAsRequireCssPath() {
     checkState(valueExprList == null);
-
     return ImmutableList.copyOf(SPLITTER.split(value));
   }
 
   @Nullable
   Visibility valueAsVisibility(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseVisibility(value, errorReporter);
+  }
 
+  @Nullable
+  private Visibility parseVisibility(String value, ErrorReporter errorReporter) {
     Visibility visibility = Visibility.forAttributeValue(value);
     if (visibility == Visibility.PUBLIC) {
-      errorReporter.report(
-          valueLocation,
+      errorReporter.report(valueLocation,
           EXPLICIT_DEFAULT_ATTRIBUTE,
           key.identifier(),
           Visibility.PUBLIC.getAttributeValue());
@@ -292,9 +295,12 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
   @Nullable
   WhitespaceMode valueAsWhitespaceMode(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseWhitespaceMode(value, errorReporter);
+  }
 
+  @Nullable
+  private WhitespaceMode parseWhitespaceMode(String value, ErrorReporter errorReporter) {
     WhitespaceMode whitespaceMode = WhitespaceMode.forAttributeValue(value);
-
     if (whitespaceMode == WhitespaceMode.JOIN) {
       errorReporter.report(
           valueLocation,
@@ -302,33 +308,30 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
           key.identifier(),
           WhitespaceMode.JOIN.getAttributeValue());
     } else if (whitespaceMode == null) {
-      errorReporter.report(
-          valueLocation,
-          INVALID_ATTRIBUTE_LIST,
-          key.identifier(),
-          WhitespaceMode.getAttributeValues());
+      errorReporter.report(valueLocation, INVALID_ATTRIBUTE_LIST, key.identifier(), WhitespaceMode.getAttributeValues());
     }
-
     return whitespaceMode;
   }
 
   public Optional<SanitizedContentKind> valueAsContentKind(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseContentKind(value, errorReporter);
+  }
 
+  private Optional<SanitizedContentKind> parseContentKind(String value, ErrorReporter errorReporter) {
     Optional<SanitizedContentKind> contentKind = SanitizedContentKind.fromAttributeValue(value);
     if (!contentKind.isPresent()) {
-      errorReporter.report(
-          valueLocation,
-          INVALID_ATTRIBUTE_LIST,
-          key.identifier(),
-          SanitizedContentKind.attributeValues().asList());
+      errorReporter.report(valueLocation, INVALID_ATTRIBUTE_LIST, key.identifier(), SanitizedContentKind.attributeValues().asList());
     }
     return contentKind;
   }
 
   public Optional<TemplateContentKind> valueAsTemplateContentKind(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return parseTemplateContentKind(value, errorReporter);
+  }
 
+  private Optional<TemplateContentKind> parseTemplateContentKind(String value, ErrorReporter errorReporter) {
     Optional<TemplateContentKind> contentKind = TemplateContentKind.fromAttributeValue(value);
     if (!contentKind.isPresent()) {
       errorReporter.report(valueLocation, TemplateContentKind.INVALID_ATTRIBUTE_VALUE);
@@ -338,7 +341,10 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
 
   String valueAsCssBase(ErrorReporter errorReporter) {
     checkState(valueExprList == null);
+    return validateCssBase(value, errorReporter);
+  }
 
+  private String validateCssBase(String value, ErrorReporter errorReporter) {
     if (!BaseUtils.isDottedIdentifier(value)) {
       errorReporter.report(valueLocation, INVALID_CSS_BASE_NAMESPACE_NAME, value);
     }
@@ -357,7 +363,6 @@ public final class CommandTagAttribute implements Copyable<CommandTagAttribute> 
   /** Returns the value as an expression. Only call on an expression attribute. */
   public ExprRootNode valueAsExpr(ErrorReporter reporter) {
     checkAsExpr(reporter);
-    // Return the first expr to avoid an NPE in CallNode ctor.
     return valueExprList.get(0);
   }
 
