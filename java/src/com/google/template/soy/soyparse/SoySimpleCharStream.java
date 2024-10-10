@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -23,9 +24,6 @@ import java.util.Arrays;
  * Extends the generated char stream here:
  */
 final class SoySimpleCharStream extends SimpleCharStream {
-  // The length of each line (1-indexed), updated only up to the latest char we've parsed so far
-  // (e.g. if we're midway through parsing line 150, only lines 1 - 149 will have the correct
-  // lengths).
   int[] lineLengths = new int[2048];
 
   @Override
@@ -37,12 +35,19 @@ final class SoySimpleCharStream extends SimpleCharStream {
 
   /** Update line lengths for the current char. */
   private void updateLineLengthsForNewChar() {
-    // Increase the size of the array, if necessary.
+    ensureCapacityForLineLengths();
+    updateCurrentLineLength();
+  }
+
+  /** Ensure the capacity of lineLengths array is sufficient. */
+  private void ensureCapacityForLineLengths() {
     if (line >= lineLengths.length) {
       lineLengths = Arrays.copyOf(lineLengths, Math.max(lineLengths.length, line) + 2048);
     }
+  }
 
-    // Update the line lengths for the most recently parsed char.
+  /** Update the current line length based on the column position. */
+  private void updateCurrentLineLength() {
     lineLengths[line] = Math.max(lineLengths[line], column);
   }
 
@@ -53,23 +58,27 @@ final class SoySimpleCharStream extends SimpleCharStream {
    * foo.
    */
   Point getPointJustBeforeNextToken() {
-    if (bufline[tokenBegin] <= 1 && bufcolumn[tokenBegin] <= 1) {
-      throw new IllegalStateException("Can't get point before beginning of file");
-    }
+    validateTokenBegin();
 
-    // If bufline & bufcolumn still have the previous point stored, just use that.
     if (tokenBegin > 0) {
       return Point.create(bufline[tokenBegin - 1], bufcolumn[tokenBegin - 1]);
     }
 
-    // Otherwise (if the buffer was reset), manually construct the previous point.
+    return constructPreviousPoint();
+  }
 
-    // If the column is one, return the last point on the previous line.
+  /** Validate the current token position. */
+  private void validateTokenBegin() {
+    if (bufline[tokenBegin] <= 1 && bufcolumn[tokenBegin] <= 1) {
+      throw new IllegalStateException("Can't get point before beginning of file");
+    }
+  }
+
+  /** Construct the previous point based on the token position. */
+  private Point constructPreviousPoint() {
     if (bufcolumn[tokenBegin] == 1) {
       return Point.create(bufline[tokenBegin] - 1, lineLengths[bufline[tokenBegin] - 1]);
     }
-
-    // If the column is > 1, just subtract 1 from it.
     return Point.create(bufline[tokenBegin], bufcolumn[tokenBegin] - 1);
   }
 
