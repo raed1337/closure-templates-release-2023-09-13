@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -84,19 +85,20 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
   private void checkTemplateNode(TemplateNode node, IdGenerator idGenerator) {
     ErrorReporter reporter = ErrorReporter.create(ImmutableMap.of());
     htmlMatcherGraph = new HtmlTagVisitor(idGenerator, reporter).exec(node);
-    new HtmlTagMatchingPass(
-            reporter,
-            idGenerator,
-
-            /* inCondition= */ false,
-
-            /* foreignContentTagDepth= */ 0,
-
-            /* parentBlockType= */ null)
-        .run(htmlMatcherGraph);
+    runHtmlTagMatchingPass(node, reporter, idGenerator);
     if (node.isStrictHtml()) {
       reporter.copyTo(this.errorReporter);
     }
+  }
+
+  private void runHtmlTagMatchingPass(TemplateNode node, ErrorReporter reporter, IdGenerator idGenerator) {
+    new HtmlTagMatchingPass(
+            reporter,
+            idGenerator,
+            /* inCondition= */ false,
+            /* foreignContentTagDepth= */ 0,
+            /* parentBlockType= */ null)
+        .run(htmlMatcherGraph);
   }
 
   @VisibleForTesting
@@ -106,43 +108,8 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
 
   private static final class HtmlTagVisitor extends AbstractSoyNodeVisitor<HtmlMatcherGraph> {
 
-    /**
-     * The HTML tag matcher graph.
-     *
-     * <p>There are three stages concerning this graph:
-     *
-     * <ol>
-     *   <li>Build the graph by walking the AST in-order. At each node, a corresponding HTML Matcher
-     *       Graph node is created and linked to the HTML Matcher Graph. The HTML Matcher Graph is a
-     *       shadow structure of the AST.
-     *   <li>Traverse the graph, inserting implicit closing tags that match void or self-closing
-     *       HTML tags.
-     *   <li>Traverse the graph, matching HTML open and close tags through all possible code paths.
-     *       This is done using a simple stack mechanism, where each open tag pushes on the stack,
-     *       and each close tag pops the stack. Raise an "unm,atched HTML tag" error if there is a
-     *       stack underflow or if the stack is not empty at the end of any graph traversal.
-     * </ol>
-     *
-     * <p>See <a
-     * for more info.
-     */
     private final HtmlMatcherGraph htmlMatcherGraph = new HtmlMatcherGraph();
-
-    /**
-     * A stack of active edge lists.
-     *
-     * <p>The active edges belong to the syntactically last HTML tags in a condition block. Note
-     * that the syntactically last node might be the condition node itself, if there are no HTML
-     * tags in its block. For example {@code {if $cond1}Content{/if}}.
-     *
-     * <p>At the end of each {@link IfNode}, all active edges are accumulated into a synthetic
-     * {@link HtmlMatcherAccumulatorNode}. These synthetic nodes act as a pass-through node when
-     * traversing the {@link HtmlMatcherGraph} in order to match HTML tags.
-     *
-     * <p>The stack is pushed on entry to an {@link IfNode} and popped at the end.
-     */
     private final ArrayDeque<List<ActiveEdge>> activeEdgeStack = new ArrayDeque<>();
-
     private final IdGenerator idGenerator;
     private final ErrorReporter errorReporter;
 
@@ -175,27 +142,12 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
       exitConditionalContext();
     }
 
-    /**
-     * Starts a conditional branch in the {@link HtmlMatcherGraph}.
-     *
-     * <p>The basic logic flow is:
-     *
-     * <ol>
-     *   <li>Start a new conditional node, with the active edge set to {@link EdgeKind#TRUE_EDGE}
-     *   <li>Visit all the children.
-     *   <li>The graph cursor now points to the syntactically last HTML tag in the {@code true}
-     *       branch of the condition block. Add this node to the list of active nodes for later
-     *       accumulation.
-     *   <li>Set the active edge of this onditional node to {@link EdgeKind#FALSE_EDGE}
-     *   <li>Continue building the HTML matcher graph from the {@code false} branch of this node.
-     * </ol>
-     *
-     * <p>HTML Matcher graph building continues at the {@link HtmlMatcherAccumulatorNode}
-     *
-     * <p>See <a
-     */
     @Override
     protected void visitIfCondNode(IfCondNode node) {
+      processIfCondNode(node);
+    }
+
+    private void processIfCondNode(IfCondNode node) {
       HtmlMatcherConditionNode conditionNode = enterConditionBranch(node.getExpr(), node);
       visitChildren(node);
       exitConditionBranch(conditionNode);
@@ -211,131 +163,83 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
     @Override
     protected void visitSwitchCaseNode(SwitchCaseNode node) {
       for (ExprNode expr : node.getExprList()) {
-        HtmlMatcherConditionNode conditionNode = enterConditionBranch(expr, node);
-        visitChildren(node);
-        exitConditionBranch(conditionNode);
+        processSwitchCaseNode(expr, node);
       }
     }
 
-    // These are all the 'block' nodes.
-    //
-    // We require that every one of these blocks is internally balanced, to do that we recursively
-    // call into ourselves to build a new independent graph.
+    private void processSwitchCaseNode(ExprNode expr, SwitchCaseNode node) {
+      HtmlMatcherConditionNode conditionNode = enterConditionBranch(expr, node);
+      visitChildren(node);
+      exitConditionBranch(conditionNode);
+    }
 
     @Override
     protected void visitMsgNode(MsgNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "msg"));
+      addHtmlMatcherBlockNode(node, "msg");
     }
 
     @Override
     protected void visitMsgPluralCaseNode(MsgPluralCaseNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "msg"));
+      addHtmlMatcherBlockNode(node, "msg");
     }
 
     @Override
     protected void visitMsgPluralDefaultNode(MsgPluralDefaultNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "msg"));
+      addHtmlMatcherBlockNode(node, "msg");
     }
 
     @Override
     protected void visitMsgSelectCaseNode(MsgSelectCaseNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "msg"));
+      addHtmlMatcherBlockNode(node, "msg");
     }
 
     @Override
     protected void visitMsgSelectDefaultNode(MsgSelectDefaultNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "msg"));
+      addHtmlMatcherBlockNode(node, "msg");
     }
 
     @Override
     protected void visitForNonemptyNode(ForNonemptyNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "loop"));
+      addHtmlMatcherBlockNode(node, "loop");
     }
 
     @Override
     protected void visitVeLogNode(VeLogNode node) {
-      htmlMatcherGraph.addNode(
-          new HtmlMatcherBlockNode(
-              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), "velog"));
+      addHtmlMatcherBlockNode(node, "velog");
     }
 
-    // These two blocks are explicitly not affected by foreign content, so just run the pass
-    // over independently.
+    private void addHtmlMatcherBlockNode(SoyNode node, String blockType) {
+      htmlMatcherGraph.addNode(
+          new HtmlMatcherBlockNode(
+              new HtmlTagVisitor(idGenerator, errorReporter).exec(node), blockType));
+    }
 
     @Override
     protected void visitLetContentNode(LetContentNode node) {
-      HtmlMatcherGraph htmlMatcherGraph = new HtmlTagVisitor(idGenerator, errorReporter).exec(node);
-      new HtmlTagMatchingPass(
-              errorReporter,
-              idGenerator,
-
-              /* inCondition= */ false,
-
-              /* foreignContentTagDepth= */ 0,
-              "let content")
-          .run(htmlMatcherGraph);
+      runHtmlTagMatchingPass(node, "let content");
     }
 
     @Override
     protected void visitCallParamContentNode(CallParamContentNode node) {
+      runHtmlTagMatchingPass(node, "call param content");
+    }
+
+    private void runHtmlTagMatchingPass(SoyNode node, String blockType) {
       HtmlMatcherGraph htmlMatcherGraph = new HtmlTagVisitor(idGenerator, errorReporter).exec(node);
       new HtmlTagMatchingPass(
               errorReporter,
               idGenerator,
-
               /* inCondition= */ false,
-
               /* foreignContentTagDepth= */ 0,
-              "call param content")
+              blockType)
           .run(htmlMatcherGraph);
     }
 
-    /**
-     * Establishes the start of a conditional control-flow in the {@link HtmlMatcherGraph}.
-     *
-     * <p>After this call, the graph builder starts making conditional branches, which terminate in
-     * {@link HtmlMatcherAccumulatorNode}. While in a conditional builder context, the active edges
-     * of certain nodes are recorded, and accumulated on exit of the condtional context. Condition
-     * contexts can be nested.
-     *
-     * <p>See <a
-     */
     private void enterConditionalContext() {
       activeEdgeStack.push(new ArrayList<>());
     }
 
-    /**
-     * Terminates the conditional graph-builder context in the {@link HtmlMatcherGraph} started in
-     * the nearest call to {@link #enterConditionalContext()}. The basic logic flow is:
-     *
-     * <ol>
-     *   <li>Start a new list of active edges that are candidates for an accumulator node. This is
-     *       done in {@link #enterConditionalContext()}.
-     *   <li>For each of its children, update the active node to the syntactically last node in the
-     *       child block.
-     *   <li>Capture all the active edges into an {@link HtmlMatcherAccumulatorNode}.
-     * </ol>
-     *
-     * <p>HTML Matcher graph building continues at the {@link HtmlMatcherAccumulatorNode}
-     *
-     * <p>See <a
-     */
     private void exitConditionalContext() {
-      // Add the syntactically last AST node of the else branch. If there is no else branch, then
-      // add the syntactically last if branch. Note that the active edge of the syntactically last
-      // if branch is the FALSE edge.
       List<ActiveEdge> activeEdges = activeEdgeStack.pop();
       if (htmlMatcherGraph.getNodeAtCursor().isPresent()) {
         HtmlMatcherGraphNode activeNode = htmlMatcherGraph.getNodeAtCursor().get();
@@ -346,18 +250,6 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
       htmlMatcherGraph.addNode(accNode);
     }
 
-    /**
-     * Starts a conditional branch in the {@link HtmlMatcherGraph}.
-     *
-     * <p>Adds a newly-created {@link HtmlMatcherConditionNode} to the matcher graph, and saves the
-     * graph's cursor state and sets the active edge of the {@link HtmlMatcherConditionNode} to the
-     * {@code true} edge.
-     *
-     * <p>This condition branch is terminated by calling {@link
-     * #exitConditionBranch(HtmlMatcherConditionNode)}.
-     *
-     * <p>See <a
-     */
     private HtmlMatcherConditionNode enterConditionBranch(ExprNode expr, SoyNode node) {
       HtmlMatcherConditionNode conditionNode =
           new HtmlMatcherConditionNode(
@@ -368,28 +260,7 @@ public final class StrictHtmlValidationPass implements CompilerFilePass {
       return conditionNode;
     }
 
-    /**
-     * Terminates a conditional branch in the {@link HtmlMatcherGraph}.
-     *
-     * <p>The basic logic flow is:
-     *
-     * <ol>
-     *   <li>The HTML matcher graph cursor now points to the syntactically last HTML tag in the
-     *       {@code true} branch of the condition block. Add this node and its active edge to the
-     *       list of active edges for later accumulation.
-     *   <li>Set the active edge of this conditional node to {@link EdgeKind#FALSE_EDGE}
-     *   <li>Continue building the HTML matcher graph from the {@code false} branch of this node.
-     *   <li>The {@code false} condition branch gets terminated when the entire conditional
-     *       graph-building context ends in {@link #exitConditionalContext()}.
-     * </ol>
-     *
-     * <p>HTML Matcher graph building continues at the {@link HtmlMatcherAccumulatorNode}
-     *
-     * <p>See <a
-     */
     private void exitConditionBranch(HtmlMatcherConditionNode ifConditionNode) {
-      // The graph cursor points to the syntactically last HTML tag in the if block. Note that this
-      // could be the originating HtmlMatcherConditionNode.
       if (htmlMatcherGraph.getNodeAtCursor().isPresent()) {
         HtmlMatcherGraphNode activeNode = htmlMatcherGraph.getNodeAtCursor().get();
         activeEdgeStack.peek().add(ActiveEdge.create(activeNode, activeNode.getActiveEdgeKind()));
