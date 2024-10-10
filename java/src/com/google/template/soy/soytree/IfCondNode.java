@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -76,7 +77,11 @@ public final class IfCondNode extends AbstractBlockCommandNode
 
   @Override
   public String getCommandName() {
-    return (getParent().getChild(0) == this) ? "if" : "elseif";
+    return (isFirstChild()) ? "if" : "elseif";
+  }
+
+  private boolean isFirstChild() {
+    return getParent().getChild(0) == this;
   }
 
   @Override
@@ -86,11 +91,9 @@ public final class IfCondNode extends AbstractBlockCommandNode
 
   @Override
   public String toSourceString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append(getTagString());
+    StringBuilder sb = new StringBuilder(getTagString());
     appendSourceStringForChildren(sb);
-    // Note: No end tag.
-    return sb.toString();
+    return sb.toString(); // No end tag.
   }
 
   @Override
