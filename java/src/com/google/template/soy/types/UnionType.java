@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -42,12 +43,7 @@ public final class UnionType extends SoyType {
   private UnionType(Iterable<? extends SoyType> members) {
     this.members = ImmutableSortedSet.copyOf(MEMBER_ORDER, members);
     Preconditions.checkArgument(this.members.size() != 1);
-    for (SoyType type : this.members) {
-      if (type.getKind() == Kind.UNKNOWN) {
-        throw new IllegalArgumentException(
-            "Cannot create unions containing unknown: " + this.members);
-      }
-    }
+    validateMembers();
   }
 
   /**
@@ -69,12 +65,18 @@ public final class UnionType extends SoyType {
    *     not be a UnionType.
    */
   public static SoyType of(Collection<SoyType> members) {
-    // sort and flatten the set of types
+    ImmutableSortedSet<SoyType> flattenedMembers = flattenMembers(members);
+    if (flattenedMembers.size() == 1) {
+      return Iterables.getOnlyElement(flattenedMembers);
+    }
+    return new UnionType(flattenedMembers);
+  }
+
+  private static ImmutableSortedSet<SoyType> flattenMembers(Collection<SoyType> members) {
     ImmutableSortedSet.Builder<SoyType> builder = ImmutableSortedSet.orderedBy(MEMBER_ORDER);
     for (SoyType type : members) {
-      // simplify unions containing these types
       if (type.getKind() == Kind.UNKNOWN || type.getKind() == Kind.ANY) {
-        return type;
+        return ImmutableSortedSet.of(type);
       }
       if (type.getKind() == Kind.UNION) {
         builder.addAll(((UnionType) type).members);
@@ -82,11 +84,16 @@ public final class UnionType extends SoyType {
         builder.add(type);
       }
     }
-    ImmutableSet<SoyType> flattenedMembers = builder.build();
-    if (flattenedMembers.size() == 1) {
-      return Iterables.getOnlyElement(flattenedMembers);
+    return builder.build();
+  }
+
+  private void validateMembers() {
+    for (SoyType type : members) {
+      if (type.getKind() == Kind.UNKNOWN) {
+        throw new IllegalArgumentException(
+            "Cannot create unions containing unknown: " + members);
+      }
     }
-    return new UnionType(flattenedMembers);
   }
 
   @Override
@@ -101,14 +108,7 @@ public final class UnionType extends SoyType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType srcType, UnknownAssignmentPolicy unknownPolicy) {
-    // A type can be assigned to a union iff it is assignable to at least one
-    // member of the union.
-    for (SoyType memberType : members) {
-      if (memberType.isAssignableFromInternal(srcType, unknownPolicy)) {
-        return true;
-      }
-    }
-    return false;
+    return members.stream().anyMatch(memberType -> memberType.isAssignableFromInternal(srcType, unknownPolicy));
   }
 
   /** Returns true if the union includes the null type. */
@@ -118,12 +118,10 @@ public final class UnionType extends SoyType {
 
   /** Returns a Soy type that is equivalent to this one but with 'null' removed. */
   public SoyType filter(Predicate<SoyType> filter) {
-    ImmutableSortedSet<SoyType> filtered =
-        members.stream().filter(filter).collect(toImmutableSortedSet(MEMBER_ORDER));
-    if (filtered.size() != members.size()) {
-      return of(filtered);
-    }
-    return this;
+    ImmutableSortedSet<SoyType> filtered = members.stream()
+        .filter(filter)
+        .collect(toImmutableSortedSet(MEMBER_ORDER));
+    return (filtered.size() != members.size()) ? of(filtered) : this;
   }
 
   @Override
@@ -146,9 +144,7 @@ public final class UnionType extends SoyType {
 
   @Override
   public boolean equals(Object other) {
-    return other != null
-        && other.getClass() == this.getClass()
-        && ((UnionType) other).members.equals(members);
+    return other instanceof UnionType && members.equals(((UnionType) other).members);
   }
 
   @Override
