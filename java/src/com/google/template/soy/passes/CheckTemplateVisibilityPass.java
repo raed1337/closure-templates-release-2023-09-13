@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014 Google Inc.
  *
@@ -49,28 +50,35 @@ final class CheckTemplateVisibilityPass implements CompilerFileSetPass {
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     for (SoyFileNode file : sourceFiles) {
-      for (TemplateLiteralNode node :
-          SoyTreeUtils.getAllNodesOfType(file, TemplateLiteralNode.class)) {
-        String calleeName = node.getResolvedName();
-        TemplateMetadata definition =
-            templateRegistryFull.get().getBasicTemplateOrElement(calleeName);
-        if (definition != null && !isVisible(file, definition)) {
-          errorReporter.report(
-              node.getSourceLocation(),
-              CALLEE_NOT_VISIBLE,
-              calleeName,
-              definition.getVisibility().getAttributeValue(),
-              definition.getSourceLocation().getFilePath().path());
-        }
-      }
+      checkTemplateVisibility(file);
     }
-
     return Result.CONTINUE;
   }
 
+  private void checkTemplateVisibility(SoyFileNode file) {
+    for (TemplateLiteralNode node : SoyTreeUtils.getAllNodesOfType(file, TemplateLiteralNode.class)) {
+      validateTemplateVisibility(file, node);
+    }
+  }
+
+  private void validateTemplateVisibility(SoyFileNode file, TemplateLiteralNode node) {
+    String calleeName = node.getResolvedName();
+    TemplateMetadata definition = templateRegistryFull.get().getBasicTemplateOrElement(calleeName);
+    if (definition != null && !isVisible(file, definition)) {
+      reportVisibilityError(node, calleeName, definition);
+    }
+  }
+
+  private void reportVisibilityError(TemplateLiteralNode node, String calleeName, TemplateMetadata definition) {
+    errorReporter.report(
+        node.getSourceLocation(),
+        CALLEE_NOT_VISIBLE,
+        calleeName,
+        definition.getVisibility().getAttributeValue(),
+        definition.getSourceLocation().getFilePath().path());
+  }
+
   private static boolean isVisible(SoyFileNode calledFrom, TemplateMetadata callee) {
-    // The only visibility level that this pass currently cares about is PRIVATE.
-    // Templates are visible if they are not private or are defined in the same file.
     return callee.getVisibility() != Visibility.PRIVATE
         || callee.getSourceLocation().getFilePath().equals(calledFrom.getFilePath());
   }
