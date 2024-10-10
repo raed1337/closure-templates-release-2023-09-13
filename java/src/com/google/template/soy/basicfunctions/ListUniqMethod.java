@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2022 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -60,7 +62,6 @@ public class ListUniqMethod
     return factory.global("runtime.list_uniq").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
     static final Method LIST_UNIQ_FN =
         JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "listUniq", SoyList.class);
