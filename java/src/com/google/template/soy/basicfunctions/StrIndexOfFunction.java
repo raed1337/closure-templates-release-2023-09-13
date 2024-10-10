@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -63,6 +64,10 @@ public final class StrIndexOfFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return invokeIndexOfJavaScript(args);
+  }
+
+  private JavaScriptValue invokeIndexOfJavaScript(List<JavaScriptValue> args) {
     List<JavaScriptValue> transformedArgs = new ArrayList<>();
     transformedArgs.add(args.get(1).coerceToString());
     if (args.size() == 3) {
@@ -74,8 +79,11 @@ public final class StrIndexOfFunction
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
+    return invokeIndexOfPython(args, factory);
+  }
+
+  private PythonValue invokeIndexOfPython(List<PythonValue> args, PythonValueFactory factory) {
     List<PythonValue> transformedArgs = new ArrayList<>();
-    // Coerce SanitizedContent args to strings.
     transformedArgs.add(args.get(0).coerceToString());
     transformedArgs.add(args.get(1).coerceToString());
     if (args.size() == 3) {
@@ -98,6 +106,10 @@ public final class StrIndexOfFunction
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return invokeIndexOfJava(args, factory);
+  }
+
+  private JavaValue invokeIndexOfJava(List<JavaValue> args, JavaValueFactory factory) {
     return factory.callStaticMethod(
         Methods.INDEX_OF,
         args.get(0),
