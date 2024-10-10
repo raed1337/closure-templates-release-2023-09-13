@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -53,9 +54,13 @@ public final class HtmlMatcherAccumulatorNode extends HtmlMatcherGraphNode {
 
   @Override
   public void linkEdgeToNode(EdgeKind edgeKind, HtmlMatcherGraphNode node) {
-    checkState(edgeKind == EdgeKind.TRUE_EDGE, "Accumulator nodes only have a true branch.");
-    checkState(!this.equals(node), "Can't link a node to itsself.");
+    validateLinking(edgeKind, node);
     nextNode = node;
+  }
+
+  private void validateLinking(EdgeKind edgeKind, HtmlMatcherGraphNode node) {
+    checkState(edgeKind == EdgeKind.TRUE_EDGE, "Accumulator nodes only have a true branch.");
+    checkState(!this.equals(node), "Can't link a node to itself.");
   }
 
   /**
@@ -72,7 +77,7 @@ public final class HtmlMatcherAccumulatorNode extends HtmlMatcherGraphNode {
    *   &lt;/span&gt;
    * </pre>
    *
-   * will add two occurences of an {@link HtmlMatcherConditionNode} to the {@code activeEdges} list,
+   * will add two occurrences of an {@link HtmlMatcherConditionNode} to the {@code activeEdges} list,
    * one with a {@code TRUE} active edge, and one with a {@code FALSE} active edge.
    *
    * @param activeEdges the list of all active edges that will point to this {@link
@@ -81,7 +86,11 @@ public final class HtmlMatcherAccumulatorNode extends HtmlMatcherGraphNode {
    */
   public void accumulateActiveEdges(ImmutableList<ActiveEdge> activeEdges) {
     for (ActiveEdge accEdge : activeEdges) {
-      accEdge.getGraphNode().linkEdgeToNode(accEdge.getActiveEdge(), this);
+      linkActiveEdgeToNode(accEdge);
     }
+  }
+
+  private void linkActiveEdgeToNode(ActiveEdge accEdge) {
+    accEdge.getGraphNode().linkEdgeToNode(accEdge.getActiveEdge(), this);
   }
 }
