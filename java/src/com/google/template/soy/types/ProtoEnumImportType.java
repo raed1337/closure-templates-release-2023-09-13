@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -34,7 +35,7 @@ public abstract class ProtoEnumImportType extends ImportType {
   }
 
   @Override
-  public Kind getKind() {
+  public final Kind getKind() {
     return Kind.PROTO_ENUM_TYPE;
   }
 }
