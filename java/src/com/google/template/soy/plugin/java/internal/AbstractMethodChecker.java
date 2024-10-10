@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -35,25 +36,39 @@ public abstract class AbstractMethodChecker implements MethodChecker {
     if (signatures.equals(ClassSignatures.EMPTY)) {
       return Response.error(Code.NO_SUCH_CLASS);
     }
-    MethodSignatures methodsForSig =
-        signatures.forPartial(PartialSignature.create(methodName, ImmutableList.copyOf(arguments)));
+    
+    MethodSignatures methodsForSig = findMethodSignatures(signatures, methodName, arguments);
     if (methodsForSig.equals(MethodSignatures.EMPTY)) {
-      ImmutableList<PartialSignature> methodsMatchingName =
-          signatures.allPartials().stream()
-              .filter(p -> p.methodName().equals(methodName))
-              .collect(toImmutableList());
-      if (methodsMatchingName.isEmpty()) {
-        return Response.error(
-            Code.NO_SUCH_METHOD_NAME,
-            signatures.allPartials().stream()
-                .map(PartialSignature::methodName)
-                .collect(toImmutableList()));
-      } else {
-        ImmutableList<String> suggestedSigs =
-            methodsMatchingName.stream().map(PartialSignature::toString).collect(toImmutableList());
-        return Response.error(Code.NO_SUCH_METHOD_SIG, suggestedSigs);
-      }
+      return handleNoMethodSignatures(signatures, methodName);
     }
+
+    return validateMethodReturnType(methodsForSig, returnType);
+  }
+
+  private MethodSignatures findMethodSignatures(ClassSignatures signatures, String methodName, List<String> arguments) {
+    return signatures.forPartial(PartialSignature.create(methodName, ImmutableList.copyOf(arguments)));
+  }
+
+  private Response handleNoMethodSignatures(ClassSignatures signatures, String methodName) {
+    ImmutableList<PartialSignature> methodsMatchingName =
+        signatures.allPartials().stream()
+            .filter(p -> p.methodName().equals(methodName))
+            .collect(toImmutableList());
+    
+    if (methodsMatchingName.isEmpty()) {
+      return Response.error(
+          Code.NO_SUCH_METHOD_NAME,
+          signatures.allPartials().stream()
+              .map(PartialSignature::methodName)
+              .collect(toImmutableList()));
+    } else {
+      ImmutableList<String> suggestedSigs =
+          methodsMatchingName.stream().map(PartialSignature::toString).collect(toImmutableList());
+      return Response.error(Code.NO_SUCH_METHOD_SIG, suggestedSigs);
+    }
+  }
+
+  private Response validateMethodReturnType(MethodSignatures methodsForSig, String returnType) {
     ReadMethodData method = methodsForSig.forReturnType(returnType);
     if (method != null) {
       if (!method.isPublic()) {
