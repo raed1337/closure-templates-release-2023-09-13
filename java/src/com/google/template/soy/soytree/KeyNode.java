@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -79,7 +80,7 @@ public final class KeyNode extends AbstractCommandNode
   @SuppressWarnings("unchecked")
   @Override
   public ParentSoyNode<StandaloneNode> getParent() {
-    // Cast is necessary so this is typed as a parent with a StandaloneNode child (this KeyNode).
+    // Cast is necessary to ensure the parent is treated as containing a StandaloneNode child (this KeyNode).
     return (ParentSoyNode<StandaloneNode>) super.getParent();
   }
 
