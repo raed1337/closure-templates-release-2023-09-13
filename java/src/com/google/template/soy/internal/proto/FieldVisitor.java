@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -7,8 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -34,19 +34,22 @@ import java.util.List;
 public abstract class FieldVisitor<T> {
   /** Applies the visitor to the given field. */
   public static <T> T visitField(FieldDescriptor fieldDescriptor, FieldVisitor<T> visitor) {
-    // NOTE: map fields are technically repeated, so check isMap first.
     if (fieldDescriptor.isMapField()) {
-      List<FieldDescriptor> mapFields = fieldDescriptor.getMessageType().getFields();
-      checkState(mapFields.size() == 2, "proto representation of map fields changed");
-      FieldDescriptor keyField = mapFields.get(0);
-      FieldDescriptor valueField = mapFields.get(1);
-      return visitor.visitMap(
-          fieldDescriptor, getScalarType(keyField, visitor), getScalarType(valueField, visitor));
+      return visitMapField(visitor, fieldDescriptor);
     } else if (fieldDescriptor.isRepeated()) {
       return visitor.visitRepeated(getScalarType(fieldDescriptor, visitor));
     } else {
       return getScalarType(fieldDescriptor, visitor);
     }
+  }
+
+  private static <T> T visitMapField(FieldVisitor<T> visitor, FieldDescriptor fieldDescriptor) {
+    List<FieldDescriptor> mapFields = fieldDescriptor.getMessageType().getFields();
+    checkState(mapFields.size() == 2, "proto representation of map fields changed");
+    FieldDescriptor keyField = mapFields.get(0);
+    FieldDescriptor valueField = mapFields.get(1);
+    return visitor.visitMap(
+        fieldDescriptor, getScalarType(keyField, visitor), getScalarType(valueField, visitor));
   }
 
   /** Visits a proto map field. Which is represented by a soy map. */
@@ -93,12 +96,14 @@ public abstract class FieldVisitor<T> {
   @ForOverride
   protected abstract T visitString();
 
-  /** Visits a doubble valued field that should be interpreted as a soy float. */
+  /** Visits a double valued field that should be interpreted as a soy float. */
   @ForOverride
   protected abstract T visitDoubleAsFloat();
+
   /** Visits a float valued field that should be interpreted as a soy float. */
   @ForOverride
   protected abstract T visitFloat();
+
   /** Visits a SafeHtmlProto field that should be interpreted as a soy html object. */
   @ForOverride
   protected abstract T visitSafeHtml();
@@ -126,49 +131,31 @@ public abstract class FieldVisitor<T> {
   @ForOverride
   protected abstract T visitTrustedResourceUrl();
 
-  /** Visits a message typed field that should be interpted as a soy proto type. */
+  /** Visits a message typed field that should be interpreted as a soy proto type. */
   @ForOverride
   protected abstract T visitMessage(Descriptor messageType);
 
-  /** Visits a enum typed field that should be interpted as a soy enum type. */
+  /** Visits an enum typed field that should be interpreted as a soy enum type. */
   @ForOverride
   protected abstract T visitEnum(EnumDescriptor enumType, FieldDescriptor fieldType);
 
   private static <T> T getScalarType(FieldDescriptor fieldDescriptor, FieldVisitor<T> visitor) {
-    // Field definition includes an option that overrides normal type.
     if (ProtoUtils.hasJsType(fieldDescriptor)) {
-      JSType jsType = ProtoUtils.getJsType(fieldDescriptor);
-      switch (jsType) {
-        case JS_NORMAL:
-        case JS_NUMBER:
-          // in java soy ints are big enough, to work for both cases.  except for unsigned, but we
-          // can't really support that in javascript anyway.
-          return visitor.visitLongAsInt();
-        case JS_STRING:
-          if (ProtoUtils.isUnsigned(fieldDescriptor)) {
-            return visitor.visitUnsignedLongAsString();
-          }
-          return visitor.visitLongAsString();
-      }
+      return handleJsType(visitor, fieldDescriptor);
     }
 
     switch (fieldDescriptor.getType()) {
       case BOOL:
         return visitor.visitBool();
-
       case DOUBLE:
         return visitor.visitDoubleAsFloat();
-
       case FLOAT:
         return visitor.visitFloat();
-
       case BYTES:
         return visitor.visitBytes();
-
       case GROUP:
         throw new UnsupportedOperationException(
             "soy doesn't support proto groups: " + fieldDescriptor.getFullName());
-
       case INT64:
         return visitor.visitLongAsInt();
       case INT32:
@@ -178,7 +165,6 @@ public abstract class FieldVisitor<T> {
       case UINT32:
       case FIXED32:
         return visitor.visitUnsignedInt();
-
       case FIXED64:
       case SINT64:
       case SFIXED64:
@@ -189,33 +175,46 @@ public abstract class FieldVisitor<T> {
                 + ": 64-bit integer types are not supported.  "
                 + "Consider, adding [(jspb.jstype) = INT52] or [(jspb.jstype) = STRING] to the "
                 + "field.");
-
       case ENUM:
         return visitor.visitEnum(fieldDescriptor.getEnumType(), fieldDescriptor);
-
       case MESSAGE:
-        switch (fieldDescriptor.getMessageType().getFullName()) {
-          case "webutil.html.types.SafeHtmlProto":
-            return visitor.visitSafeHtml();
-          case "webutil.html.types.SafeScriptProto":
-            return visitor.visitSafeScript();
-          case "webutil.html.types.SafeStyleProto":
-            return visitor.visitSafeStyle();
-          case "webutil.html.types.SafeStyleSheetProto":
-            return visitor.visitSafeStyleSheet();
-          case "webutil.html.types.SafeUrlProto":
-            return visitor.visitSafeUrl();
-          case "webutil.html.types.TrustedResourceUrlProto":
-            return visitor.visitTrustedResourceUrl();
-          default:
-            return visitor.visitMessage(fieldDescriptor.getMessageType());
-        }
-
+        return handleMessageType(visitor, fieldDescriptor);
       case STRING:
         return visitor.visitString();
-
       default:
         throw new AssertionError("Unexpected field type in proto");
+    }
+  }
+
+  private static <T> T handleJsType(FieldVisitor<T> visitor, FieldDescriptor fieldDescriptor) {
+    JSType jsType = ProtoUtils.getJsType(fieldDescriptor);
+    switch (jsType) {
+      case JS_NORMAL:
+      case JS_NUMBER:
+        return visitor.visitLongAsInt();
+      case JS_STRING:
+        return ProtoUtils.isUnsigned(fieldDescriptor) ? visitor.visitUnsignedLongAsString() : visitor.visitLongAsString();
+      default:
+        throw new AssertionError("Unexpected JSType: " + jsType);
+    }
+  }
+
+  private static <T> T handleMessageType(FieldVisitor<T> visitor, FieldDescriptor fieldDescriptor) {
+    switch (fieldDescriptor.getMessageType().getFullName()) {
+      case "webutil.html.types.SafeHtmlProto":
+        return visitor.visitSafeHtml();
+      case "webutil.html.types.SafeScriptProto":
+        return visitor.visitSafeScript();
+      case "webutil.html.types.SafeStyleProto":
+        return visitor.visitSafeStyle();
+      case "webutil.html.types.SafeStyleSheetProto":
+        return visitor.visitSafeStyleSheet();
+      case "webutil.html.types.SafeUrlProto":
+        return visitor.visitSafeUrl();
+      case "webutil.html.types.TrustedResourceUrlProto":
+        return visitor.visitTrustedResourceUrl();
+      default:
+        return visitor.visitMessage(fieldDescriptor.getMessageType());
     }
   }
 }
