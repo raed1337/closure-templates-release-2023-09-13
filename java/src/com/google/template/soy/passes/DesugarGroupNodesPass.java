@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -28,9 +29,13 @@ final class DesugarGroupNodesPass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     for (GroupNode gn : SoyTreeUtils.getAllNodesOfType(file, GroupNode.class)) {
-      ExprNode content = gn.getChild(0);
-      content.setDesugaredGroup(true);
-      gn.getParent().replaceChild(gn, content);
+      replaceGroupNodeWithContent(gn);
     }
+  }
+
+  private void replaceGroupNodeWithContent(GroupNode groupNode) {
+    ExprNode content = groupNode.getChild(0);
+    content.setDesugaredGroup(true);
+    groupNode.getParent().replaceChild(groupNode, content);
   }
 }
