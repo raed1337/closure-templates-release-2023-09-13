@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -33,6 +34,10 @@ public abstract class SanitizedType extends PrimitiveType {
 
   @Override
   public String toString() {
+    return formatContentKind();
+  }
+
+  private String formatContentKind() {
     return Ascii.toLowerCase(getContentKind().toString());
   }
 
@@ -67,8 +72,10 @@ public abstract class SanitizedType extends PrimitiveType {
 
       case TEXT:
         return StringType.getInstance();
+
+      default:
+        throw new AssertionError(contentKind);
     }
-    throw new AssertionError(contentKind);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -146,6 +153,10 @@ public abstract class SanitizedType extends PrimitiveType {
 
     @Override
     public String toString() {
+      return formatTagName();
+    }
+
+    private String formatTagName() {
       return "html<" + (tagName.isEmpty() ? "?" : tagName) + ">";
     }
 
@@ -154,10 +165,7 @@ public abstract class SanitizedType extends PrimitiveType {
       if (!(srcType instanceof ElementType)) {
         return false;
       }
-      if (tagName.isEmpty()) {
-        return true;
-      }
-      return tagName.equals(((ElementType) srcType).tagName);
+      return tagName.isEmpty() || tagName.equals(((ElementType) srcType).tagName);
     }
 
     @Override
