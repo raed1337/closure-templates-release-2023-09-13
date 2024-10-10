@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -60,8 +61,13 @@ public final class CallParamContentNode extends CallParamNode
     super(id, location, key);
     this.parentMixin = new MixinParentNode<>(this);
     this.contentKind = new SetOnce<>();
+    this.kindAttr = kindAttr;
+    this.openTagLocation = openTagLocation;
+    setContentKindFromAttribute(errorReporter);
+  }
+
+  private void setContentKindFromAttribute(ErrorReporter errorReporter) {
     if (kindAttr != null) {
-      Optional<SanitizedContentKind> parsedKind = Optional.empty();
       if (!kindAttr.hasName("kind")) {
         errorReporter.report(
             kindAttr.getName().location(),
@@ -69,13 +75,14 @@ public final class CallParamContentNode extends CallParamNode
             kindAttr.getName().identifier(),
             "param",
             "kind");
+        contentKind.set(SanitizedContentKind.HTML);
       } else {
-        parsedKind = kindAttr.valueAsContentKind(errorReporter);
+        Optional<SanitizedContentKind> parsedKind = kindAttr.valueAsContentKind(errorReporter);
+        contentKind.set(parsedKind.orElse(SanitizedContentKind.HTML));
       }
-      this.contentKind.set(parsedKind.orElse(SanitizedContentKind.HTML));
+    } else {
+      contentKind.set(SanitizedContentKind.HTML);
     }
-    this.kindAttr = kindAttr;
-    this.openTagLocation = openTagLocation;
   }
 
   /**
@@ -112,12 +119,7 @@ public final class CallParamContentNode extends CallParamNode
 
   @Override
   public String getCommandText() {
-    return (contentKind == null)
-        ? getKey().identifier()
-        : getKey().identifier()
-            + (isImplicitContentKind()
-                ? ""
-                : " kind=\"" + contentKind.get().asAttributeValue() + "\"");
+    return getKey().identifier() + (isImplicitContentKind() ? "" : " kind=\"" + contentKind.get().asAttributeValue() + "\"");
   }
 
   @Override
@@ -131,10 +133,7 @@ public final class CallParamContentNode extends CallParamNode
 
   @Override
   public ImmutableList<CommandTagAttribute> getAttributes() {
-    if (kindAttr == null) {
-      return ImmutableList.of();
-    }
-    return ImmutableList.of(kindAttr);
+    return kindAttr == null ? ImmutableList.of() : ImmutableList.of(kindAttr);
   }
 
   @Override
@@ -144,9 +143,6 @@ public final class CallParamContentNode extends CallParamNode
 
   // -----------------------------------------------------------------------------------------------
   // ParentSoyNode stuff.
-  // Note: Most concrete nodes simply inherit this functionality from AbstractParentCommandNode or
-  // AbstractParentSoyNode. But this class need to include its own MixinParentNode field because
-  // it needs to subclass CallParamNode (and Java doesn't allow multiple inheritance).
 
   @Override
   public int numChildren() {
