@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -61,12 +62,11 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @RunAfter({
-  ResolveNamesPass.class, // depends on looking up definitions from names
-  CheckNonEmptyMsgNodesPass.class, // depends on calculating ids and empty msg nodes don't have them
+  ResolveNamesPass.class,
+  CheckNonEmptyMsgNodesPass.class,
 })
 @RunBefore({
-  ResolveExpressionTypesPass
-      .class, // so we don't need to worry about assigning types to our synthetic expressions
+  ResolveExpressionTypesPass.class,
 })
 final class MsgWithIdFunctionPass implements CompilerFilePass {
   private static final SoyErrorKind MSG_VARIABLE_NOT_IN_SCOPE =
@@ -88,48 +88,17 @@ final class MsgWithIdFunctionPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    outer:
-    for (FunctionNode fn :
-        SoyTreeUtils.allFunctionInvocations(file, BuiltinFunction.MSG_WITH_ID)
-            .collect(Collectors.toList())) {
+    for (FunctionNode fn : getMsgWithIdFunctions(file)) {
       if (fn.numChildren() != 1) {
-        // if it isn't == 1, then an error has already been reported
         continue;
       }
       ExprNode msgVariable = fn.getChild(0);
-      if (!(msgVariable instanceof VarRefNode)) {
-        badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a variable.");
+      if (!isValidMsgVariable(fn, msgVariable)) {
         continue;
       }
-      VarDefn defn = ((VarRefNode) msgVariable).getDefnDecl();
-      if (!(defn instanceof LocalVar)) {
-        badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a let variable.");
-        continue;
-      }
-      LocalVarNode declaringNode = ((LocalVar) defn).declaringNode();
-      if (!(declaringNode instanceof LetContentNode)) {
-        badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a let.");
-        continue;
-      }
-      LetContentNode letNode = (LetContentNode) declaringNode;
-      MsgFallbackGroupNode fallbackGroupNode = null;
-      for (SoyNode child : letNode.getChildren()) {
-        if (child instanceof RawTextNode && ((RawTextNode) child).getRawText().isEmpty()) {
-          continue;
-        } else if (child instanceof MsgFallbackGroupNode) {
-          if (fallbackGroupNode == null) {
-            fallbackGroupNode = (MsgFallbackGroupNode) child;
-          } else {
-            badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There is more than one msg.");
-            continue outer;
-          }
-        } else {
-          badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There is a non-msg child of the let.");
-          continue outer;
-        }
-      }
+      LetContentNode letNode = (LetContentNode) ((LocalVar) ((VarRefNode) msgVariable).getDefnDecl()).declaringNode();
+      MsgFallbackGroupNode fallbackGroupNode = getFallbackGroupNode(fn, letNode);
       if (fallbackGroupNode == null) {
-        badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There was no msg in the referenced let.");
         continue;
       }
       if (fallbackGroupNode.getMsg().getAlternateId().isPresent()) {
@@ -140,11 +109,55 @@ final class MsgWithIdFunctionPass implements CompilerFilePass {
     }
   }
 
+  private Iterable<FunctionNode> getMsgWithIdFunctions(SoyFileNode file) {
+    return SoyTreeUtils.allFunctionInvocations(file, BuiltinFunction.MSG_WITH_ID).collect(Collectors.toList());
+  }
+
+  private boolean isValidMsgVariable(FunctionNode fn, ExprNode msgVariable) {
+    if (!(msgVariable instanceof VarRefNode)) {
+      badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a variable.");
+      return false;
+    }
+    VarDefn defn = ((VarRefNode) msgVariable).getDefnDecl();
+    if (!(defn instanceof LocalVar)) {
+      badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a let variable.");
+      return false;
+    }
+    LocalVarNode declaringNode = ((LocalVar) defn).declaringNode();
+    if (!(declaringNode instanceof LetContentNode)) {
+      badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " It is not a let.");
+      return false;
+    }
+    return true;
+  }
+
+  private MsgFallbackGroupNode getFallbackGroupNode(FunctionNode fn, LetContentNode letNode) {
+    MsgFallbackGroupNode fallbackGroupNode = null;
+    for (SoyNode child : letNode.getChildren()) {
+      if (child instanceof RawTextNode && ((RawTextNode) child).getRawText().isEmpty()) {
+        continue;
+      } else if (child instanceof MsgFallbackGroupNode) {
+        if (fallbackGroupNode == null) {
+          fallbackGroupNode = (MsgFallbackGroupNode) child;
+        } else {
+          badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There is more than one msg.");
+          return null;
+        }
+      } else {
+        badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There is a non-msg child of the let.");
+        return null;
+      }
+    }
+    if (fallbackGroupNode == null) {
+      badFunctionCall(fn, MSG_VARIABLE_NOT_IN_SCOPE, " There was no msg in the referenced let.");
+    }
+    return fallbackGroupNode;
+  }
+
   private void badFunctionCall(FunctionNode fn, SoyErrorKind errorKind, String explanation) {
     errorReporter.report(
         fn.getChild(0).getSourceLocation(), errorKind, fn.getStaticFunctionName(), explanation);
 
-    // this way we don't trigger a cascade of errors about incorrect types
     RecordLiteralNode recordLiteral =
         new RecordLiteralNode(
             Identifier.create("record", fn.getSourceLocation()),
@@ -164,37 +177,7 @@ final class MsgWithIdFunctionPass implements CompilerFilePass {
    * there is a fallback.
    */
   private void handleMsgIdCall(FunctionNode fn, MsgFallbackGroupNode msgNode) {
-    ExprNode msgIdNode;
-    long primaryMsgId = MsgUtils.computeMsgIdForDualFormat(msgNode.getChild(0));
-    if (msgNode.numChildren() == 1) {
-      // easy peasy
-      msgIdNode = createMsgIdNode(primaryMsgId, fn.getSourceLocation());
-    } else {
-      long fallbackMsgId = MsgUtils.computeMsgIdForDualFormat(msgNode.getChild(1));
-      ConditionalOpNode condOpNode =
-          new ConditionalOpNode(
-              fn.getSourceLocation(), /*operatorLocation=*/ fn.getSourceLocation());
-      FunctionNode isPrimaryMsgInUse =
-          FunctionNode.newPositional(
-              Identifier.create(
-                  BuiltinFunction.IS_PRIMARY_MSG_IN_USE.getName(), fn.getSourceLocation()),
-              BuiltinFunction.IS_PRIMARY_MSG_IN_USE,
-              fn.getSourceLocation());
-      // We add the varRef, and the 2 message ids to the funcitonnode as arguments so they are
-      // trivial to access in the backends.  This is a little hacky however since we never generate
-      // code for these things.
-      // We could formalize the hack by providing a way to stash arbitrary data in the FunctionNode
-      // and then just pack this up in a non-AST datastructure.
-      isPrimaryMsgInUse.addChild(fn.getChild(0).copy(new CopyState()));
-      isPrimaryMsgInUse.addChild(new IntegerNode(primaryMsgId, fn.getSourceLocation()));
-      isPrimaryMsgInUse.addChild(new IntegerNode(fallbackMsgId, fn.getSourceLocation()));
-      condOpNode.addChild(isPrimaryMsgInUse);
-      condOpNode.addChild(createMsgIdNode(primaryMsgId, fn.getSourceLocation()));
-      condOpNode.addChild(createMsgIdNode(fallbackMsgId, fn.getSourceLocation()));
-      msgIdNode = condOpNode;
-    }
-    // We need to generate a record literal
-    // This map literal has 2 keys: 'id' and 'msg'
+    ExprNode msgIdNode = createMsgIdNode(fn, msgNode);
     RecordLiteralNode recordLiteral =
         new RecordLiteralNode(
             Identifier.create("record", fn.getSourceLocation()),
@@ -204,6 +187,38 @@ final class MsgWithIdFunctionPass implements CompilerFilePass {
             fn.getSourceLocation());
     recordLiteral.addChildren(ImmutableList.of(msgIdNode, fn.getChild(0).copy(new CopyState())));
     fn.getParent().replaceChild(fn, recordLiteral);
+  }
+
+  private ExprNode createMsgIdNode(FunctionNode fn, MsgFallbackGroupNode msgNode) {
+    long primaryMsgId = MsgUtils.computeMsgIdForDualFormat(msgNode.getChild(0));
+    if (msgNode.numChildren() == 1) {
+      return createMsgIdNode(primaryMsgId, fn.getSourceLocation());
+    } else {
+      return createConditionalMsgIdNode(fn, msgNode, primaryMsgId);
+    }
+  }
+
+  private ConditionalOpNode createConditionalMsgIdNode(FunctionNode fn, MsgFallbackGroupNode msgNode, long primaryMsgId) {
+    long fallbackMsgId = MsgUtils.computeMsgIdForDualFormat(msgNode.getChild(1));
+    ConditionalOpNode condOpNode = new ConditionalOpNode(fn.getSourceLocation(), fn.getSourceLocation());
+    FunctionNode isPrimaryMsgInUse = createIsPrimaryMsgInUseNode(fn, primaryMsgId, fallbackMsgId);
+    condOpNode.addChild(isPrimaryMsgInUse);
+    condOpNode.addChild(createMsgIdNode(primaryMsgId, fn.getSourceLocation()));
+    condOpNode.addChild(createMsgIdNode(fallbackMsgId, fn.getSourceLocation()));
+    return condOpNode;
+  }
+
+  private FunctionNode createIsPrimaryMsgInUseNode(FunctionNode fn, long primaryMsgId, long fallbackMsgId) {
+    FunctionNode isPrimaryMsgInUse =
+        FunctionNode.newPositional(
+            Identifier.create(
+                BuiltinFunction.IS_PRIMARY_MSG_IN_USE.getName(), fn.getSourceLocation()),
+            BuiltinFunction.IS_PRIMARY_MSG_IN_USE,
+            fn.getSourceLocation());
+    isPrimaryMsgInUse.addChild(fn.getChild(0).copy(new CopyState()));
+    isPrimaryMsgInUse.addChild(new IntegerNode(primaryMsgId, fn.getSourceLocation()));
+    isPrimaryMsgInUse.addChild(new IntegerNode(fallbackMsgId, fn.getSourceLocation()));
+    return isPrimaryMsgInUse;
   }
 
   private StringNode createMsgIdNode(long id, SourceLocation location) {
