@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -45,6 +46,8 @@ import java.util.List;
 class SqrtFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method MATH_SQRT = getMathSqrtMethod();
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -57,14 +60,17 @@ class SqrtFunction
     return factory.global("runtime.sqrt").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method MATH_SQRT = JavaValueFactory.createMethod(Math.class, "sqrt", double.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.MATH_SQRT, args.get(0));
+    return factory.callStaticMethod(MATH_SQRT, args.get(0));
+  }
+
+  private static Method getMathSqrtMethod() {
+    try {
+      return Math.class.getMethod("sqrt", double.class);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException("Math.sqrt method not found", e);
+    }
   }
 }
