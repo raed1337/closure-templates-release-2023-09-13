@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -39,7 +40,7 @@ public final class SoyToJbcSrcCompiler extends AbstractSoyCompiler {
     usage =
         "[Optional] The file name of the JAR containing sources to be written.  Each compiler"
             + " invocation will produce exactly one such file.  This may be useful for enabling"
-            + "IDE debugging scenarios"
+            + " IDE debugging scenarios"
   )
   private File outputSrcJar;
 
@@ -51,11 +52,15 @@ public final class SoyToJbcSrcCompiler extends AbstractSoyCompiler {
 
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) {
-    Optional<ByteSink> srcJarSink = Optional.empty();
-    if (outputSrcJar != null) {
-      srcJarSink = Optional.of(Files.asByteSink(outputSrcJar));
-    }
-    compile(sfsBuilder.build(), Files.asByteSink(output), srcJarSink);
+    compile(sfsBuilder.build(), createJarSink(output), createSrcJarSink(outputSrcJar));
+  }
+
+  private Optional<ByteSink> createSrcJarSink(File outputSrcJar) {
+    return Optional.ofNullable(outputSrcJar).map(Files::asByteSink);
+  }
+
+  private ByteSink createJarSink(File output) {
+    return Files.asByteSink(output);
   }
 
   /**
