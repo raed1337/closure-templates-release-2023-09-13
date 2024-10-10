@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -89,21 +90,18 @@ public final class RecordType extends SoyType {
   boolean doIsAssignableFromNonUnionType(SoyType srcType, UnknownAssignmentPolicy policy) {
     if (srcType.getKind() == Kind.RECORD) {
       RecordType srcRecord = (RecordType) srcType;
-      // The source record must have at least all of the members in the dest
-      // record.
-      for (Member mine : members) {
-        SoyType theirType = srcRecord.getMemberType(mine.name());
-        if (theirType == null) {
-          if (!mine.optional()) {
-            return false;
-          }
-        } else if (!mine.checkedType().isAssignableFromInternal(theirType, policy)) {
-          return false;
-        }
-      }
-      return true;
+      return members.stream().allMatch(mine -> 
+                isMemberAssignable(srcRecord, mine, policy));
     }
     return false;
+  }
+
+  private boolean isMemberAssignable(RecordType srcRecord, Member mine, UnknownAssignmentPolicy policy) {
+    SoyType theirType = srcRecord.getMemberType(mine.name());
+    if (theirType == null) {
+      return mine.optional();
+    }
+    return mine.checkedType().isAssignableFromInternal(theirType, policy);
   }
 
   public ImmutableList<Member> getMembers() {
