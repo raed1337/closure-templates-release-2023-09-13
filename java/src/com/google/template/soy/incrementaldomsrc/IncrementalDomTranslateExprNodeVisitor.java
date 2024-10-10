@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -72,13 +73,17 @@ public class IncrementalDomTranslateExprNodeVisitor extends TranslateExprNodeVis
   @Override
   protected Expression visitFunctionNode(FunctionNode node) {
     if (node.getSoyFunction() instanceof LoggingFunction) {
-      LoggingFunction loggingNode = (LoggingFunction) node.getSoyFunction();
-      return INCREMENTAL_DOM_EVAL_LOG_FN.call(
-          XID.call(Expressions.stringLiteral(node.getStaticFunctionName())),
-          Expressions.arrayLiteral(visitChildren(node)),
-          Expressions.stringLiteral(loggingNode.getPlaceholder()));
+      return createLoggingExpression(node);
     }
     return super.visitFunctionNode(node);
+  }
+
+  private Expression createLoggingExpression(FunctionNode node) {
+    LoggingFunction loggingNode = (LoggingFunction) node.getSoyFunction();
+    return INCREMENTAL_DOM_EVAL_LOG_FN.call(
+        XID.call(Expressions.stringLiteral(node.getStaticFunctionName())),
+        Expressions.arrayLiteral(visitChildren(node)),
+        Expressions.stringLiteral(loggingNode.getPlaceholder()));
   }
 
   @Override
@@ -89,13 +94,7 @@ public class IncrementalDomTranslateExprNodeVisitor extends TranslateExprNodeVis
   @Override
   protected Expression genCodeForBind(
       Expression template, Expression paramRecord, SoyType templateType) {
-    // Unions are enforced to have the same content kind in CheckTemplateCallsPass.
-    SanitizedContentKind kind =
-        Iterables.getOnlyElement(
-                SoyTypes.expandUnions(templateType).stream()
-                    .map(type -> ((TemplateType) type).getContentKind())
-                    .collect(toImmutableSet()))
-            .getSanitizedContentKind();
+    SanitizedContentKind kind = determineContentKind(templateType);
     if (kind.isHtml() || kind == SanitizedContentKind.ATTRIBUTES) {
       return BIND_TEMPLATE_PARAMS_FOR_IDOM.call(template, paramRecord);
     } else {
@@ -103,9 +102,16 @@ public class IncrementalDomTranslateExprNodeVisitor extends TranslateExprNodeVis
     }
   }
 
+  private SanitizedContentKind determineContentKind(SoyType templateType) {
+    return Iterables.getOnlyElement(
+        SoyTypes.expandUnions(templateType).stream()
+            .map(type -> ((TemplateType) type).getContentKind())
+            .collect(toImmutableSet()))
+        .getSanitizedContentKind();
+  }
+
   @Override
   protected Expression visitProtoEnumValueNode(ProtoEnumValueNode node) {
-    // TODO(b/128869068) Ensure that a hard require is added for this type.
     JsType type = JsType.forJsSrcStrict(SoyTypes.removeNull(node.getType()));
     return number(node.getValue()).castAs(type.typeExpr(), type.getGoogRequires());
   }
@@ -119,7 +125,6 @@ public class IncrementalDomTranslateExprNodeVisitor extends TranslateExprNodeVis
     if (SoyTypes.containsKinds(type, FUNCTION_TYPES)) {
       return SOY_IDOM_IS_TRUTHY.call(chunk);
     }
-
     return super.maybeCoerceToBoolean(type, chunk, force);
   }
 
