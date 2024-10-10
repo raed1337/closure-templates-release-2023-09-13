@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -99,14 +100,18 @@ public final class ForNode extends AbstractParentCommandNode<BlockNode>
 
   @Override
   public String getCommandText() {
-    return ((ForNonemptyNode) getChild(0)).getIndexVar() == null
-        ? String.format(
-            "%s in %s", ((ForNonemptyNode) getChild(0)).getVarRefName(), expr.toSourceString())
-        : String.format(
-            "%s, %s in %s",
-            ((ForNonemptyNode) getChild(0)).getVarRefName(),
-            ((ForNonemptyNode) getChild(0)).getIndexVar().refName(),
-            expr.toSourceString());
+    return formatCommandText((ForNonemptyNode) getChild(0), expr.toSourceString());
+  }
+
+  private String formatCommandText(ForNonemptyNode forNonemptyNode, String exprSource) {
+    if (forNonemptyNode.getIndexVar() == null) {
+      return String.format("%s in %s", forNonemptyNode.getVarRefName(), exprSource);
+    } else {
+      return String.format("%s, %s in %s",
+          forNonemptyNode.getVarRefName(),
+          forNonemptyNode.getIndexVar().refName(),
+          exprSource);
+    }
   }
 
   @Override
