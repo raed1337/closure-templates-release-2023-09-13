@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -48,16 +49,12 @@ public final class ForNonemptyNode extends AbstractBlockNode
       Identifier indexVarIdentifier,
       SourceLocation contentLocation) {
     super(id, contentLocation);
-    this.var =
-        new LocalVar(varIdentifier.identifier(), varIdentifier.location(), this, /* type= */ null);
-    this.indexVar =
-        indexVarIdentifier == null
-            ? null
-            : new LocalVar(
-                indexVarIdentifier.identifier(),
-                indexVarIdentifier.location(),
-                this,
-                /* type= */ null);
+    this.var = createLocalVar(varIdentifier);
+    this.indexVar = indexVarIdentifier == null ? null : createLocalVar(indexVarIdentifier);
+  }
+
+  private LocalVar createLocalVar(Identifier identifier) {
+    return new LocalVar(identifier.identifier(), identifier.location(), this, /* type= */ null);
   }
 
   /**
@@ -96,7 +93,7 @@ public final class ForNonemptyNode extends AbstractBlockNode
 
   @Nullable
   public String getIndexVarName() {
-    return indexVar.name();
+    return indexVar != null ? indexVar.name() : null;
   }
 
   /** Returns the expression we're iterating over. */
