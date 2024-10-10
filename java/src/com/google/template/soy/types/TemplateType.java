@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -54,7 +55,7 @@ public abstract class TemplateType extends SoyType {
           .build();
   private static final Parameter KEY_HIDDEN_ATTRIBUTE =
       Parameter.builder()
-          .setName("ssk")
+          .setName(KEY_HIDDEN_ATTRIBUTE_NAME)
           .setType(StringType.getInstance())
           .setKind(ParameterKind.ATTRIBUTE)
           .setRequired(false)
@@ -100,8 +101,12 @@ public abstract class TemplateType extends SoyType {
   /** The same as {@link #getParameters} but also includes hidden parameters. */
   @Memoized
   public ImmutableList<Parameter> getActualParameters() {
-    ImmutableList.Builder<Parameter> builder =
-        ImmutableList.<Parameter>builder().addAll(getParameters());
+    return buildActualParameters();
+  }
+
+  private ImmutableList<Parameter> buildActualParameters() {
+    ImmutableList.Builder<Parameter> builder = ImmutableList.<Parameter>builder()
+        .addAll(getParameters());
     if (getContentKind() instanceof ElementContentKind) {
       builder.add(KEY_HIDDEN_ATTRIBUTE);
     }
@@ -221,6 +226,10 @@ public abstract class TemplateType extends SoyType {
 
           @Override
           SoyType getType() {
+            return getInitializedType(typeSupplier);
+          }
+
+          private SoyType getInitializedType(Supplier<SoyType> typeSupplier) {
             SoyType local = type;
             if (local == null) {
               local = typeSupplier.get();
@@ -262,8 +271,6 @@ public abstract class TemplateType extends SoyType {
 
     public abstract ParameterKind getKind();
 
-    // TODO(lukes): this will likely not work once we start compiling templates separately,
-    // especially if we want to start pruning the proto descriptors required by the compiler.
     public SoyType getType() {
       return getTypeWrapper().getType();
     }
@@ -274,10 +281,6 @@ public abstract class TemplateType extends SoyType {
 
     public abstract boolean isImplicit();
 
-    /**
-     * Note that description is not serialized by TemplateMetadataSerializer so this field will be
-     * null if this instance is created via deserialization.
-     */
     @Nullable
     public abstract String getDescription();
 
@@ -363,14 +366,10 @@ public abstract class TemplateType extends SoyType {
     TemplateContentKind templateContentKind = fromType(returnType);
     SanitizedContentKind contentKind = templateContentKind.getSanitizedContentKind();
     return builder()
-        // Declared templates can only be basic templates (no deltemplates/elements allowed).
         .setTemplateKind(TemplateKind.BASIC)
         .setContentKind(templateContentKind)
-        // Declared HTML templates are implicitly strict. A separate check enforces that
-        // non-strict templates may not be bound in template literals.
         .setStrictHtml(contentKind.isHtml())
         .setParameters(ImmutableList.copyOf(parameters))
-        // data=all is banned on declared templates.
         .setDataAllCallSituations(ImmutableList.of())
         .setIdentifierForDebugging(
             stringRepresentation(parameters, templateContentKind, ImmutableSet.of()))
@@ -413,8 +412,6 @@ public abstract class TemplateType extends SoyType {
         srcTemplate.getParameters().stream()
             .collect(toImmutableMap(Parameter::getName, identity()));
 
-    // The source template type's arguments must be a superset of this type's arguments (possibly
-    // containing some optional parameters omitted from this type).
     for (Parameter thisParam : getParameters()) {
       if (thisParam.getKind() == ParameterKind.ATTRIBUTE) {
         if (!(srcParams.containsKey(thisParam.getName())
@@ -435,9 +432,6 @@ public abstract class TemplateType extends SoyType {
           return false;
         }
       } else {
-        // Check that each argument of the source type is assignable FROM the corresponding
-        // argument of this type. This is because the parameter types are constraints; assignability
-        // of a template type is only possible when the constraints of the from-type are narrower.
         if (!srcParam.getType().isAssignableFromInternal(thisParam.getType(), unknownPolicy)) {
           return false;
         }
