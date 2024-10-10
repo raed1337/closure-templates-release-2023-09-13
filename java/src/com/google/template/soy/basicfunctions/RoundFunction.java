@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -60,6 +61,10 @@ final class RoundFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return handleJavaScriptArgs(factory, args);
+  }
+
+  private JavaScriptValue handleJavaScriptArgs(JavaScriptValueFactory factory, List<JavaScriptValue> args) {
     if (args.size() == 1) {
       return factory.global("Math").invokeMethod("round", args.get(0));
     }
@@ -87,6 +92,10 @@ final class RoundFunction
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return handleJavaArgs(factory, args);
+  }
+
+  private JavaValue handleJavaArgs(JavaValueFactory factory, List<JavaValue> args) {
     if (args.size() == 1) {
       return factory.callStaticMethod(Methods.BOXED_ROUND_FN, args.get(0));
     } else {
