@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -40,17 +41,12 @@ public abstract class DetachableSoyValueProvider implements SoyValueProvider {
   @Override
   public final SoyValue resolve() {
     JbcSrcRuntime.awaitProvider(this);
-    SoyValue local = resolvedValue;
-    checkState(local != TombstoneValue.INSTANCE, "doResolve didn't replace tombstone");
-    return local;
+    return getResolvedValue();
   }
 
   @Override
   public final RenderResult status() {
-    if (resolvedValue != TombstoneValue.INSTANCE) {
-      return RenderResult.done();
-    }
-    return doResolve();
+    return (resolvedValue != TombstoneValue.INSTANCE) ? RenderResult.done() : doResolve();
   }
 
   @Override
@@ -58,14 +54,24 @@ public abstract class DetachableSoyValueProvider implements SoyValueProvider {
       throws IOException {
     RenderResult result = status();
     if (result.isDone()) {
-      SoyValue resolved = resolve();
-      if (resolved == null) {
-        appendable.append("null");
-      } else {
-        resolved.render(appendable);
-      }
+      renderResolvedValue(appendable);
     }
     return result;
+  }
+
+  private SoyValue getResolvedValue() {
+    SoyValue local = resolvedValue;
+    checkState(local != TombstoneValue.INSTANCE, "doResolve didn't replace tombstone");
+    return local;
+  }
+
+  private void renderResolvedValue(LoggingAdvisingAppendable appendable) throws IOException {
+    SoyValue resolved = resolve();
+    if (resolved == null) {
+      appendable.append("null");
+    } else {
+      resolved.render(appendable);
+    }
   }
 
   /** Overridden by generated subclasses to implement lazy detachable resolution. */
