@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -161,7 +162,7 @@ public abstract class SoyType {
     DISALLOWED
   }
 
-  // memoize the proto version.  SoyTypes are immutable so this is safe/correct and types are likely
+  // memoize the proto version. SoyTypes are immutable so this is safe/correct and types are likely
   // to be serialized many times (think, 'string'), so we can save some work by not calculating it
   // repeatedly.
   @LazyInit private SoyTypeP protoDual;
@@ -249,14 +250,16 @@ public abstract class SoyType {
 
   /** The type represented in proto format. For template metadata protos. */
   public final SoyTypeP toProto() {
-    SoyTypeP local = protoDual;
-    if (local == null) {
-      SoyTypeP.Builder builder = SoyTypeP.newBuilder();
-      doToProto(builder);
-      local = builder.build();
-      protoDual = local;
+    if (protoDual == null) {
+      synchronized (this) {
+        if (protoDual == null) {
+          SoyTypeP.Builder builder = SoyTypeP.newBuilder();
+          doToProto(builder);
+          protoDual = builder.build();
+        }
+      }
     }
-    return local;
+    return protoDual;
   }
 
   @ForOverride
