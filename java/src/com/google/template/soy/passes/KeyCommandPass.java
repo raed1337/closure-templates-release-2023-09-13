@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -69,15 +70,22 @@ final class KeyCommandPass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     for (KeyNode node : SoyTreeUtils.getAllNodesOfType(file, KeyNode.class)) {
-      checkNodeIsValidChildOfOpenTagNode(node);
-      checkNoDuplicateKeyAttribute(node);
-      if (!disableAllTypeChecking) {
-        checkNodeIsSupportedType(node.getExpr());
-      }
+      validateKeyNode(node);
     }
-    if (disableAllTypeChecking) {
-      return;
+    if (!disableAllTypeChecking) {
+      checkCallNodes(file);
     }
+  }
+
+  private void validateKeyNode(KeyNode node) {
+    checkNodeIsValidChildOfOpenTagNode(node);
+    checkNoDuplicateKeyAttribute(node);
+    if (!disableAllTypeChecking) {
+      checkNodeIsSupportedType(node.getExpr());
+    }
+  }
+
+  private void checkCallNodes(SoyFileNode file) {
     for (CallNode call : SoyTreeUtils.getAllNodesOfType(file, CallNode.class)) {
       if (call.getKeyExpr() != null) {
         checkNodeIsSupportedType(call.getKeyExpr());
@@ -135,52 +143,56 @@ final class KeyCommandPass implements CompilerFilePass {
             : ImmutableSet.of(exprType);
     boolean isSupportedType = true;
     for (SoyType type : unwrapped) {
-      switch (type.getKind()) {
-        case NULL:
-        case UNDEFINED:
-        case INT:
-        case FLOAT:
-        case STRING:
-        case PROTO_ENUM:
-          // these are all fine.
-          // null should potentially be rejected, but it is often hard to avoid nullable expressions
-          break;
-        case BOOL:
-        case HTML:
-        case ELEMENT:
-        case ATTRIBUTES:
-        case JS:
-        case CSS:
-        case URI:
-        case TRUSTED_RESOURCE_URI:
-        case LIST:
-        case RECORD:
-        case LEGACY_OBJECT_MAP:
-        case MAP:
-        case MESSAGE:
-        case PROTO:
-        case TEMPLATE:
-        case VE:
-        case VE_DATA:
-        case ANY:
-        case UNKNOWN:
-          isSupportedType = false;
-          break;
-        case UNION:
-        case CSS_TYPE:
-        case CSS_MODULE:
-        case PROTO_TYPE:
-        case PROTO_ENUM_TYPE:
-        case PROTO_EXTENSION:
-        case PROTO_MODULE:
-        case TEMPLATE_TYPE:
-        case TEMPLATE_MODULE:
-        case FUNCTION:
-          throw new AssertionError("impossible");
-      }
+      isSupportedType = validateSoyType(type, isSupportedType);
     }
     if (!isSupportedType) {
       errorReporter.report(exprRootNode.getSourceLocation(), UNSUPPORTED_TYPE, exprType);
     }
+  }
+
+  private boolean validateSoyType(SoyType type, boolean isSupportedType) {
+    switch (type.getKind()) {
+      case NULL:
+      case UNDEFINED:
+      case INT:
+      case FLOAT:
+      case STRING:
+      case PROTO_ENUM:
+        // these are all fine.
+        break;
+      case BOOL:
+      case HTML:
+      case ELEMENT:
+      case ATTRIBUTES:
+      case JS:
+      case CSS:
+      case URI:
+      case TRUSTED_RESOURCE_URI:
+      case LIST:
+      case RECORD:
+      case LEGACY_OBJECT_MAP:
+      case MAP:
+      case MESSAGE:
+      case PROTO:
+      case TEMPLATE:
+      case VE:
+      case VE_DATA:
+      case ANY:
+      case UNKNOWN:
+        isSupportedType = false;
+        break;
+      case UNION:
+      case CSS_TYPE:
+      case CSS_MODULE:
+      case PROTO_TYPE:
+      case PROTO_ENUM_TYPE:
+      case PROTO_EXTENSION:
+      case PROTO_MODULE:
+      case TEMPLATE_TYPE:
+      case TEMPLATE_MODULE:
+      case FUNCTION:
+        throw new AssertionError("impossible");
+    }
+    return isSupportedType;
   }
 }
