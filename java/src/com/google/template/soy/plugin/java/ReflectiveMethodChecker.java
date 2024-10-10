@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -24,6 +25,10 @@ public final class ReflectiveMethodChecker extends AbstractMethodChecker {
 
   @Override
   protected ClassSignatures getSignatures(String className) {
+    return retrieveSignatures(className);
+  }
+
+  private ClassSignatures retrieveSignatures(String className) {
     return CompiledJarsPluginSignatureReader.indexReflectively(className);
   }
 }
