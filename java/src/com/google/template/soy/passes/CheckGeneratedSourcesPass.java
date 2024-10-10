@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -52,16 +53,15 @@ public class CheckGeneratedSourcesPass implements CompilerFileSetPass {
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     for (SoyFileNode sourceFile : sourceFiles) {
-      if (!check(sourceFile)) {
-        errorReporter.report(
-            sourceFile.getNamespaceDeclaration().getSourceLocation(), UNBLESSED_GENERATED_FILE);
+      if (!isValidGeneratedSource(sourceFile)) {
+        reportError(sourceFile);
         return Result.STOP;
       }
     }
     return Result.CONTINUE;
   }
 
-  private boolean check(SoyFileNode sourceFile) {
+  private boolean isValidGeneratedSource(SoyFileNode sourceFile) {
     if (!generatedPaths.contains(sourceFile.getFilePath())) {
       return true;
     }
@@ -70,7 +70,16 @@ public class CheckGeneratedSourcesPass implements CompilerFileSetPass {
       return true;
     }
 
+    return containsBlessComment(sourceFile);
+  }
+
+  private boolean containsBlessComment(SoyFileNode sourceFile) {
     return sourceFile.getComments().stream()
         .anyMatch(c -> BLESS_COMMENT.matcher(c.getSource()).find());
+  }
+
+  private void reportError(SoyFileNode sourceFile) {
+    errorReporter.report(
+        sourceFile.getNamespaceDeclaration().getSourceLocation(), UNBLESSED_GENERATED_FILE);
   }
 }
