@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2022 Google Inc.
  *
@@ -34,10 +35,10 @@ public class DelcallAnnotationVisitor extends AbstractSoyNodeVisitor<ImmutableSe
   /** Collects final output. */
   private final ImmutableSet.Builder<String> output;
 
-  /** Map of variable to mod templates that are referenced in its delcaration. */
+  /** Map of variable to mod templates that are referenced in its declaration. */
   private final Map<String, ImmutableSet<String>> modTemplateRefs;
 
-  /** Map of variable to other variables that are referenced in its delcaration. */
+  /** Map of variable to other variables that are referenced in its declaration. */
   private final Map<String, ImmutableSet<String>> varRefs;
 
   public DelcallAnnotationVisitor() {
@@ -54,10 +55,7 @@ public class DelcallAnnotationVisitor extends AbstractSoyNodeVisitor<ImmutableSe
 
   @Override
   protected void visitLetValueNode(LetValueNode node) {
-    FindModTemplatesAndVars visitor = new FindModTemplatesAndVars();
-    visitor.exec(node.getExpr());
-    modTemplateRefs.put(node.getVarName(), visitor.getModTemplates());
-    varRefs.put(node.getVarName(), visitor.getVarRefs());
+    processLetValueNode(node);
   }
 
   @Override
@@ -97,6 +95,14 @@ public class DelcallAnnotationVisitor extends AbstractSoyNodeVisitor<ImmutableSe
     if (node instanceof ParentSoyNode) {
       visitChildren((ParentSoyNode) node);
     }
+  }
+
+  /** Process LetValueNode to extract mod templates and variable references. */
+  private void processLetValueNode(LetValueNode node) {
+    FindModTemplatesAndVars visitor = new FindModTemplatesAndVars();
+    visitor.exec(node.getExpr());
+    modTemplateRefs.put(node.getVarName(), visitor.getModTemplates());
+    varRefs.put(node.getVarName(), visitor.getVarRefs());
   }
 
   /** Finds all mod template literals and variables contained in an expression. */
