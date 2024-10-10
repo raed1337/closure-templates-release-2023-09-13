@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -35,6 +36,8 @@ public final class SoyConformancePass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    conformance.check(file, errorReporter);
+    if (file != null && nodeIdGen != null) {
+      conformance.check(file, errorReporter);
+    }
   }
 }
