@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -41,8 +42,6 @@ import java.util.List;
 @SoyFunctionSignature(
     name = "max",
     value =
-        // TODO(b/70946095): these should all be number. The ResolveExpressionTypesPass narrows the
-        // type.
         @Signature(
             returnType = "?",
             parameterTypes = {"?", "?"}))
@@ -62,9 +61,8 @@ public final class MaxFunction
     return factory.global("max").call(args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
-    private static final Method MAX_FN =
+    private static final Method MAX_FN = 
         JavaValueFactory.createMethod(
             BasicFunctionsRuntime.class, "max", SoyValue.class, SoyValue.class);
   }
