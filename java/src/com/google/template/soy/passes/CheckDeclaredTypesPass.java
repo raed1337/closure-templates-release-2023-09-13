@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -59,14 +60,15 @@ final class CheckDeclaredTypesPass implements CompilerFilePass {
     for (TemplateNode templateNode : file.getTemplates()) {
       for (TemplateHeaderVarDefn param : templateNode.getHeaderParams()) {
         TypeNode type = param.getTypeNode();
-        // Skip this if it's a param with a default value and an inferred type. In the case of an
-        // illegal map key type, the error will be reported on the map literal by
-        // ResolveExpressionTypesPass.
         if (type != null) {
-          type.accept(new MapKeyTypeChecker());
+          checkTypeNode(type);
         }
       }
     }
+  }
+
+  private void checkTypeNode(TypeNode type) {
+    type.accept(new MapKeyTypeChecker());
   }
 
   private final class MapKeyTypeChecker implements TypeNodeVisitor<Void> {
@@ -79,38 +81,20 @@ final class CheckDeclaredTypesPass implements CompilerFilePass {
     @Override
     public Void visit(GenericTypeNode node) {
       if (!node.isTypeResolved()) {
-        // this means an error was already reported
-        return null;
+        return null; // this means an error was already reported
       }
       switch (node.getResolvedType().getKind()) {
         case MAP:
-          checkArgument(node.arguments().size() == 2);
-          TypeNode key = node.arguments().get(0);
-          if (!MapType.isAllowedKeyType(key.getResolvedType())) {
-            errorReporter.report(
-                key.sourceLocation(), MapType.BAD_MAP_KEY_TYPE, key.getResolvedType());
-          }
-          node.arguments().get(1).accept(this);
+          checkMapType(node);
           break;
         case LIST:
-          checkArgument(node.arguments().size() == 1);
-          node.arguments().get(0).accept(this);
+          checkListType(node);
           break;
         case LEGACY_OBJECT_MAP:
-          checkArgument(node.arguments().size() == 2);
-          for (TypeNode child : node.arguments()) {
-            child.accept(this);
-          }
+          checkLegacyObjectMapType(node);
           break;
         case VE:
-          checkArgument(node.arguments().size() == 1);
-          TypeNode dataType = node.arguments().get(0);
-          if (dataType.getResolvedType().getKind() != Kind.PROTO
-              && dataType.getResolvedType().getKind() != Kind.NULL) {
-            errorReporter.report(
-                dataType.sourceLocation(), VE_BAD_DATA_TYPE, dataType.getResolvedType());
-          }
-          node.arguments().get(0).accept(this);
+          checkVeType(node);
           break;
         case ELEMENT:
           break;
@@ -118,6 +102,39 @@ final class CheckDeclaredTypesPass implements CompilerFilePass {
           throw new AssertionError("unexpected generic type: " + node.getResolvedType().getKind());
       }
       return null;
+    }
+
+    private void checkMapType(GenericTypeNode node) {
+      checkArgument(node.arguments().size() == 2);
+      TypeNode key = node.arguments().get(0);
+      if (!MapType.isAllowedKeyType(key.getResolvedType())) {
+        errorReporter.report(
+            key.sourceLocation(), MapType.BAD_MAP_KEY_TYPE, key.getResolvedType());
+      }
+      node.arguments().get(1).accept(this);
+    }
+
+    private void checkListType(GenericTypeNode node) {
+      checkArgument(node.arguments().size() == 1);
+      node.arguments().get(0).accept(this);
+    }
+
+    private void checkLegacyObjectMapType(GenericTypeNode node) {
+      checkArgument(node.arguments().size() == 2);
+      for (TypeNode child : node.arguments()) {
+        child.accept(this);
+      }
+    }
+
+    private void checkVeType(GenericTypeNode node) {
+      checkArgument(node.arguments().size() == 1);
+      TypeNode dataType = node.arguments().get(0);
+      if (dataType.getResolvedType().getKind() != Kind.PROTO
+          && dataType.getResolvedType().getKind() != Kind.NULL) {
+        errorReporter.report(
+            dataType.sourceLocation(), VE_BAD_DATA_TYPE, dataType.getResolvedType());
+      }
+      node.arguments().get(0).accept(this);
     }
 
     @Override
