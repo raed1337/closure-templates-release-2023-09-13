@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -22,9 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.template.soy.base.internal.IdGenerator;
 import com.google.template.soy.error.ErrorReporter;
 import com.google.template.soy.exprtree.ExprNode;
-import com.google.template.soy.soytree.IfCondNode;
 import com.google.template.soy.soytree.SoyNode;
-import com.google.template.soy.soytree.SwitchCaseNode;
 import java.util.Optional;
 import javax.annotation.Nullable;
 
@@ -39,15 +38,11 @@ import javax.annotation.Nullable;
 public final class HtmlMatcherConditionNode extends HtmlMatcherGraphNode {
 
   private final SoyNode soyNode;
-
-  private EdgeKind activeEdge = EdgeKind.TRUE_EDGE;
-
   private final ExprNode expression;
-
   private final HtmlMatcherGraph graph;
 
+  private EdgeKind activeEdge = EdgeKind.TRUE_EDGE;
   @Nullable private HtmlMatcherGraphNode trueBranchNode = null;
-
   @Nullable private HtmlMatcherGraphNode falseBranchNode = null;
 
   private Optional<Boolean> isInternallyBalancedForForeignContent = Optional.empty();
@@ -60,9 +55,7 @@ public final class HtmlMatcherConditionNode extends HtmlMatcherGraphNode {
   }
 
   public HtmlMatcherConditionNode(SoyNode soyNode, ExprNode expression) {
-    this.soyNode = soyNode;
-    this.expression = expression;
-    this.graph = null;
+    this(soyNode, expression, null);
   }
 
   public ExprNode getExpression() {
@@ -71,21 +64,32 @@ public final class HtmlMatcherConditionNode extends HtmlMatcherGraphNode {
 
   public boolean isInternallyBalanced(int foreignContentTagDepth, IdGenerator idGenerator) {
     ErrorReporter errorReporter = ErrorReporter.create(ImmutableMap.of());
-    HtmlTagMatchingPass pass =
-        new HtmlTagMatchingPass(
+    HtmlTagMatchingPass pass = createHtmlTagMatchingPass(errorReporter, idGenerator, foreignContentTagDepth);
+    
+    if (foreignContentTagDepth > 0) {
+      return checkInternallyBalancedForForeignContent(errorReporter, pass);
+    }
+    return checkInternallyBalanced(errorReporter, pass);
+  }
+
+  private HtmlTagMatchingPass createHtmlTagMatchingPass(ErrorReporter errorReporter, IdGenerator idGenerator, int foreignContentTagDepth) {
+    return new HtmlTagMatchingPass(
             errorReporter,
             idGenerator,
-
             /* inCondition= */ true,
             foreignContentTagDepth,
             "condition");
-    if (foreignContentTagDepth > 0) {
-      if (!isInternallyBalancedForForeignContent.isPresent()) {
-        pass.run(graph);
-        isInternallyBalancedForForeignContent = Optional.of(errorReporter.getErrors().isEmpty());
-      }
-      return isInternallyBalancedForForeignContent.get();
+  }
+
+  private boolean checkInternallyBalancedForForeignContent(ErrorReporter errorReporter, HtmlTagMatchingPass pass) {
+    if (!isInternallyBalancedForForeignContent.isPresent()) {
+      pass.run(graph);
+      isInternallyBalancedForForeignContent = Optional.of(errorReporter.getErrors().isEmpty());
     }
+    return isInternallyBalancedForForeignContent.get();
+  }
+
+  private boolean checkInternallyBalanced(ErrorReporter errorReporter, HtmlTagMatchingPass pass) {
     if (!isInternallyBalanced.isPresent()) {
       pass.run(graph);
       isInternallyBalanced = Optional.of(errorReporter.getErrors().isEmpty());
