@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -35,6 +36,7 @@ public final class DebuggerNode extends AbstractCommandNode
    * Copy constructor.
    *
    * @param orig The node to copy.
+   * @param copyState The state of the copy operation.
    */
   private DebuggerNode(DebuggerNode orig, CopyState copyState) {
     super(orig, copyState);
@@ -51,6 +53,12 @@ public final class DebuggerNode extends AbstractCommandNode
     return (ParentSoyNode<StandaloneNode>) super.getParent();
   }
 
+  /**
+   * Creates a copy of this DebuggerNode.
+   *
+   * @param copyState The state of the copy operation.
+   * @return A new instance of DebuggerNode that is a copy of this node.
+   */
   @Override
   public DebuggerNode copy(CopyState copyState) {
     return new DebuggerNode(this, copyState);
