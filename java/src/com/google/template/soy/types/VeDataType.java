@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -22,11 +23,11 @@ public final class VeDataType extends PrimitiveType {
 
   private static final VeDataType INSTANCE = new VeDataType();
 
+  private VeDataType() {}
+
   public static VeDataType getInstance() {
     return INSTANCE;
   }
-
-  private VeDataType() {}
 
   @Override
   public Kind getKind() {
