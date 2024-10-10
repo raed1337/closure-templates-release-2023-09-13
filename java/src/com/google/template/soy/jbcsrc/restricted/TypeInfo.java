@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -30,6 +31,7 @@ import org.objectweb.asm.Type;
  */
 @AutoValue
 public abstract class TypeInfo {
+  
   public static TypeInfo create(Class<?> clazz) {
     Type type = Type.getType(clazz);
     return new AutoValue_TypeInfo(
@@ -42,14 +44,15 @@ public abstract class TypeInfo {
   }
 
   public static TypeInfo create(String className, boolean isInterface) {
-    // Translates a java class name (foo.bar.Baz$Quux) to a java 'internal' name and then translates
-    // that to a Type object
     Type type = Type.getObjectType(className.replace('.', '/'));
-    // This logic is specified by Class.getSimpleName()
-    String packageLessName = className.substring(className.lastIndexOf('.') + 1);
-    String simpleName = packageLessName.substring(packageLessName.lastIndexOf('$') + 1);
+    String simpleName = extractSimpleName(className);
     return new AutoValue_TypeInfo(
         className, simpleName, type.getInternalName(), type, isInterface, Optional.empty());
+  }
+
+  private static String extractSimpleName(String className) {
+    String packageLessName = className.substring(className.lastIndexOf('.') + 1);
+    return packageLessName.substring(packageLessName.lastIndexOf('$') + 1);
   }
 
   public static TypeInfo createClass(String className) {
