@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -49,6 +51,9 @@ import java.util.List;
 final class HtmlToTextFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method HTML_TO_TEXT = 
+      JavaValueFactory.createMethod(HtmlToText.class, "convert", SoyValue.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -61,15 +66,9 @@ final class HtmlToTextFunction
     return factory.global("sanitize.html_to_text").call(args.get(0));
   }
 
-  // Lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method HTML_TO_TEXT =
-        JavaValueFactory.createMethod(HtmlToText.class, "convert", SoyValue.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.HTML_TO_TEXT, args.get(0));
+    return factory.callStaticMethod(HTML_TO_TEXT, args.get(0));
   }
 }
