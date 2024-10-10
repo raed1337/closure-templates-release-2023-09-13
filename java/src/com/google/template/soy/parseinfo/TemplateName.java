@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -27,6 +28,9 @@ import com.google.errorprone.annotations.Immutable;
 public abstract class TemplateName {
 
   public static TemplateName of(String name) {
+    if (name == null || name.trim().isEmpty()) {
+      throw new IllegalArgumentException("Template name must not be null or empty.");
+    }
     return new AutoValue_TemplateName(name);
   }
 
