@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -31,11 +32,8 @@ import java.util.Objects;
  */
 public final class LegacyObjectMapType extends AbstractMapType {
 
-  // TODO(lukes): see if this can be replaced with legacy_object_map<?, ?>
   public static final LegacyObjectMapType EMPTY_MAP = new LegacyObjectMapType(null, null);
-
-  public static final LegacyObjectMapType ANY_MAP =
-      new LegacyObjectMapType(AnyType.getInstance(), AnyType.getInstance());
+  public static final LegacyObjectMapType ANY_MAP = new LegacyObjectMapType(AnyType.getInstance(), AnyType.getInstance());
 
   /** The declared type of item keys in this map. */
   private final SoyType keyType;
@@ -71,20 +69,21 @@ public final class LegacyObjectMapType extends AbstractMapType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType srcType, UnknownAssignmentPolicy policy) {
-    if (srcType.getKind() == Kind.LEGACY_OBJECT_MAP) {
-      LegacyObjectMapType srcMapType = (LegacyObjectMapType) srcType;
-      if (srcMapType == EMPTY_MAP) {
-        return true;
-      } else if (this == EMPTY_MAP) {
-        return false;
-      }
-      // Maps are covariant.
-      return keyType.isAssignableFromInternal(srcMapType.keyType, policy)
-          && valueType.isAssignableFromInternal(srcMapType.valueType, policy);
+    if (srcType.getKind() != Kind.LEGACY_OBJECT_MAP) {
+      return false;
     }
-    return false;
+    return isAssignableFromLegacyObjectMap((LegacyObjectMapType) srcType, policy);
   }
 
+  private boolean isAssignableFromLegacyObjectMap(LegacyObjectMapType srcMapType, UnknownAssignmentPolicy policy) {
+    if (srcMapType == EMPTY_MAP) {
+      return true;
+    } else if (this == EMPTY_MAP) {
+      return false;
+    }
+    return keyType.isAssignableFromInternal(srcMapType.keyType, policy)
+        && valueType.isAssignableFromInternal(srcMapType.valueType, policy);
+  }
 
   @Override
   public String toString() {
@@ -98,12 +97,12 @@ public final class LegacyObjectMapType extends AbstractMapType {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other.getClass() == this.getClass()) {
-      LegacyObjectMapType otherMap = (LegacyObjectMapType) other;
-      return Objects.equals(otherMap.keyType, keyType)
-          && Objects.equals(otherMap.valueType, valueType);
+    if (!(other instanceof LegacyObjectMapType)) {
+      return false;
     }
-    return false;
+    LegacyObjectMapType otherMap = (LegacyObjectMapType) other;
+    return Objects.equals(otherMap.keyType, keyType)
+        && Objects.equals(otherMap.valueType, valueType);
   }
 
   @Override
