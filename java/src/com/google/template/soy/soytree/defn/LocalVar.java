@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -32,8 +33,7 @@ public class LocalVar extends AbstractLocalVarDefn<LocalVarNode> {
    * @param declaringNode The statement in which this variable is defined.
    * @param type The data type of the variable.
    */
-  public LocalVar(
-      String name, SourceLocation nameLocation, LocalVarNode declaringNode, SoyType type) {
+  public LocalVar(String name, SourceLocation nameLocation, LocalVarNode declaringNode, SoyType type) {
     super(name, nameLocation, declaringNode, type);
   }
 
