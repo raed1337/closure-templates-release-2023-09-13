@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -64,10 +65,7 @@ public final class HtmlAttributeNode extends AbstractParentSoyNode<StandaloneNod
 
   @Nullable
   public String getConcatenationDelimiter() {
-    if (getStaticKey() != null && CONCATENATED_ATTRIBUTES.containsKey(getStaticKey())) {
-      return CONCATENATED_ATTRIBUTES.get(this.getStaticKey());
-    }
-    return null;
+    return CONCATENATED_ATTRIBUTES.get(getStaticKey());
   }
 
   public boolean hasValue() {
@@ -75,7 +73,8 @@ public final class HtmlAttributeNode extends AbstractParentSoyNode<StandaloneNod
   }
 
   public boolean isSoyAttr() {
-    return getStaticKey() != null && getStaticKey().startsWith("@");
+    String staticKey = getStaticKey();
+    return staticKey != null && staticKey.startsWith("@");
   }
 
   /** Returns the static value, if one exists, or null otherwise. */
@@ -84,6 +83,11 @@ public final class HtmlAttributeNode extends AbstractParentSoyNode<StandaloneNod
     if (!hasValue()) {
       return null;
     }
+    return extractStaticContent();
+  }
+
+  @Nullable
+  private String extractStaticContent() {
     SoyNode value = getChild(1);
     if (!(value instanceof HtmlAttributeValueNode)) {
       return null;
@@ -104,10 +108,7 @@ public final class HtmlAttributeNode extends AbstractParentSoyNode<StandaloneNod
 
   @Nullable
   public String getStaticKey() {
-    if (getChild(0) instanceof RawTextNode) {
-      return ((RawTextNode) getChild(0)).getRawText();
-    }
-    return null;
+    return (getChild(0) instanceof RawTextNode) ? ((RawTextNode) getChild(0)).getRawText() : null;
   }
 
   public SourceLocation getEqualsLocation() {
@@ -136,6 +137,10 @@ public final class HtmlAttributeNode extends AbstractParentSoyNode<StandaloneNod
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
     sb.append(getChild(0).toSourceString());
     if (hasValue()) {
