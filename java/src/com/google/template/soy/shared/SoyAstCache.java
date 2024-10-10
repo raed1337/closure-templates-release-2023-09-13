@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -38,7 +39,6 @@ public final class SoyAstCache {
   /** A {@link SoyFileNode} with an associated {@link Version}. */
   private static final class VersionedFile {
     final SoyFileNode file;
-
     final Version version;
 
     VersionedFile(SoyFileNode file, Version version) {
@@ -80,14 +80,11 @@ public final class SoyAstCache {
    */
   public synchronized SoyFileNode get(SourceFilePath fileName, Version version) {
     VersionedFile entry = cache.get(fileName);
-    if (entry != null) {
-      if (entry.version.equals(version)) {
-        return entry.file;
-      } else {
-        // Aggressively purge to save memory.
-        cache.remove(fileName);
-      }
-    }
+    return (entry != null && entry.version.equals(version)) ? entry.file : handleCacheMiss(fileName);
+  }
+
+  private synchronized SoyFileNode handleCacheMiss(SourceFilePath fileName) {
+    cache.remove(fileName); // Aggressively purge to save memory.
     return null;
   }
 
