@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -40,7 +41,7 @@ import javax.annotation.Nullable;
 public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     implements SplitLevelTopNode<SoyNode> {
 
-  /** A css path required by a Soy file. Constains both the source text and the resolved file. */
+  /** A css path required by a Soy file. Contains both the source text and the resolved file. */
   public static final class CssPath {
     private final String sourcePath;
     private String resolvedPath;
@@ -81,20 +82,12 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     }
   }
 
-  /** The name and location of the containing modname, or null if none. */
   @Nullable private final ModNameDeclaration modName;
-
-  /** This Soy file's namespace, or null if syntax version V1. */
   private final NamespaceDeclaration namespaceDeclaration;
-
   private final ImmutableList<AliasDeclaration> aliasDeclarations;
-
   private final TemplateNode.SoyFileHeaderInfo headerInfo;
-
   private final ImmutableList<Comment> comments;
-
   private final ImportsContext importsContext;
-
   private final ImmutableList<CssPath> requiredCssPaths;
 
   /**
@@ -113,8 +106,8 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     super(id, sourceLocation);
     this.headerInfo = headerInfo;
     this.modName = headerInfo.getModNameDeclaration();
-    this.namespaceDeclaration = namespaceDeclaration; // Immutable
-    this.aliasDeclarations = headerInfo.getAliases(); // immutable
+    this.namespaceDeclaration = namespaceDeclaration;
+    this.aliasDeclarations = headerInfo.getAliases();
     this.comments = comments;
     this.importsContext = new ImportsContext();
     this.requiredCssPaths =
@@ -123,20 +116,13 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
             .collect(toImmutableList());
   }
 
-  /**
-   * Copy constructor.
-   *
-   * @param orig The node to copy.
-   */
   private SoyFileNode(SoyFileNode orig, CopyState copyState) {
     super(orig, copyState);
     this.modName = orig.modName;
     this.namespaceDeclaration = orig.namespaceDeclaration.copy(copyState);
-    this.aliasDeclarations = orig.aliasDeclarations; // immutable
+    this.aliasDeclarations = orig.aliasDeclarations;
     this.headerInfo = orig.headerInfo.copy();
     this.comments = orig.comments;
-    // Imports context must be reset during edit-refresh (can't be set/cached in single file
-    // passes).
     this.importsContext = new ImportsContext();
     this.requiredCssPaths =
         orig.requiredCssPaths.stream().map(CssPath::copy).collect(toImmutableList());
@@ -147,7 +133,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     return Kind.SOY_FILE_NODE;
   }
 
-  /** Returns the attibutes of the namespace tag. */
+  /** Returns the attributes of the namespace tag. */
   public ImmutableList<CommandTagAttribute> getNamespaceAttributes() {
     return namespaceDeclaration.attrs;
   }
@@ -183,7 +169,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     return namespaceDeclaration.getRequiredCssNamespaces();
   }
 
-  /** Returns the CSS namespaces required by this file (usable in any template in this file). */
+  /** Returns the CSS paths required by this file. */
   public ImmutableList<CssPath> getRequiredCssPaths() {
     return requiredCssPaths;
   }
@@ -197,7 +183,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
         .collect(toImmutableList());
   }
 
-  /** Return the CSS namespaces required (i.e. requirecsspath) and imported by this file. */
+  /** Returns the CSS namespaces required and imported by this file. */
   public ImmutableList<CssPath> getAllRequiredCssPaths() {
     return ImmutableList.<CssPath>builder()
         .addAll(getRequiredCssPaths())
@@ -208,12 +194,11 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
   public ImmutableList<String> getRequireCss() {
     return ImmutableList.<String>builder()
         .addAll(getRequiredCssNamespaces())
-        .addAll(
-            getAllRequiredCssPaths().stream().map(CssPath::sourcePath).collect(toImmutableList()))
+        .addAll(getAllRequiredCssPaths().stream().map(CssPath::sourcePath).collect(toImmutableList()))
         .build();
   }
 
-  /** Returns the CSS base namespace for this file (usable in any template in this file). */
+  /** Returns the CSS base namespace for this file. */
   @Nullable
   public String getCssBaseNamespace() {
     return namespaceDeclaration.getCssBaseNamespace();
@@ -236,8 +221,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
 
   public boolean isEmpty() {
     return this.getChildren().stream()
-        .noneMatch(
-            c -> c instanceof TemplateNode || c instanceof ConstNode || c instanceof ExternNode);
+        .noneMatch(c -> c instanceof TemplateNode || c instanceof ConstNode || c instanceof ExternNode);
   }
 
   public ImmutableList<ConstNode> getConstants() {
@@ -262,7 +246,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     return getSourceLocation().getFileName();
   }
 
-  /** Returns all comments in the entire Soy file (not just doc-level comments). */
+  /** Returns all comments in the entire Soy file. */
   public ImmutableList<Comment> getComments() {
     return comments;
   }
@@ -292,7 +276,6 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
 
   @Override
   public String toSourceString() {
-
     StringBuilder sb = new StringBuilder();
 
     if (modName != null) {
@@ -303,13 +286,7 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     if (!aliasDeclarations.isEmpty()) {
       sb.append("\n");
       for (AliasDeclaration aliasDeclaration : aliasDeclarations) {
-        String alias = aliasDeclaration.alias().identifier();
-        String aliasNamespace = aliasDeclaration.namespace().identifier();
-        if (aliasNamespace.equals(alias) || aliasNamespace.endsWith("." + alias)) {
-          sb.append("{alias ").append(aliasNamespace).append("}\n");
-        } else {
-          sb.append("{alias ").append(aliasNamespace).append(" as ").append(alias).append("}\n");
-        }
+        appendAlias(sb, aliasDeclaration);
       }
     }
 
@@ -319,6 +296,16 @@ public final class SoyFileNode extends AbstractParentSoyNode<SoyNode>
     }
 
     return sb.toString();
+  }
+
+  private void appendAlias(StringBuilder sb, AliasDeclaration aliasDeclaration) {
+    String alias = aliasDeclaration.alias().identifier();
+    String aliasNamespace = aliasDeclaration.namespace().identifier();
+    if (aliasNamespace.equals(alias) || aliasNamespace.endsWith("." + alias)) {
+      sb.append("{alias ").append(aliasNamespace).append("}\n");
+    } else {
+      sb.append("{alias ").append(aliasNamespace).append(" as ").append(alias).append("}\n");
+    }
   }
 
   @Override
