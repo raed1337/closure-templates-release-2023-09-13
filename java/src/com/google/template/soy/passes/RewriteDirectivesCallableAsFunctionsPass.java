@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -62,43 +63,57 @@ final class RewriteDirectivesCallableAsFunctionsPass implements CompilerFilePass
         SoyTreeUtils.getAllNodesOfType(file, PrintDirectiveNode.class)) {
       SoySourceFunction function = directiveNode.getPrintDirectiveFunction();
       if (function != null) {
-        rewritePrintDirectiveAsFunction(directiveNode, function);
+        processDirective(directiveNode, function);
       }
     }
   }
 
-  private void rewritePrintDirectiveAsFunction(
-      PrintDirectiveNode directiveNode, SoySourceFunction function) {
+  private void processDirective(PrintDirectiveNode directiveNode, SoySourceFunction function) {
     PrintNode printNode = (PrintNode) directiveNode.getParent();
-    // printNode.
-    String functionName = function.getClass().getAnnotation(SoyFunctionSignature.class).name();
+    String functionName = getFunctionName(function);
 
-    // Only rewrite the print directive if it is the first in the chain. This avoids having to
-    // create new let nodes.
-    int directiveIndex = printNode.getChildIndex(directiveNode);
-    if (directiveIndex != 0) {
-      errorReporter.report(
-          directiveNode.getSourceLocation(),
-          NOT_FIRST_PRINT_DIRECTIVE,
-          functionName,
-          printNode.getChild(directiveIndex - 1).getName());
+    if (isNotFirstInChain(printNode, directiveNode)) {
+      reportError(directiveNode, functionName, printNode);
       return;
     }
 
+    rewriteExpression(printNode, directiveNode, function, functionName);
+  }
+
+  private String getFunctionName(SoySourceFunction function) {
+    return function.getClass().getAnnotation(SoyFunctionSignature.class).name();
+  }
+
+  private boolean isNotFirstInChain(PrintNode printNode, PrintDirectiveNode directiveNode) {
+    return printNode.getChildIndex(directiveNode) != 0;
+  }
+
+  private void reportError(PrintDirectiveNode directiveNode, String functionName, PrintNode printNode) {
+    errorReporter.report(
+        directiveNode.getSourceLocation(),
+        NOT_FIRST_PRINT_DIRECTIVE,
+        functionName,
+        printNode.getChild(printNode.getChildIndex(directiveNode) - 1).getName());
+  }
+
+  private void rewriteExpression(PrintNode printNode, PrintDirectiveNode directiveNode, 
+                                 SoySourceFunction function, String functionName) {
     ExprRootNode originalExprRoot = printNode.getExpr();
     ExprNode originalExpr = originalExprRoot.getRoot();
-    FunctionNode newExpr =
-        FunctionNode.newPositional(
-            Identifier.create(functionName, directiveNode.getNameLocation()),
-            function,
-            originalExpr.getSourceLocation().extend(directiveNode.getSourceLocation()));
-    // Add the original expression of the print directive as the first argument to the function.
-    newExpr.addChild(originalExpr);
-    // Add the 0-n arguments to the print directive as the 1-(n+1) arguments of the function.
-    newExpr.addChildren(directiveNode.getArgs());
+    FunctionNode newExpr = createFunctionNode(directiveNode, function, functionName, originalExpr);
+    
     originalExprRoot.addChild(newExpr);
+    printNode.removeChild(printNode.getChildIndex(directiveNode));
+  }
 
-    // Remove the print directive.
-    printNode.removeChild(directiveIndex);
+  private FunctionNode createFunctionNode(PrintDirectiveNode directiveNode, SoySourceFunction function, 
+                                           String functionName, ExprNode originalExpr) {
+    FunctionNode newExpr = FunctionNode.newPositional(
+        Identifier.create(functionName, directiveNode.getNameLocation()),
+        function,
+        originalExpr.getSourceLocation().extend(directiveNode.getSourceLocation()));
+    newExpr.addChild(originalExpr);
+    newExpr.addChildren(directiveNode.getArgs());
+    return newExpr;
   }
 }
