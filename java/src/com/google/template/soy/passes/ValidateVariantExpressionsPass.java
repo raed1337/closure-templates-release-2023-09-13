@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -20,6 +21,9 @@ import com.google.template.soy.error.ErrorReporter;
 import com.google.template.soy.soytree.SoyFileNode;
 import com.google.template.soy.soytree.TemplateDelegateNode;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * Calls {@link TemplateDelegateNode#validateVariantExpression(ErrorReporter)} on every such node in
  * the AST.
@@ -35,9 +39,11 @@ final class ValidateVariantExpressionsPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    file.getTemplates().stream()
-        .filter(t -> t instanceof TemplateDelegateNode)
+    List<TemplateDelegateNode> delegateNodes = file.getTemplates().stream()
+        .filter(TemplateDelegateNode.class::isInstance)
         .map(TemplateDelegateNode.class::cast)
-        .forEach(t -> t.validateVariantExpression(errorReporter));
+        .collect(Collectors.toList());
+
+    delegateNodes.forEach(t -> t.validateVariantExpression(errorReporter));
   }
 }
