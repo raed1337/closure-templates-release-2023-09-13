@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -54,7 +55,6 @@ import java.util.List;
     value = {
       @Signature(
           parameterTypes = {"string"},
-          // TODO(b/70946095): should be nullable
           returnType = "int"),
       @Signature(
           parameterTypes = {"string", "int"},
@@ -65,8 +65,6 @@ final class ParseIntFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    // TODO(user): parseInt('123abc', 10) == 123; JS parseInt tries to parse as much as it can.
-
     return factory.callNamespaceFunction("soy", "soy.$$parseInt", args);
   }
 
@@ -75,7 +73,7 @@ final class ParseIntFunction
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
     return factory
         .global("runtime.parse_int")
-        .call(args.get(0), getRadixValue(args, factory.constant(10)));
+        .call(args.get(0), getRadixValue(args));
   }
 
   // lazy singleton pattern, allows other backends to avoid the work.
@@ -85,14 +83,14 @@ final class ParseIntFunction
             BasicFunctionsRuntime.class, "parseInt", String.class, int.class);
   }
 
-  private <T> T getRadixValue(List<T> args, T defaultValue) {
-    return args.size() == 2 ? args.get(1) : defaultValue;
+  private <T> T getRadixValue(List<T> args) {
+    return args.size() > 1 ? args.get(1) : (T) Integer.valueOf(10);
   }
 
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(
-        Methods.PARSE_INT, args.get(0), getRadixValue(args, factory.constant(10)));
+        Methods.PARSE_INT, args.get(0), getRadixValue(args));
   }
 }
