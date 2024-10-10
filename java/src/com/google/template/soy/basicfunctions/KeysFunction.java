@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -50,8 +51,6 @@ import java.util.List;
  */
 @SoyFunctionSignature(
     name = "keys",
-    // TODO(b/70946095): should take a legacy_object_map.
-    // Note: the return type is overridden in ResolveTypeExpressionsPass
     value = @Signature(parameterTypes = "any", returnType = "?"))
 @SoyPureFunction
 public final class KeysFunction
@@ -69,10 +68,8 @@ public final class KeysFunction
     return args.get(0).getProp("keys").call();
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
-    static final Method KEYS_FN =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "keys", SoyValue.class);
+    static final Method KEYS_FN = JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "keys", SoyValue.class);
   }
 
   @Override
