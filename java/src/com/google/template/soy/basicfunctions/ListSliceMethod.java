@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -66,10 +67,11 @@ public class ListSliceMethod
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
     return factory
         .global("runtime.list_slice")
-        .call(
-            args.get(0),
-            args.size() > 1 ? args.get(1) : factory.constantNull(),
-            args.size() == 3 ? args.get(2) : factory.constantNull());
+        .call(args.get(0), getSliceArgument(args, 1, factory), getSliceArgument(args, 2, factory));
+  }
+
+  private PythonValue getSliceArgument(List<PythonValue> args, int index, PythonValueFactory factory) {
+    return args.size() > index ? args.get(index) : factory.constantNull();
   }
 
   // lazy singleton pattern, allows other backends to avoid the work.
@@ -89,7 +91,11 @@ public class ListSliceMethod
     return factory.callStaticMethod(
         Methods.LIST_SLICE_FN,
         args.get(0),
-        args.size() > 1 ? args.get(1) : factory.constant(0),
-        args.size() == 3 ? args.get(2) : factory.constantNull());
+        getJavaArgument(args, 1, factory),
+        getJavaArgument(args, 2, factory));
+  }
+
+  private JavaValue getJavaArgument(List<JavaValue> args, int index, JavaValueFactory factory) {
+    return args.size() > index ? args.get(index) : factory.constant(0);
   }
 }
