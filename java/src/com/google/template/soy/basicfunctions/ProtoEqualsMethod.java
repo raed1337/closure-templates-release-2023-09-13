@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -39,6 +40,8 @@ import java.util.List;
 @SoyPureFunction
 public final class ProtoEqualsMethod implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction {
 
+  private static final Method PROTO_EQUALS_FN = createProtoEqualsMethod();
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -46,16 +49,14 @@ public final class ProtoEqualsMethod implements SoyJavaSourceFunction, SoyJavaSc
         "soy.map", "soy.map.$$protoEquals", args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method PROTO_EQUALS_FN =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class, "protoEquals", Message.class, Message.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.PROTO_EQUALS_FN, args.get(0), args.get(1));
+    return factory.callStaticMethod(PROTO_EQUALS_FN, args.get(0), args.get(1));
+  }
+
+  private static Method createProtoEqualsMethod() {
+    return JavaValueFactory.createMethod(
+        BasicFunctionsRuntime.class, "protoEquals", Message.class, Message.class);
   }
 }
