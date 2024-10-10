@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -45,28 +46,30 @@ final class VeLogRewritePass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     for (VeLogNode node : SoyTreeUtils.getAllNodesOfType(file, VeLogNode.class)) {
-      maybeRewriteVeLogNode(node);
+      rewriteVeLogNodeIfNecessary(node);
     }
   }
 
-  private void maybeRewriteVeLogNode(VeLogNode node) {
+  private void rewriteVeLogNodeIfNecessary(VeLogNode node) {
     ExprNode veExpr = node.getVeDataExpression().getRoot();
-    if (SoyTypes.isKindOrUnionOfKind(veExpr.getType(), Kind.VE)) {
-      FunctionNode veData =
-          FunctionNode.newPositional(
-              Identifier.create(BuiltinFunction.VE_DATA.getName(), veExpr.getSourceLocation()),
-              BuiltinFunction.VE_DATA,
-              veExpr.getSourceLocation());
-      // Explicitly set the type here. This pass has to run after ResolveExpressionTypesPass since
-      // it requires the type information set in ResolveExpressionTypesPass, so we need to set the
-      // type on our own here.
-      veData.setType(VeDataType.getInstance());
-      veData.addChild(veExpr);
-      // Explicitly set the second parameter to null. This parameter is optional, but it's rewritten
-      // to null (if left off) by the VeRewritePass. The VeRewritePass runs before this so we can't
-      // rely on that to add the null parameter, so we have to do it ourselves here.
-      veData.addChild(new NullNode(veExpr.getSourceLocation()));
+    if (isVeType(veExpr)) {
+      FunctionNode veData = createVeDataFunctionNode(veExpr);
       node.getVeDataExpression().addChild(veData);
     }
+  }
+
+  private boolean isVeType(ExprNode veExpr) {
+    return SoyTypes.isKindOrUnionOfKind(veExpr.getType(), Kind.VE);
+  }
+
+  private FunctionNode createVeDataFunctionNode(ExprNode veExpr) {
+    FunctionNode veData = FunctionNode.newPositional(
+        Identifier.create(BuiltinFunction.VE_DATA.getName(), veExpr.getSourceLocation()),
+        BuiltinFunction.VE_DATA,
+        veExpr.getSourceLocation());
+    veData.setType(VeDataType.getInstance());
+    veData.addChild(veExpr);
+    veData.addChild(new NullNode(veExpr.getSourceLocation()));
+    return veData;
   }
 }
