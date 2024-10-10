@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -7,8 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -31,6 +31,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -39,98 +40,17 @@ import java.util.List;
     name = "concat",
     baseType = "list<any>",
     value = {
-      // Note: These signatures exist solely to inform the # of parameters we allow.
-      // The return type is overridden in ResolveExpressionTypePass.
-      // ConcatLists would be varadic if soy allowed varadic functions. Instead we're giving the
-      // function a high enough upper limit that it's close enough to being varadic in practice.
       @Signature(parameterTypes = "list<any>", returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {"list<any>", "list<any>"},
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {"list<any>", "list<any>", "list<any>"},
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>"},
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>"},
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>"),
-      @Signature(
-          parameterTypes = {
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>",
-            "list<any>"
-          },
-          returnType = "list<any>")
+      @Signature(parameterTypes = {"list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>"),
+      @Signature(parameterTypes = {"list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>", "list<any>"}, returnType = "list<any>")
     })
 @SoyPureFunction
 public final class ConcatListsFunction
@@ -147,11 +67,7 @@ public final class ConcatListsFunction
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
-    PythonValue accum = args.get(0);
-    for (int i = 1; i < args.size(); i++) {
-      accum = accum.plus(args.get(i));
-    }
-    return accum;
+    return args.stream().reduce(args.get(0), PythonValue::plus);
   }
 
   // lazy singleton pattern, allows other backends to avoid the work.
