@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -48,7 +49,7 @@ public final class SkipNode extends AbstractParentCommandNode<StandaloneNode>
    */
   private SkipNode(SkipNode orig, CopyState copyState) {
     super(orig, copyState);
-    for (StandaloneNode node : this.getChildren()) {
+    for (StandaloneNode node : orig.getChildren()) {
       addChild(node.copy(copyState));
     }
     this.skipOnlyChildren = orig.skipOnlyChildren;
@@ -61,25 +62,26 @@ public final class SkipNode extends AbstractParentCommandNode<StandaloneNode>
 
   @Override
   public String getCommandText() {
-    if (this.skipOnlyChildren) {
-      return "{skipchildren}";
-    }
-    return "{skip}";
+    return skipOnlyChildren ? "{skipchildren}" : "{skip}";
   }
 
   @Override
   public String toSourceString() {
     StringBuilder builder = new StringBuilder();
     builder.append(getCommandText());
+    appendChildrenSourceString(builder);
+    builder.append(getClosingTag());
+    return builder.toString();
+  }
+
+  private void appendChildrenSourceString(StringBuilder builder) {
     for (StandaloneNode node : this.getChildren()) {
       builder.append(node.toSourceString());
     }
-    if (this.skipOnlyChildren) {
-      builder.append("{/skipchildren}");
-    } else {
-      builder.append("{/skip}");
-    }
-    return builder.toString();
+  }
+
+  private String getClosingTag() {
+    return skipOnlyChildren ? "{/skipchildren}" : "{/skip}";
   }
 
   public boolean skipOnlyChildren() {
@@ -89,7 +91,6 @@ public final class SkipNode extends AbstractParentCommandNode<StandaloneNode>
   @SuppressWarnings("unchecked")
   @Override
   public ParentSoyNode<StandaloneNode> getParent() {
-    // Cast is necessary so this is typed as a parent with a StandaloneNode child (this KeyNode).
     return (ParentSoyNode<StandaloneNode>) super.getParent();
   }
 
