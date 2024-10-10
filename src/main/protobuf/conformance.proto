@@ -1,0 +1,119 @@
+/*
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package soy;
+
+option java_package = "com.google.template.soy.conformance";
+option java_multiple_files = true;
+
+// A container to describe code requirements.
+message ConformanceConfig {
+  repeated Requirement requirement = 1;
+}
+
+// A specification of code requirements.
+message Requirement {
+  message BannedCssSelector {
+    // The banned CSS selectors.
+    repeated string selector = 1;
+
+    // If true, bans the selector(s) if it is a prefix rather than a substring.
+    // Default false.
+    bool when_prefix = 2;
+  }
+
+  message BannedDirective {
+    // The banned directive names.
+    repeated string directive = 1;
+  }
+
+  message BannedFunction {
+    // The banned function names.
+    repeated string function = 1;
+  }
+
+  message BannedRawText {
+    // The banned text. This only bans literal text, not commands or expressions
+    repeated string text = 1;
+    // However, if the text occurs inside the given html attributes, then it
+    // will be allowed.
+    // Note: If a template of kind `trusted_resource_uri` contains banned text
+    // with except_in_html_attribute, it will still need an explicit exemption
+    // because the conformance test does not detect attributes in trusted
+    // resource uris.
+    repeated string except_in_html_attribute = 2;
+  }
+
+  message BannedHtmlTag {
+    // The banned HTML tag (lowercase).
+    repeated string tag = 1;
+
+    // NOTE: All the checks below are considered separately. So if both
+    // `when_attribute_possibly_present` and `when_attribute_possibly_missing`
+    // is set, then a tag is banned if any attribute in
+    // `when_attribute_possibly_present` is present, or if any attribute in
+    // `when_attribute_possibly_missing` is missing. (Both checks must pass.)
+
+    // If provided, then it will only ban tags that have all these attributes.
+    repeated string when_attribute_possibly_present = 2;
+
+    // If provided, then it will ban tags that are missing any of these
+    // attributes.
+    // For example, this can be used to ban inline scripts by checking for
+    // <script> tags that are missing a `src` attribute.
+    repeated string when_attribute_possibly_missing = 3;
+  }
+
+  message BanXidForCssObfuscation {
+    // Bans the usage of xid for css obfuscation
+  }
+
+  message Custom {
+    // Required: the fully-qualified name of the Java class providing the
+    // custom conformance check. The class must implement
+    // com.google.template.soy.conformance.Rule.
+    string java_class = 1;
+  }
+
+  reserved 1, 6, 12, 13;
+  oneof requirement_type {
+    BannedCssSelector banned_css_selector = 2;
+    BannedFunction banned_function = 3;
+    BannedDirective banned_directive = 4;
+    BannedRawText banned_raw_text = 5;
+    Custom custom = 7;
+    BannedHtmlTag banned_html_tag = 11;
+    BanXidForCssObfuscation ban_xid_for_css_obfuscation = 14;
+  }
+
+  // Required: The message to report when a requirement is violated.
+  // This should reference a document describing the reason for the requirement
+  // and contacts.
+  string error_message = 8;
+
+  // Optional: Any source path that contains a exempted substring is exempt
+  // from the requirement.
+  repeated string exempt = 16;
+
+  // Optional: A list of paths. If this field is presented, the conformance
+  // test is only running for the files matching the paths specified here.
+  // exmempted sources will still be exempted.
+  repeated string only_apply_to = 15;
+
+  reserved 9, 10;
+}

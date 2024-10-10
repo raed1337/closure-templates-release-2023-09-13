@@ -1,0 +1,23 @@
+syntax = "proto2";
+
+package soy.test.correct;
+
+option java_package = "com.google.template.soy.testing.correct";
+
+message Proto2ImplicitDefaults {
+  optional int32 int = 1;
+  optional int64 long = 2;
+  optional float float = 3;
+  optional double double = 4;
+  optional string string = 5;
+  optional bool bool = 6;
+  optional bytes bytes = 8;
+  optional SubMessage msg = 7;
+  message SubMessage {
+    optional string field = 1;
+    optional SubMessage msg = 2;
+  }
+
+  repeated string strings = 9;
+  map<string, string> colors = 10;
+}

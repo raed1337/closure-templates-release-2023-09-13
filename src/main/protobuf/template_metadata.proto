@@ -1,0 +1,254 @@
+// This file is a serialized dual of c.g.template.soy.soytree.TemplateMetadata
+//
+// This represents just enough information to accurately reconstruct those
+// objects for dependency templates.  While convenient, we should avoid adding
+// additional data to these protos that is not needed for compilation.  Consider
+// adding more alternate files (like css_metadata.proto) in order to preserve
+// this feature.
+//
+// This represents a non-stable compiler internal interface.  Users should not
+// rely on these objects to be stable between compiler releases.
+syntax = "proto3";
+
+package soy.compiler;
+
+option java_package = "com.google.template.soy.soytree";
+option java_outer_classname = "TemplateMetadataProto";
+option java_multiple_files = true;
+
+// Represents a set of files
+message CompilationUnit {
+  repeated SoyFileP file = 1;
+}
+
+// Represents a soy file
+// File global information should be represented here to avoid duplicating data
+// across each template.
+message SoyFileP {
+  // The original file path for the soy file.
+  string file_path = 1;
+  // The modname of the file, or "" if there was no modname
+  string mod_name = 2;
+  // The namespace of the file
+  string namespace = 3;
+  // The exported constants in the file
+  repeated ConstantP constants = 6;
+  // The exported constants in the file
+  repeated ExternP externs = 7;
+  // The templates in the file
+  repeated TemplateMetadataP template = 4;
+  reserved 5;
+}
+
+// A soy type
+message SoyTypeP {
+  // a simple type
+  enum PrimitiveTypeP {
+    UNKNOWN_PRIMITIVE_TYPE = 0;
+    ANY = 1;
+    UNKNOWN = 2;
+    NULL = 3;
+    UNDEFINED = 15;
+    BOOL = 4;
+    INT = 5;
+    FLOAT = 6;
+    STRING = 7;
+    ATTRIBUTES = 9;
+    JS = 10;
+    CSS = 11;
+    URI = 12;
+    TRUSTED_RESOURCE_URI = 13;
+    VE_DATA = 14;
+  }
+  message HtmlTypeP {
+    bool is_element = 1;
+    string tag_name = 4;
+    bool allow_extra_attributes = 2;
+    repeated string reserved_attributes = 3;
+  }
+  message RecordTypeP {
+    repeated RecordMemberP members = 1;
+  }
+  message RecordMemberP {
+    string name = 1;
+    bool optional = 2;
+    SoyTypeP type = 3;
+  }
+  message LegacyObjectMapTypeP {
+    SoyTypeP key = 1;
+    SoyTypeP value = 2;
+  }
+  message MapTypeP {
+    SoyTypeP key = 1;
+    SoyTypeP value = 2;
+  }
+  message UnionTypeP {
+    repeated SoyTypeP member = 1;
+  }
+  message TemplateTypeP {
+    repeated ParameterP parameter = 3;
+    SoyTypeP return_type = 4;
+    SoyTypeP use_variant_type = 5;
+    bool is_modifiable = 6;
+    bool is_modifying = 7;
+    string legacy_deltemplate_namespace = 8;
+
+    reserved 1, 2;
+  }
+  // discriminated union of the different type categories
+  oneof TypeKind {
+    PrimitiveTypeP primitive = 1;
+    SoyTypeP list_element = 2;
+    RecordTypeP record = 3;
+    LegacyObjectMapTypeP legacy_object_map = 4;
+    MapTypeP map = 5;
+    string proto = 6;
+    string proto_enum = 7;
+    UnionTypeP union = 8;
+    string ve = 9;
+    TemplateTypeP template = 10;
+    FunctionTypeP function = 13;
+    bool message = 11;
+    HtmlTypeP html = 12;
+  }
+}
+
+// An exported constant.
+message ConstantP {
+  // The local name of the constant.
+  string name = 1;
+  // The type of the constant.
+  SoyTypeP type = 2;
+}
+
+// An exported extern.
+message ExternP {
+  // The name of the external function.
+  string name = 1;
+  // The function signature.
+  FunctionTypeP signature = 2;
+}
+
+// A single declared template parameter
+message ParameterP {
+  enum KindP {
+    DEFAULT = 0;
+    PARAM = 1;
+    ATTRIBUTE = 2;
+  }
+  // The parameter name
+  string name = 1;
+  // The type of the parameter.
+  SoyTypeP type = 2;
+  // Whether or not the parameter is required.
+  bool required = 3;
+  // How this parameter is declared.
+  KindP kind = 4;
+  // Whether or not the parameter is implicitly added by the Soy framework.
+  bool implicit = 5;
+}
+
+message FunctionTypeP {
+  // A single declared function parameter.
+  message Parameter {
+    // The parameter name
+    string name = 1;
+    // The type of the parameter.
+    SoyTypeP type = 2;
+  }
+
+  repeated Parameter parameters = 1;
+  SoyTypeP return_type = 2;
+}
+
+// Represents a call within a template.
+message DataAllCallSituationP {
+  // The template name.
+  // if this is a delcall or a call to a template in another file, this will be
+  // fully qualified.  If it is a call to a template in the current namespace
+  // it will be prefixed with a single dot.
+  string template_name = 1;
+  // Whether this is a delcall
+  bool del_call = 2;
+  // The names of the explicitly passed parameters.
+  repeated string explicitly_passed_parameters = 3;
+}
+
+// The kind of the template.
+enum TemplateKindP {
+  UNKNOWN_TEMPLATE_KIND = 0;
+  BASIC = 1;
+  ELEMENT = 2;
+  DELTEMPLATE = 3;
+}
+
+// The visibility of the template.
+enum VisibilityP {
+  UNKNOWN_VISIBILITY = 0;
+  PUBLIC = 1;
+  PRIVATE = 2;
+}
+
+// Metadata around whether the template contains fragments, html elements
+// or velog.
+message HtmlElementMetadataP {
+  // If this is true, then the template contains either one visible HTML
+  // tag, or does a call that resolves to one HTML tag. If false, then
+  // there is a fragment. This is also false if the HTML element has dynamic
+  // number of tags due to if or switch statements.
+  bool is_html_element = 1;
+  // If this is true, then the single element has a velog around it. This is
+  // to prevent wrapping a velog around a call that is itself velogged.
+  bool is_velogged = 2;
+  // The tag of an element. If the template is a fragment or a template
+  // contains a dynamic tag, then this will be "?".
+  string tag = 3;
+  // Whether or not a template contains an element with {skip} directive.
+  bool is_skip = 4;
+
+  oneof delegate {
+    // If this element delegates to another element (element call syntax) then
+    // this is its FQN.
+    string delegate_element = 5;
+    // If this element delegates to another template (call syntax) then this is
+    // its FQN.
+    string delegate_callee = 6;
+  }
+  // The FQN of the final underlying template for a chain of delegating calls.
+  // If the template does not delegate, this is empty.
+  string final_callee = 7;
+}
+
+// Metadata around whether the template is a Soy element or not.
+message SoyElementMetadataP {
+  bool is_soy_element = 1;
+}
+
+// Represents a soy template.
+message TemplateMetadataP {
+  TemplateKindP template_kind = 1;
+  // The template name.
+  // For basic templates or elements this will be the local, non-namespaced name
+  // For deltemplates it will be the fully qualified deltemplate name.
+  string template_name = 2;
+
+  // Will be set for `modifies` template to the FQN of the associated
+  // `modifiable` template.
+  // For legacy deltemplates, will be set to the deltemplate name.
+  string modifiable_template_name = 15;
+
+  // The variant string.  Will be empty for basic templates or deltemplates with
+  // no variant.
+  string del_template_variant = 3;
+  bool strict_html = 5;
+  VisibilityP visibility = 6;
+  repeated DataAllCallSituationP data_all_call_situation = 8;
+
+  HtmlElementMetadataP html_element = 11;
+  SoyElementMetadataP soy_element = 12;
+  SoyTypeP.TemplateTypeP template_type = 13;
+
+  bool component = 14;
+
+  reserved 4, 7, 9, 10;
+}

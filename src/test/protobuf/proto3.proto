@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package soy.test3;
+
+option java_package = "com.google.template.soy.testing3";
+option java_multiple_files = true;
+
+message Proto3Message {
+  message InnerMessage {
+    int32 field = 1;
+  }
+
+  int32 int_field = 1;
+  string string_field = 2;
+  InnerMessage message_field = 3;
+  oneof these {
+    InnerMessage another_message_field = 4;
+    int32 another_int_field = 5;
+  }
+
+  enum AnEnum {
+    ZERO = 0;
+    ONE = 1;
+    TWO = 2;
+  }
+  AnEnum an_enum = 6;
+  repeated AnEnum an_enums = 7;
+  map<string, AnEnum> map_enums = 8;
+}
+
+message Proto3ImplicitDefaults {
+  int32 int = 1;
+  int64 long = 2;
+  float float = 3;
+  double double = 4;
+  string string = 5;
+  bool bool = 6;
+  bytes bytes = 10;
+  SubMessage msg = 7;
+  message SubMessage {
+    string field = 1;
+  }
+  optional string opt = 8;
+  optional SubMessage subopt = 9;
+}
+
+message Foo3 {
+  string string_field = 1;
+  float bool_field = 2;
+
+  enum AnotherEnum {
+    UNKNOWN = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+
+  AnotherEnum an_enum = 3;
+}
+
+message Proto3MessageUnion {
+  Proto3Message.AnEnum an_enum = 1;
+}
+
+message SameName {
+  string name3 = 1;
+}
+
+message HasOneOf {
+  message Msg1 {
+    string s = 1;
+  }
+
+  message Msg2 {
+    string s = 1;
+  }
+
+  oneof grouping {
+    Msg1 message = 1;
+    Msg2 another = 2;
+    int32 number = 3;
+    string s = 4;
+  }
+}

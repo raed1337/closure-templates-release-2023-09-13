@@ -1,0 +1,265 @@
+/*
+ * Copyright 2016 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.template.soy.soyparse;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.template.soy.base.SourceFilePath;
+import com.google.template.soy.base.SourceLocation;
+import com.google.template.soy.base.internal.IdGenerator;
+import com.google.template.soy.soytree.CommandChar;
+import com.google.template.soy.soytree.RawTextNode;
+import com.google.template.soy.soytree.RawTextNode.SourceOffsets;
+import com.google.template.soy.soytree.RawTextNode.SourceOffsets.Reason;
+import com.google.template.soy.soytree.WhitespaceMode;
+import javax.annotation.Nullable;
+
+/**
+ * A helper for building raw text nodes.
+ *
+ * <p>RawText handling is complex. We need to
+ *
+ * <ul>
+ *   <li>Perform line joining on sequences of 'basic raw text'
+ *       <ul>
+ *         <li>Remove a leading newline (and surrounding whitespace)
+ *         <li>Remove a trailing newline (and surrounding whitespace)
+ *         <li>Replace interior newlines and surrounding whitespace with a single {@code ' '} unless
+ *             it immediately precedes a '<' or succeeds a '>' in which case we just remove it.
+ *       </ul>
+ *   <li>Calculate the 'effective' start and end locations given the stripping of leading and
+ *       trailing whitespace
+ *   <li>Accumulate our other 'textual' tokens which do not trigger line joining
+ * </ul>
+ *
+ * <p>The default line joining behavior can be customized by passing "whitespaceMode = PRESERVE" to
+ * the constructor. This will trigger the builder to preserve all whitespace characters (including
+ * newlines) in the output.
+ *
+ * <p>These rules appear to be an approximation of the <a
+ * href="https://www.w3.org/TR/html4/struct/text.html#h-9.1">html whitespace rules</a> but it
+ * completely ignores interior non-newline whitespace and preserves it entirely. See the unit tests
+ * for examples.
+ */
+final class RawTextBuilder {
+
+  private final RawTextNode.SourceOffsets.Builder offsets = new RawTextNode.SourceOffsets.Builder();
+  private final StringBuilder buffer = new StringBuilder();
+  private final SourceFilePath fileName;
+  private final IdGenerator nodeIdGen;
+  private final WhitespaceMode whitespaceMode;
+
+  // The index in buffer where the current sequence of basic textual content starts.
+  private int basicStart = -1;
+  // within a sequence of basic text, tracks the start of the current sequence of whitespace
+  private int basicStartOfWhitespace = -1;
+  // The ending line and column at the start of the current sequence of whitespace.  May be -1 if
+  // the current whitespace is leading whitespace.
+  private int endLineAtStartOfWhitespace;
+  private int endColumnAtStartOfWhitespace;
+  // tracks whether the current sequence of whitespace contains a newline
+  private boolean basicHasNewline = false;
+  // this will be set to non {@code NONE} if the previous sequence of text added isn't a basic
+  // text literal.  this will force us to record a new offset for the next token
+  private SourceOffsets.Reason discontinuityReason = Reason.NONE;
+
+  /**
+   * Initializes a new instance of this raw text builder object.
+   *
+   * @param fileName Path to the template file.
+   * @param nodeIdGen An object that generates Ids for new tokens.
+   * @param whitespaceMode Indicates how to handle whitespace in the output.
+   */
+  RawTextBuilder(SourceFilePath fileName, IdGenerator nodeIdGen, WhitespaceMode whitespaceMode) {
+    this.fileName = checkNotNull(fileName);
+    this.nodeIdGen = checkNotNull(nodeIdGen);
+    this.whitespaceMode = checkNotNull(whitespaceMode);
+  }
+
+  /** Append a basic token. 'Basic' tokens are text literals. */
+  void addBasic(Token token) {
+    if (basicStart == -1) {
+      basicStart = buffer.length();
+      basicStartOfWhitespace = -1;
+      basicHasNewline = false;
+    }
+    switch (token.kind) {
+      case SoyFileParserConstants.TOKEN_WS:
+        if (token.image.indexOf('\r') != -1 || token.image.indexOf('\n') != -1) {
+          basicHasNewline = true;
+        }
+        if (basicStartOfWhitespace == -1 && whitespaceMode == WhitespaceMode.JOIN) {
+          basicStartOfWhitespace = buffer.length();
+          endLineAtStartOfWhitespace = offsets.endLine();
+          endColumnAtStartOfWhitespace = offsets.endColumn();
+        }
+        break;
+      case SoyFileParserConstants.TOKEN_NOT_WS:
+        maybeCollapseWhitespace(token.image);
+        break;
+      default:
+        throw new AssertionError(
+            SoyFileParserConstants.tokenImage[token.kind] + " is not a basic text token");
+    }
+    append(token, token.image);
+  }
+
+  /** Add the content for a '{literal}...{/literal}' section. */
+  RawTextNode buildLiteral(Token literalContent, SourceLocation location) {
+    checkArgument(literalContent.kind == SoyFileParserConstants.LITERAL_RAW_TEXT_CONTENT);
+    return RawTextNode.newLiteral(nodeIdGen.genId(), literalContent.image, location);
+  }
+
+  /**
+   * Builds a RawTextNode of type COMMAND_CHAR representing one of the Soy special characters (like
+   * "{sp}" or "{nil}").
+   */
+  static RawTextNode buildCommandCharNode(
+      Token token, SourceFilePath fileName, IdGenerator nodeIdGen) {
+    CommandChar commandChar = rawTextCmdToCommandCharType(token);
+    return RawTextNode.newCommandCharNode(
+        nodeIdGen.genId(), commandChar, Tokens.createSrcLoc(fileName, token));
+  }
+
+  private static CommandChar rawTextCmdToCommandCharType(Token token) {
+    switch (token.kind) {
+      case SoyFileParserConstants.CMD_FULL_SP:
+        return CommandChar.SPACE;
+      case SoyFileParserConstants.CMD_FULL_CR:
+        return CommandChar.CARRIAGE_RETURN;
+      case SoyFileParserConstants.CMD_FULL_LF:
+        return CommandChar.NEWLINE;
+      case SoyFileParserConstants.CMD_FULL_TAB:
+        return CommandChar.TAB;
+      case SoyFileParserConstants.CMD_FULL_LB:
+        return CommandChar.LEFT_BRACE;
+      case SoyFileParserConstants.CMD_FULL_RB:
+        return CommandChar.RIGHT_BRACE;
+      case SoyFileParserConstants.CMD_FULL_NBSP:
+        // https://en.wikipedia.org/wiki/Non-breaking_space
+        return CommandChar.NBSP;
+      case SoyFileParserConstants.CMD_FULL_NIL:
+        return CommandChar.NIL;
+      default:
+        throw new IllegalArgumentException(
+            "unexpected token: " + SoyFileParserConstants.tokenImage[token.kind]);
+    }
+  }
+
+  RawTextNode build() {
+    maybeFinishBasic();
+    String text = buffer.toString();
+    RawTextNode.SourceOffsets sourceOffsets = offsets.build(text.length(), discontinuityReason);
+    return new RawTextNode(
+        nodeIdGen.genId(), text, sourceOffsets.getSourceLocation(fileName), sourceOffsets);
+  }
+
+  /** updates the location with the given tokens location. */
+  private void append(Token token, String content) {
+    if (content.isEmpty()) {
+      throw new IllegalStateException(
+          String.format(
+              "shouldn't append empty content: %s @ %s",
+              SoyFileParserConstants.tokenImage[token.kind], Tokens.createSrcLoc(fileName, token)));
+    }
+    // add a new offset if:
+    // - this is the first token
+    // - the previous token introduced a discontinuity (due to a special token, or whitespace
+    //   joining)
+    // - this token doesn't directly abut the previous token (this happens when there is a comment)
+    boolean addOffset = false;
+    if (offsets.isEmpty()) {
+      addOffset = true;
+    } else if (discontinuityReason != Reason.NONE) {
+      addOffset = true;
+    } else {
+      // are the two tokens not adjacent? We don't actually record comments in the AST or token
+      // stream so this is kind of a guess, but all known cases are due to comments.
+      if (offsets.endLine() == token.beginLine) {
+        if (offsets.endColumn() + 1 != token.beginColumn) {
+          addOffset = true;
+          discontinuityReason = Reason.COMMENT;
+        }
+      } else if (offsets.endLine() + 1 == token.beginLine && token.beginColumn != 1) {
+        addOffset = true;
+        discontinuityReason = Reason.COMMENT;
+      }
+    }
+    if (addOffset) {
+      offsets.add(buffer.length(), token.beginLine, token.beginColumn, discontinuityReason);
+      discontinuityReason = Reason.NONE;
+    }
+    offsets.setEndLocation(token.endLine, token.endColumn);
+    buffer.append(content);
+  }
+
+  // Completes the current open basic text sequence.
+  private void maybeFinishBasic() {
+    if (basicStart != -1) {
+      maybeCollapseWhitespace(null);
+      basicStart = -1;
+    }
+  }
+
+  /**
+   * This method should be called at the end of a sequence of basic whitespace tokens. This is how
+   * we implement the line joining algorithm.
+   *
+   * @param next The next basic text token image, or null if the next token isn't a basic token.
+   */
+  private void maybeCollapseWhitespace(@Nullable String next) {
+    if (basicStartOfWhitespace != -1) {
+      if (basicHasNewline) {
+        // Note: if we are replacing the whitespace we don't need to update our source location
+        // information.  This is because
+        // 1. if we are stripping leading whitespace, the next token will be the start token
+        //    - note: if there is no next token, the whole raw text node will get dropped, so we
+        //      won't need a source location
+        // 2. if we are stripping trailing whitespace, the previously assigned location should be
+        //    preserved
+        // 3. if we are in the middle, then our location is irrelevant
+        offsets.delete(basicStartOfWhitespace);
+        if (basicStart == basicStartOfWhitespace || next == null) {
+          // leading or trailing whitespace, remove it all
+          buffer.setLength(basicStartOfWhitespace);
+          if (next == null && endColumnAtStartOfWhitespace != -1) {
+            // if this is trailing whitespace, then our end location will be wrong, so restore it to
+            // what it was when we started accumulating whitespace (assuming we had one).
+            offsets.setEndLocation(endLineAtStartOfWhitespace, endColumnAtStartOfWhitespace);
+          }
+        } else {
+          // We are in the middle, we either remove the whole segment or replace it with a single
+          // space character based on whether or not we appear to be butted up next to an html tag.
+          // This logic is definitely suspicious but it is important to maintain for compatibility
+          // reasons.
+          if (next.charAt(0) == '<' || buffer.charAt(basicStartOfWhitespace - 1) == '>') {
+            // we are immediately before or after an html tag.
+            buffer.setLength(basicStartOfWhitespace);
+          } else {
+            // Otherwise, collapse to a single whitespace character.
+            buffer.setLength(basicStartOfWhitespace);
+            buffer.append(' ');
+          }
+        }
+        discontinuityReason = Reason.WHITESPACE;
+        basicHasNewline = false;
+      }
+      basicStartOfWhitespace = -1;
+    }
+  }
+}

@@ -1,0 +1,62 @@
+// Copyright 2008 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Simple examples.
+
+{namespace soy.examples.simple}
+
+
+/**
+ * Says hello to the world.
+ */
+{template helloWorld}
+  {msg desc="Says hello to the world."}
+    Hello world!
+  {/msg}
+{/template}
+
+
+/**
+ * Says hello to a person (or to the world if no person is given).
+ */
+{template helloName}
+  {@param? name: string}  /** The name of the person to say hello to. */
+  {if $name}
+    {msg desc="Says hello to a person."}
+      Hello {$name}!
+    {/msg}
+  {else}
+    {call helloWorld /}
+  {/if}
+{/template}
+
+
+/**
+ * Say hello to a list of people.
+ */
+{template helloNames}
+  {@param names: list<string>}  /** List of names of the people to say hello to. */
+  {if $names.length != 0}
+    {for $name, $nameIndex in $names}
+      {call helloName}
+        {param name: $name /}
+      {/call}
+      {if $nameIndex != $names.length - 1}
+        <br>
+      {/if}
+    {/for}
+  {else}
+    {call helloWorld /}
+  {/if}
+{/template}
