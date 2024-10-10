@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -51,7 +52,16 @@ public final class SoySourceFunctionMethod implements SoyMethod {
 
   @Override
   public boolean appliesToArgs(List<SoyType> argTypes) {
-    Preconditions.checkArgument(argTypes.size() == this.argTypes.size());
+    validateArgTypes(argTypes);
+    return areArgTypesAssignable(argTypes);
+  }
+
+  private void validateArgTypes(List<SoyType> argTypes) {
+    Preconditions.checkArgument(argTypes.size() == this.argTypes.size(),
+        "Argument size mismatch: expected " + this.argTypes.size() + " but got " + argTypes.size());
+  }
+
+  private boolean areArgTypesAssignable(List<SoyType> argTypes) {
     for (int i = 0; i < argTypes.size(); i++) {
       if (!this.argTypes.get(i).isAssignableFromStrict(argTypes.get(i))) {
         return false;
