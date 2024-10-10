@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -58,15 +59,22 @@ public class HtmlMatcherTagNode extends HtmlMatcherGraphNode {
 
   /** Returns the tag kind. */
   public TagKind getTagKind() {
+    return determineTagKind();
+  }
+
+  private TagKind determineTagKind() {
     if (htmlTagNode instanceof HtmlOpenTagNode) {
-      HtmlOpenTagNode openTagNode = (HtmlOpenTagNode) htmlTagNode;
-      if (openTagNode.isSelfClosing() || openTagNode.getTagName().isDefinitelyVoid()) {
-        return TagKind.VOID_TAG;
-      }
-      return TagKind.OPEN_TAG;
+      return classifyOpenTag((HtmlOpenTagNode) htmlTagNode);
     } else {
       return TagKind.CLOSE_TAG;
     }
+  }
+
+  private TagKind classifyOpenTag(HtmlOpenTagNode openTagNode) {
+    if (openTagNode.isSelfClosing() || openTagNode.getTagName().isDefinitelyVoid()) {
+      return TagKind.VOID_TAG;
+    }
+    return TagKind.OPEN_TAG;
   }
 
   // ------ HtmlMatcherGraphNode implementation ------
@@ -78,10 +86,7 @@ public class HtmlMatcherTagNode extends HtmlMatcherGraphNode {
 
   @Override
   public Optional<HtmlMatcherGraphNode> getNodeForEdgeKind(EdgeKind edgeKind) {
-    if (edgeKind == EdgeKind.TRUE_EDGE) {
-      return Optional.ofNullable(nextNode);
-    }
-    return Optional.empty();
+    return (edgeKind == EdgeKind.TRUE_EDGE) ? Optional.ofNullable(nextNode) : Optional.empty();
   }
 
   @Override
@@ -92,7 +97,7 @@ public class HtmlMatcherTagNode extends HtmlMatcherGraphNode {
   @Override
   public void linkEdgeToNode(EdgeKind edgeKind, HtmlMatcherGraphNode node) {
     checkState(edgeKind == EdgeKind.TRUE_EDGE, "HTML Tag nodes only have a true branch.");
-    checkState(!this.equals(node), "Can't link a node to itsself.");
+    checkState(!this.equals(node), "Can't link a node to itself.");
     nextNode = node;
   }
 }
