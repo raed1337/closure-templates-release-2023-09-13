@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -31,21 +32,19 @@ import java.util.stream.Stream;
 public abstract class UnionTypeNode extends TypeNode {
 
   public static UnionTypeNode create(Iterable<TypeNode> candidates) {
-    ImmutableList<TypeNode> candidateList =
-        Streams.stream(candidates)
-            .flatMap(
-                tn ->
-                    tn instanceof UnionTypeNode
-                        ? ((UnionTypeNode) tn).candidates().stream()
-                        : Stream.of(tn))
-            .collect(toImmutableList());
+    ImmutableList<TypeNode> candidateList = flattenCandidates(candidates);
     Preconditions.checkArgument(candidateList.size() > 1);
     return new AutoValue_UnionTypeNode(
-        candidateList
-            .get(0)
-            .sourceLocation()
-            .extend(Iterables.getLast(candidateList).sourceLocation()),
+        candidateList.get(0).sourceLocation().extend(Iterables.getLast(candidateList).sourceLocation()),
         candidateList);
+  }
+
+  private static ImmutableList<TypeNode> flattenCandidates(Iterable<TypeNode> candidates) {
+    return Streams.stream(candidates)
+        .flatMap(tn -> tn instanceof UnionTypeNode
+            ? ((UnionTypeNode) tn).candidates().stream()
+            : Stream.of(tn))
+        .collect(toImmutableList());
   }
 
   UnionTypeNode() {}
@@ -64,8 +63,12 @@ public abstract class UnionTypeNode extends TypeNode {
 
   @Override
   public UnionTypeNode copy() {
+    return copyCandidates(candidates());
+  }
+
+  private UnionTypeNode copyCandidates(ImmutableList<TypeNode> candidates) {
     ImmutableList.Builder<TypeNode> newCandidates = ImmutableList.builder();
-    for (TypeNode candidate : candidates()) {
+    for (TypeNode candidate : candidates) {
       newCandidates.add(candidate.copy());
     }
     UnionTypeNode copy = create(newCandidates.build());
