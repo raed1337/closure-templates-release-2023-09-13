@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -18,6 +19,23 @@ package com.google.template.soy.plugin.python.restricted;
 
 /** A factory for instructing soy how to implement a {@link SoyPythonSourceFunction}. */
 public abstract class PythonValueFactory {
+  
+  /** Creates a constant value of a given type. */
+  protected PythonValue createConstant(Object value) {
+    if (value instanceof Long) {
+      return constant((Long) value);
+    } else if (value instanceof Double) {
+      return constant((Double) value);
+    } else if (value instanceof String) {
+      return constant((String) value);
+    } else if (value instanceof Boolean) {
+      return constant((Boolean) value);
+    } else if (value == null) {
+      return constantNull();
+    }
+    throw new IllegalArgumentException("Unsupported type: " + value.getClass());
+  }
+
   /** Creates an integer constant. */
   public abstract PythonValue constant(long num);
 
