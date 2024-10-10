@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -65,7 +66,7 @@ public final class LetValueNode extends LetNode implements ExprHolderNode {
 
   @Override
   public String getCommandText() {
-    return getVarRefName() + " : " + getExpr().toSourceString();
+    return String.format("%s : %s", getVarRefName(), getExpr().toSourceString());
   }
 
   @Override
