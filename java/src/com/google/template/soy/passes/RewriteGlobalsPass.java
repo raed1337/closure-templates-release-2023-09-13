@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -34,7 +35,15 @@ final class RewriteGlobalsPass implements CompilerFilePass {
 
   private void resolveGlobal(SoyFileNode file, GlobalNode global) {
     Identifier original = global.getIdentifier();
-    Identifier alias = file.resolveAlias(global.getIdentifier());
+    Identifier alias = resolveAlias(file, original);
+    updateGlobalResolution(global, original, alias);
+  }
+
+  private Identifier resolveAlias(SoyFileNode file, Identifier identifier) {
+    return file.resolveAlias(identifier);
+  }
+
+  private void updateGlobalResolution(GlobalNode global, Identifier original, Identifier alias) {
     if (!alias.equals(original)) {
       global.resolve(alias.identifier());
     }
