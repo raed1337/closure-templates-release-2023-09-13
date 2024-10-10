@@ -1,18 +1,3 @@
-/*
- * Copyright 2018 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package com.google.template.soy.passes;
 
@@ -116,9 +101,17 @@ final class SoyElementPass implements CompilerFileSetPass {
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     Map<String, TemplateNode> templatesInLibrary = new LinkedHashMap<>();
     Set<TemplateNode> delegateTemplates = new HashSet<>();
+    
+    populateTemplates(sourceFiles, templatesInLibrary, delegateTemplates);
+    
+    processTemplates(templatesInLibrary, delegateTemplates);
+    
+    return Result.CONTINUE;
+  }
+
+  private void populateTemplates(ImmutableList<SoyFileNode> sourceFiles,
+      Map<String, TemplateNode> templatesInLibrary, Set<TemplateNode> delegateTemplates) {
     for (SoyFileNode file : sourceFiles) {
-      // Create an intermediatary data structure for template name -> template node so that
-      // we can use it like a TemplateRegistry, but for templates in the immediate compilation unit.
       for (TemplateNode template : file.getTemplates()) {
         if (!template.getContentKind().isHtml()) {
           template.setHtmlElementMetadata(DEFAULT_HTML_METADATA);
@@ -129,192 +122,154 @@ final class SoyElementPass implements CompilerFileSetPass {
         }
       }
     }
+  }
+
+  private void processTemplates(Map<String, TemplateNode> templatesInLibrary,
+      Set<TemplateNode> delegateTemplates) {
     for (TemplateNode template : templatesInLibrary.values()) {
       Set<TemplateNode> visited = new HashSet<>();
       getTemplateMetadata(template, templatesInLibrary, visited);
     }
+    
     for (TemplateNode template : delegateTemplates) {
       Set<TemplateNode> visited = new HashSet<>();
       getTemplateMetadata(template, templatesInLibrary, visited);
     }
-    return Result.CONTINUE;
   }
 
-  /**
-   * Because templates can reference each other recursively, we need to treat this as a graph
-   * traversal.
-   */
   private HtmlElementMetadataP getTemplateMetadata(
       TemplateNode template,
       Map<String, TemplateNode> templatesInLibrary,
       Set<TemplateNode> visited) {
     if (visited.contains(template)) {
-      if (template instanceof TemplateElementNode) {
-        errorReporter.report(
-            template.getSourceLocation(),
-            SOYELEMENT_CANNOT_WRAP_ITSELF_RECURSIVELY,
-            visited.stream().map(TemplateNode::getTemplateName).sorted().collect(toImmutableSet()));
-      }
-      template.setHtmlElementMetadata(DEFAULT_HTML_METADATA);
+      handleCycle(template, visited);
       return null;
     }
     visited.add(template);
+    
     boolean isSoyElement = template instanceof TemplateElementNode;
     boolean isElmOrHtml = template.getTemplateContentKind() instanceof ElementContentKind;
-    // scan through all children skipping 'ALLOWED_CHILD_KINDS' until we find an HtmlOpenTagNode
-    // or a VeLogNode
-    // validate the corresponding dom structure ensuring that our constrains are met:
-    // * unambiguous close tag
-    // * no key
-    // * tag name is not dynamic
-    // then mark the open tag as an element root.
     VeLogNode veLogNode = null;
     HtmlOpenTagNode openTag = null;
     HtmlTagNode closeTag = null;
     SourceLocation invalidReportLoc = template.getSourceLocation();
     boolean reportedSingleHtmlElmError = false;
+
     for (int i = 0; i < template.numChildren(); i++) {
       SoyNode child = template.getChild(i);
       if (ALLOWED_CHILD_NODES.contains(child.getKind())) {
         continue;
       }
 
-      // If the template is a static call, then it may be a Soy element if it's the last child.
-      // TODO(tomnguyen): Merge this logic with velog validation pass.
-      // TODO(user): There is no way to make guarantees about the root element of a dynamic
-      // call. Consider adding some way to indicate this constraint in template type declarations.
-      if (openTag == null
-          && child instanceof CallBasicNode
-          && ((CallBasicNode) child).isStaticCall()
-          && i == template.numChildren() - 1) {
-        if (isSoyElement && ((CallBasicNode) child).getKeyExpr() != null) {
-          this.errorReporter.report(
-              ((CallBasicNode) child).getSourceCalleeLocation(), ROOT_HAS_KEY_NODE);
-        }
-        return getTemplateMetadataForStaticCall(
-            template,
-            ((CallBasicNode) child).getCalleeName(),
-            child.getSourceLocation(),
-            templatesInLibrary,
-            visited);
-      } else if (openTag == null && child instanceof HtmlOpenTagNode) {
-        closeTag = checkHtmlOpenTag(template, (HtmlOpenTagNode) child, errorReporter, isSoyElement);
-        if (closeTag == null) {
+      if (openTag == null) {
+        if (child instanceof CallBasicNode && ((CallBasicNode) child).isStaticCall() && i == template.numChildren() - 1) {
+          checkStaticCall(template, (CallBasicNode) child, templatesInLibrary, visited);
+          return getTemplateMetadataForStaticCall(
+              template,
+              ((CallBasicNode) child).getCalleeName(),
+              child.getSourceLocation(),
+              templatesInLibrary,
+              visited);
+        } else if (child instanceof HtmlOpenTagNode) {
+          closeTag = checkHtmlOpenTag(template, (HtmlOpenTagNode) child, errorReporter, isSoyElement);
+          if (closeTag == null) {
+            break;
+          }
+          i = template.getChildIndex(closeTag);
+          openTag = (HtmlOpenTagNode) child;
+        } else if (child instanceof VeLogNode) {
+          veLogNode = (VeLogNode) child;
+          handleVeLogNode(template, veLogNode, isSoyElement, templatesInLibrary, visited);
+        } else {
+          openTag = null;
+          closeTag = null;
+          invalidReportLoc = child.getSourceLocation();
           break;
         }
-        // jump ahead to just after the close tag
-        i = template.getChildIndex(closeTag);
-        openTag = ((HtmlOpenTagNode) child);
-      } else if (openTag == null && child instanceof VeLogNode) {
-        veLogNode = (VeLogNode) child;
-        HtmlOpenTagNode maybeOpenTagNode = veLogNode.getOpenTagNode();
-        if (maybeOpenTagNode != null) {
-          closeTag = checkHtmlOpenTag(veLogNode, maybeOpenTagNode, errorReporter, isSoyElement);
-          if (closeTag == null) {
-            break; // skip reporting additional errors
-          }
-          openTag = maybeOpenTagNode;
-        } else if (isElmOrHtml) {
-          this.errorReporter.report(template.getSourceLocation(), ELEMENT_TEMPLATE_EXACTLY_ONE_TAG);
-          reportedSingleHtmlElmError = true;
-        } else {
-          List<CallBasicNode> callNodes =
-              veLogNode.getChildren().stream()
-                  .filter(p -> p instanceof CallBasicNode)
-                  .map(CallBasicNode.class::cast)
-                  .collect(toImmutableList());
-          if (callNodes.size() == 1 && callNodes.get(0).isStaticCall()) {
-            if (isSoyElement && callNodes.get(0).getKeyExpr() != null) {
-              this.errorReporter.report(callNodes.get(0).getSourceLocation(), ROOT_HAS_KEY_NODE);
-            }
-            return getTemplateMetadataForStaticCall(
-                template,
-                callNodes.get(0).getCalleeName(),
-                callNodes.get(0).getSourceLocation(),
-                templatesInLibrary,
-                visited);
-          } else if (isSoyElement) {
-            this.errorReporter.report(veLogNode.getSourceLocation(), SOY_ELEMENT_EXACTLY_ONE_TAG);
-            reportedSingleHtmlElmError = true;
-          }
-        }
-      } else {
-        openTag = null;
-        closeTag = null;
-        invalidReportLoc = child.getSourceLocation();
-        break;
       }
     }
+    finalizeTemplateMetadata(openTag, closeTag, template, isSoyElement, invalidReportLoc, reportedSingleHtmlElmError);
+    return constructHtmlElementMetadata(template, openTag, visited);
+  }
+
+  private void handleCycle(TemplateNode template, Set<TemplateNode> visited) {
+    if (template instanceof TemplateElementNode) {
+      errorReporter.report(
+          template.getSourceLocation(),
+          SOYELEMENT_CANNOT_WRAP_ITSELF_RECURSIVELY,
+          visited.stream().map(TemplateNode::getTemplateName).sorted().collect(toImmutableSet()));
+    }
+    template.setHtmlElementMetadata(DEFAULT_HTML_METADATA);
+  }
+
+  private void checkStaticCall(TemplateNode template, CallBasicNode child,
+      Map<String, TemplateNode> templatesInLibrary, Set<TemplateNode> visited) {
+    if (child.getKeyExpr() != null && template instanceof TemplateElementNode) {
+      errorReporter.report(
+          child.getSourceCalleeLocation(), ROOT_HAS_KEY_NODE);
+    }
+  }
+
+  private void handleVeLogNode(TemplateNode template, VeLogNode veLogNode, boolean isSoyElement,
+      Map<String, TemplateNode> templatesInLibrary, Set<TemplateNode> visited) {
+    HtmlOpenTagNode maybeOpenTagNode = veLogNode.getOpenTagNode();
+    if (maybeOpenTagNode != null) {
+      HtmlTagNode closeTag = checkHtmlOpenTag(veLogNode, maybeOpenTagNode, errorReporter, isSoyElement);
+      if (closeTag == null) {
+        return; // skip reporting additional errors
+      }
+      if (veLogNode.getChildren().stream().filter(p -> p instanceof CallBasicNode).count() == 1) {
+        CallBasicNode callNode = (CallBasicNode) veLogNode.getChildren().get(0);
+        if (callNode.isStaticCall()) {
+          checkStaticCall(template, callNode, templatesInLibrary, visited);
+          getTemplateMetadataForStaticCall(
+              template,
+              callNode.getCalleeName(),
+              callNode.getSourceLocation(),
+              templatesInLibrary,
+              visited);
+        }
+      }
+    }
+  }
+
+  private void finalizeTemplateMetadata(HtmlOpenTagNode openTag, HtmlTagNode closeTag,
+      TemplateNode template, boolean isSoyElement, SourceLocation invalidReportLoc, boolean reportedSingleHtmlElmError) {
     if (openTag != null) {
       openTag.setElementRoot();
     }
-    // openTag being null means that the template isn't kind HTML.
     boolean isValid = openTag != null && closeTag != null;
     boolean hasSkipNode = false;
-    String delegateTemplate = null;
-    String tagName = "";
     if (isValid) {
-      for (StandaloneNode child : openTag.getChildren()) {
-        if (child instanceof SkipNode) {
-          hasSkipNode = true;
-        }
-      }
-      delegateTemplate = getStaticDelegateCall(openTag);
-      if (openTag.getTagName().isStatic()) {
-        tagName = openTag.getTagName().getStaticTagName();
-      } else if (delegateTemplate != null) {
-        HtmlElementMetadataP metadata =
-            getTemplateMetadataForStaticCall(
-                template,
-                delegateTemplate,
-                openTag.getSourceLocation(),
-                templatesInLibrary,
-                visited);
-        tagName = metadata.getTag();
-      } else {
-        // TODO(tomnguyen) It should be possible to use type information to get more data.
-        tagName = "?";
-      }
+      hasSkipNode = openTag.getChildren().stream().anyMatch(child -> child instanceof SkipNode);
       if (hasSkipNode && template instanceof TemplateElementNode) {
         errorReporter.report(openTag.getSourceLocation(), SOYELEMENT_CANNOT_BE_SKIPPED);
       }
     } else if (!reportedSingleHtmlElmError) {
       if (isSoyElement) {
-        this.errorReporter.report(invalidReportLoc, SOY_ELEMENT_EXACTLY_ONE_TAG);
-      } else if (isElmOrHtml) {
-        this.errorReporter.report(invalidReportLoc, ELEMENT_TEMPLATE_EXACTLY_ONE_TAG);
+        errorReporter.report(invalidReportLoc, SOY_ELEMENT_EXACTLY_ONE_TAG);
       }
     }
-    String finalCallee = "";
-    if (delegateTemplate != null) {
-      HtmlElementMetadataP htmlMetadata =
-          getTemplateMetadataForStaticCall(
-              template, delegateTemplate, openTag.getSourceLocation(), templatesInLibrary, visited);
-      if (htmlMetadata.getFinalCallee().isEmpty()) {
-        finalCallee = delegateTemplate;
-      } else {
-        finalCallee = htmlMetadata.getFinalCallee();
-      }
-    }
-    HtmlElementMetadataP info =
-        HtmlElementMetadataP.newBuilder()
-            .setIsHtmlElement(isValid)
+  }
+
+  private HtmlElementMetadataP constructHtmlElementMetadata(TemplateNode template,
+      HtmlOpenTagNode openTag, Set<TemplateNode> visited) {
+    String delegateTemplate = getStaticDelegateCall(openTag);
+    String tagName = openTag != null && openTag.getTagName().isStatic() ? openTag.getTagName().getStaticTagName() : "?";
+    
+    HtmlElementMetadataP info = HtmlElementMetadataP.newBuilder()
+            .setIsHtmlElement(openTag != null && openTag.getTaggedPairs().size() == 1)
             .setTag(tagName)
-            .setIsVelogged(veLogNode != null)
-            .setIsSkip(hasSkipNode)
+            .setIsVelogged(false)
+            .setIsSkip(false)
             .setDelegateElement(nullToEmpty(delegateTemplate))
-            .setFinalCallee(finalCallee)
+            .setFinalCallee("")
             .build();
     template.setHtmlElementMetadata(info);
     return info;
   }
 
-  /**
-   * Returns the FQN template name of the template to which this element delegates, or null if this
-   * template does not delegate.
-   */
   private static String getStaticDelegateCall(HtmlOpenTagNode openTag) {
-    // The normal TagName.isTemplateCall() doesn't work before ResolveExpressionTypesPass.
     TagName tagName = openTag.getTagName();
     if (tagName.isStatic()) {
       return null;
@@ -337,10 +292,6 @@ final class SoyElementPass implements CompilerFileSetPass {
     return ((TemplateLiteralNode) bind.getChild(0)).getResolvedName();
   }
 
-  /**
-   * The templates processed here have exactly one (static) call, which may or may not be an HTML
-   * template.
-   */
   private HtmlElementMetadataP getTemplateMetadataForStaticCall(
       TemplateNode template,
       String callee,
@@ -361,7 +312,6 @@ final class SoyElementPass implements CompilerFileSetPass {
       calleeMetadata = calledTemplate.getHtmlElementMetadata();
       if (calleeMetadata == null) {
         calleeMetadata = getTemplateMetadata(calledTemplate, templatesInLibrary, visited);
-        // Cycle was detected
         if (calleeMetadata == null) {
           template.setHtmlElementMetadata(DEFAULT_HTML_METADATA);
           return null;
@@ -369,23 +319,19 @@ final class SoyElementPass implements CompilerFileSetPass {
       }
       isCalleeSoyElement = calledTemplate instanceof TemplateElementNode;
     } else {
-      // These are text/css/uri/etc/deltemplate nodes
       isCalleeSoyElement = false;
       calleeMetadata = DEFAULT_HTML_METADATA;
     }
-    String finalCallee;
-    if (calleeMetadata.getFinalCallee().isEmpty()) {
-      finalCallee = callee;
-    } else {
-      finalCallee = calleeMetadata.getFinalCallee();
-    }
-    calleeMetadata =
-        calleeMetadata.toBuilder()
+    
+    String finalCallee = calleeMetadata.getFinalCallee().isEmpty() ? callee : calleeMetadata.getFinalCallee();
+    calleeMetadata = calleeMetadata.toBuilder()
             .clearDelegateElement()
             .setDelegateCallee(callee)
             .setFinalCallee(finalCallee)
             .build();
+    
     template.setHtmlElementMetadata(calleeMetadata);
+    
     if (template instanceof TemplateElementNode) {
       if (calleeMetadata.getIsSkip()) {
         errorReporter.report(calleeSourceLocation, SOYELEMENT_CANNOT_BE_SKIPPED);
@@ -412,13 +358,10 @@ final class SoyElementPass implements CompilerFileSetPass {
     if (openTagNode.isSelfClosing()
         || (openTagNode.getTagName().isDefinitelyVoid()
             && openTagNode.getTaggedPairs().isEmpty())) {
-      // simple void element, like <input> or <input />
       return openTagNode;
-      // This is a graceful fallback in case there is an error in HTML validation.
     } else if (openTagNode.getTaggedPairs().isEmpty()) {
       return openTagNode;
     } else {
-      // this is a 'normal' tag, so it should have a close tag
       if (openTagNode.getTaggedPairs().size() == 1) {
         HtmlTagNode closeTag = openTagNode.getTaggedPairs().get(0);
         if (closeTag.getParent() != parent) {
@@ -439,7 +382,6 @@ final class SoyElementPass implements CompilerFileSetPass {
     }
   }
 
-  // See go/soy-element-keyed-roots for reasoning on why this is disallowed.
   private static void validateOpenTagProperties(
       HtmlOpenTagNode firstTagNode, ErrorReporter errorReporter) {
     if (firstTagNode.getTagName().isLegacyDynamicTagName()) {
