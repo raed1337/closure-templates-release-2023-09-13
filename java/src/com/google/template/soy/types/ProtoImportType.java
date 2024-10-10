@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -43,10 +44,18 @@ public abstract class ProtoImportType extends ImportType {
 
   @Override
   public ImmutableCollection<String> getNestedSymbolNames() {
-    ImmutableSet.Builder<String> allNames = ImmutableSet.builder();
-    getDescriptor().getNestedTypes().forEach(t -> allNames.add(t.getName()));
-    getDescriptor().getEnumTypes().forEach(t -> allNames.add(t.getName()));
-    getDescriptor().getExtensions().forEach(t -> allNames.add(Field.computeSoyName(t)));
-    return allNames.build();
+    ImmutableSet.Builder<String> nestedSymbolNamesBuilder = ImmutableSet.builder();
+    Descriptor descriptor = getDescriptor();
+    
+    descriptor.getNestedTypes().forEach(nestedType -> 
+      nestedSymbolNamesBuilder.add(nestedType.getName())
+    );
+    descriptor.getEnumTypes().forEach(enumType -> 
+      nestedSymbolNamesBuilder.add(enumType.getName())
+    );
+    descriptor.getExtensions().forEach(extension -> 
+      nestedSymbolNamesBuilder.add(Field.computeSoyName(extension))
+    );
+    return nestedSymbolNamesBuilder.build();
   }
 }
