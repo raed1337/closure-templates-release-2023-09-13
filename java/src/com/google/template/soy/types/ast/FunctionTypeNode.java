@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -48,6 +49,10 @@ public abstract class FunctionTypeNode extends TypeNode {
 
     @Override
     public final String toString() {
+      return formatParameter();
+    }
+
+    private String formatParameter() {
       return sourceName() + ": " + type();
     }
 
@@ -62,9 +67,21 @@ public abstract class FunctionTypeNode extends TypeNode {
 
   @Override
   public final String toString() {
+    return formatFunctionType();
+  }
+
+  private String formatFunctionType() {
     if (parameters().size() < 3) {
-      return "(" + Joiner.on(", ").join(parameters()) + ") => " + returnType();
+      return formatInlineParameters();
     }
+    return formatMultilineParameters();
+  }
+
+  private String formatInlineParameters() {
+    return "(" + Joiner.on(", ").join(parameters()) + ") => " + returnType();
+  }
+
+  private String formatMultilineParameters() {
     return "(\n  " + Joiner.on(",\n  ").join(parameters()) + "\n) => " + returnType();
   }
 
@@ -75,12 +92,21 @@ public abstract class FunctionTypeNode extends TypeNode {
 
   @Override
   public FunctionTypeNode copy() {
+    return createCopy();
+  }
+
+  private FunctionTypeNode createCopy() {
+    ImmutableList<Parameter> newParameters = copyParameters();
+    FunctionTypeNode copy = create(sourceLocation(), newParameters, returnType().copy());
+    copy.copyResolvedTypeFrom(this);
+    return copy;
+  }
+
+  private ImmutableList<Parameter> copyParameters() {
     ImmutableList.Builder<Parameter> newParameters = ImmutableList.builder();
     for (Parameter parameter : parameters()) {
       newParameters.add(parameter.copy());
     }
-    FunctionTypeNode copy = create(sourceLocation(), newParameters.build(), returnType().copy());
-    copy.copyResolvedTypeFrom(this);
-    return copy;
+    return newParameters.build();
   }
 }
