@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -30,24 +31,30 @@ public class NullSafeAccessPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    ImmutableList<DataAccessNode> accesses =
-        SoyTreeUtils.getAllNodesOfType(file, DataAccessNode.class);
+    ImmutableList<DataAccessNode> accesses = SoyTreeUtils.getAllNodesOfType(file, DataAccessNode.class);
     for (DataAccessNode access : accesses.reverse()) {
-      if (access.isNullSafe() && access.getParent() != null) {
-        AccessChainComponentNode accessChainRoot = findRoot(access);
-        NullSafeAccessNode.createAndInsert(access, accessChainRoot);
-      }
+      processAccessNode(access);
+    }
+  }
+
+  private void processAccessNode(DataAccessNode access) {
+    if (access.isNullSafe() && access.getParent() != null) {
+      AccessChainComponentNode accessChainRoot = findRoot(access);
+      NullSafeAccessNode.createAndInsert(access, accessChainRoot);
     }
   }
 
   private static AccessChainComponentNode findRoot(DataAccessNode access) {
     AccessChainComponentNode node = access;
-    while ((node.getParent() instanceof DataAccessNode
-            // Make sure to only traverse base nodes up the tree.
-            && ((DataAccessNode) node.getParent()).getBaseExprChild() == node)
-        || node.getParent().getKind() == Kind.ASSERT_NON_NULL_OP_NODE) {
+    while (isBaseNode(node)) {
       node = (AccessChainComponentNode) node.getParent();
     }
     return node;
+  }
+
+  private static boolean isBaseNode(AccessChainComponentNode node) {
+    return (node.getParent() instanceof DataAccessNode
+        && ((DataAccessNode) node.getParent()).getBaseExprChild() == node)
+        || node.getParent().getKind() == Kind.ASSERT_NON_NULL_OP_NODE;
   }
 }
