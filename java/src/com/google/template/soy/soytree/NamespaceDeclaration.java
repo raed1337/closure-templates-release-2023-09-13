@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -53,10 +54,15 @@ public final class NamespaceDeclaration implements Copyable<NamespaceDeclaration
       List<CommandTagAttribute> attrs,
       ErrorReporter errorReporter,
       SourceLocation srcLoc) {
+    this.namespace = namespace;
+    this.srcLoc = srcLoc;
+    this.attrs = ImmutableList.copyOf(attrs);
+    
     ImmutableList<String> requiredCssNamespaces = ImmutableList.of();
     ImmutableList<String> requiredCssPaths = ImmutableList.of();
     String cssBaseNamespace = null;
     String cssPrefix = null;
+
     for (CommandTagAttribute attr : attrs) {
       switch (attr.getName().identifier()) {
         case "requirecss":
@@ -66,41 +72,46 @@ public final class NamespaceDeclaration implements Copyable<NamespaceDeclaration
           requiredCssPaths = attr.valueAsRequireCssPath();
           break;
         case "cssprefix":
-          cssPrefix = attr.getValue();
-          if (cssBaseNamespace != null) {
-            errorReporter.report(
-                attr.getSourceLocation(), CommandTagAttribute.CSS_PREFIX_AND_CSS_BASE);
-          }
+          cssPrefix = validateCssPrefix(attr, cssBaseNamespace, errorReporter);
           break;
         case "cssbase":
-          cssBaseNamespace = attr.getValue();
-          if (cssPrefix != null) {
-            errorReporter.report(
-                attr.getSourceLocation(), CommandTagAttribute.CSS_PREFIX_AND_CSS_BASE);
-          }
+          cssBaseNamespace = validateCssBase(attr, cssPrefix, errorReporter);
           break;
         case "stricthtml":
-          errorReporter.report(
-              attr.getName().location(), CommandTagAttribute.NAMESPACE_STRICTHTML_ATTRIBUTE);
+          errorReporter.report(attr.getName().location(), CommandTagAttribute.NAMESPACE_STRICTHTML_ATTRIBUTE);
           break;
         default:
-          errorReporter.report(
-              attr.getName().location(),
-              CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-              attr.getName().identifier(),
-              "namespace",
-              ImmutableList.of("cssbase", "requirecss", "requirecsspath", "cssprefix"));
-          break;
+          reportUnsupportedAttribute(attr, errorReporter);
       }
     }
 
-    this.namespace = namespace;
     this.requiredCssNamespaces = requiredCssNamespaces;
     this.requiredCssPaths = requiredCssPaths;
     this.cssBaseNamespace = cssBaseNamespace;
-    this.srcLoc = srcLoc;
-    this.attrs = ImmutableList.copyOf(attrs);
     this.cssPrefix = cssPrefix;
+  }
+
+  private String validateCssPrefix(CommandTagAttribute attr, String cssBaseNamespace, ErrorReporter errorReporter) {
+    if (cssBaseNamespace != null) {
+      errorReporter.report(attr.getSourceLocation(), CommandTagAttribute.CSS_PREFIX_AND_CSS_BASE);
+    }
+    return attr.getValue();
+  }
+
+  private String validateCssBase(CommandTagAttribute attr, String cssPrefix, ErrorReporter errorReporter) {
+    if (cssPrefix != null) {
+      errorReporter.report(attr.getSourceLocation(), CommandTagAttribute.CSS_PREFIX_AND_CSS_BASE);
+    }
+    return attr.getValue();
+  }
+
+  private void reportUnsupportedAttribute(CommandTagAttribute attr, ErrorReporter errorReporter) {
+    errorReporter.report(
+        attr.getName().location(),
+        CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
+        attr.getName().identifier(),
+        "namespace",
+        ImmutableList.of("cssbase", "requirecss", "requirecsspath", "cssprefix"));
   }
 
   @Override
@@ -144,9 +155,8 @@ public final class NamespaceDeclaration implements Copyable<NamespaceDeclaration
 
   /** Returns an approximation of what the original source for this namespace looked like. */
   public String toSourceString() {
-    return "{namespace "
-        + namespace.identifier()
-        + (attrs.isEmpty() ? "" : " " + Joiner.on(' ').join(attrs))
-        + "}\n";
+    return String.format("{namespace %s%s}\n", 
+                         namespace.identifier(), 
+                         attrs.isEmpty() ? "" : " " + Joiner.on(' ').join(attrs));
   }
 }
