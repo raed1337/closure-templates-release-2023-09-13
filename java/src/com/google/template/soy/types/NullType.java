@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -48,7 +49,7 @@ public final class NullType extends PrimitiveType {
     builder.setPrimitive(SoyTypeP.PrimitiveTypeP.NULL);
   }
 
-  /** Return the single instance of this type. */
+  /** Return the singleton instance of this type. */
   public static NullType getInstance() {
     return INSTANCE;
   }
