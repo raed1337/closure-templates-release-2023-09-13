@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -76,27 +77,8 @@ public class TemplateParam extends AbstractVarDefn implements TemplateHeaderVarD
     this.defaultValue = defaultValue == null ? null : new ExprRootNode(defaultValue);
     this.sourceLocation = sourceLocation;
     this.isExplicitlyOptional = optional;
-
-    boolean isNullable = false;
-    if (typeNode instanceof UnionTypeNode) {
-      UnionTypeNode utn = (UnionTypeNode) typeNode;
-      for (TypeNode tn : utn.candidates()) {
-        if (tn instanceof NamedTypeNode
-            && ((NamedTypeNode) tn).name().identifier().equals("null")) {
-          isNullable = true;
-          break;
-        }
-      }
-    } else if (typeNode instanceof NamedTypeNode
-        && ((NamedTypeNode) typeNode).name().identifier().equals("null")) {
-      isNullable = true;
-    }
-    // Optional params become nullable
-    if (optional && !isNullable && typeNode != null) {
-      typeNode = getNullableTypeNode(typeNode);
-    }
-    this.typeNode = typeNode;
-    this.isRequired = defaultValue == null && !optional && !isNullable;
+    this.typeNode = resolveTypeNode(typeNode, optional);
+    this.isRequired = defaultValue == null && !optional && !isNullable(typeNode);
   }
 
   protected TemplateParam(TemplateParam param, CopyState copyState) {
@@ -198,6 +180,28 @@ public class TemplateParam extends AbstractVarDefn implements TemplateHeaderVarD
   @Override
   public TemplateParam copy(CopyState copyState) {
     return new TemplateParam(this, copyState);
+  }
+
+  private static boolean isNullable(TypeNode typeNode) {
+    if (typeNode instanceof UnionTypeNode) {
+      for (TypeNode tn : ((UnionTypeNode) typeNode).candidates()) {
+        if (isNamedNull(tn)) {
+          return true;
+        }
+      }
+    }
+    return isNamedNull(typeNode);
+  }
+
+  private static boolean isNamedNull(TypeNode typeNode) {
+    return typeNode instanceof NamedTypeNode && ((NamedTypeNode) typeNode).name().identifier().equals("null");
+  }
+
+  private TypeNode resolveTypeNode(@Nullable TypeNode typeNode, boolean optional) {
+    if (optional && !isNullable(typeNode) && typeNode != null) {
+      return getNullableTypeNode(typeNode);
+    }
+    return typeNode;
   }
 
   public static TypeNode getNullableTypeNode(TypeNode typeNode) {
