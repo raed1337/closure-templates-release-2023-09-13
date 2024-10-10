@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -46,6 +48,12 @@ import java.util.List;
 public final class ConcatMapsMethod
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final class Methods {
+    static final Method CONCAT_MAPS_FN =
+        JavaValueFactory.createMethod(
+            BasicFunctionsRuntime.class, "concatMaps", SoyMap.class, SoyMap.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -56,13 +64,6 @@ public final class ConcatMapsMethod
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
     return factory.global("runtime.concat_maps").call(args.get(0), args.get(1));
-  }
-
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method CONCAT_MAPS_FN =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class, "concatMaps", SoyMap.class, SoyMap.class);
   }
 
   @Override
