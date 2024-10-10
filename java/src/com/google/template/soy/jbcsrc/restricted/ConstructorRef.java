@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -44,11 +45,15 @@ public abstract class ConstructorRef {
    * given parameter types.
    */
   public static ConstructorRef create(TypeInfo type, Method init) {
+    validateConstructor(init);
+    return new AutoValue_ConstructorRef(type, init, ImmutableList.copyOf(init.getArgumentTypes()));
+  }
+
+  private static void validateConstructor(Method init) {
     checkArgument(
         init.getName().equals("<init>") && init.getReturnType().equals(Type.VOID_TYPE),
         "'%s' is not a valid constructor",
         init);
-    return new AutoValue_ConstructorRef(type, init, ImmutableList.copyOf(init.getArgumentTypes()));
   }
 
   /**
@@ -62,16 +67,19 @@ public abstract class ConstructorRef {
 
   public static ConstructorRef create(Class<?> clazz, Class<?>... argTypes) {
     TypeInfo type = TypeInfo.create(clazz);
-    Constructor<?> c;
-    try {
-      c = clazz.getConstructor(argTypes);
-    } catch (NoSuchMethodException | SecurityException e) {
-      throw new RuntimeException(e);
-    }
-    Type constructorType = Type.getType(c);
+    Constructor<?> constructor = getConstructor(clazz, argTypes);
+    Type constructorType = Type.getType(constructor);
 
     return new AutoValue_ConstructorRef(
-        type, Method.getMethod(c), ImmutableList.copyOf(constructorType.getArgumentTypes()));
+        type, Method.getMethod(constructor), ImmutableList.copyOf(constructorType.getArgumentTypes()));
+  }
+
+  private static Constructor<?> getConstructor(Class<?> clazz, Class<?>... argTypes) {
+    try {
+      return clazz.getConstructor(argTypes);
+    } catch (NoSuchMethodException | SecurityException e) {
+      throw new RuntimeException("Unable to find constructor: " + e.getMessage(), e);
+    }
   }
 
   public static final ConstructorRef ARRAY_LIST = create(ArrayList.class);
@@ -130,8 +138,6 @@ public abstract class ConstructorRef {
       @Override
       protected void doGen(CodeBuilder mv) {
         mv.newInstance(instanceClass().type());
-        // push a second reference onto the stack so there is still a reference to the new object
-        // after invoking the constructor (constructors are void methods)
         mv.dup();
         for (Expression arg : args) {
           arg.gen(mv);
