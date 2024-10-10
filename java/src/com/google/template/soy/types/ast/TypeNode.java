@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -34,13 +35,12 @@ public abstract class TypeNode {
   public abstract <T> T accept(TypeNodeVisitor<T> visitor);
 
   public void setResolvedType(SoyType type) {
-    checkState(resolvedType == null, "type has already been set to %s", resolvedType);
+    checkState(resolvedType == null, "Resolved type has already been set to: %s", resolvedType);
     resolvedType = type;
   }
 
   public SoyType getResolvedType() {
-    checkState(
-        resolvedType != null, "type hasn't been set yet on %s at %s", toString(), sourceLocation());
+    checkState(resolvedType != null, "Resolved type hasn't been set yet on %s at %s", toString(), sourceLocation());
     return resolvedType;
   }
 
@@ -55,6 +55,8 @@ public abstract class TypeNode {
   public abstract TypeNode copy();
 
   void copyResolvedTypeFrom(TypeNode old) {
-    this.resolvedType = old.resolvedType;
+    if (old.resolvedType != null) {
+      this.resolvedType = old.resolvedType;
+    }
   }
 }
