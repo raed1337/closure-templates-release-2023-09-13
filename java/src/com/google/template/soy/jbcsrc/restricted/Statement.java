@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -60,16 +61,18 @@ public abstract class Statement extends BytecodeProducer {
    * to do that.
    */
   public static Statement returnExpression(Expression expression) {
-    // TODO(lukes): it would be nice to do a checkType operation here to make sure that expression
-    // is compatible with the return type of the method, but i don't know how to get that
-    // information here (reasonably).  So it is the caller's responsibility.
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
+        validateReturnType(expression);
         expression.gen(adapter);
         adapter.returnValue();
       }
     };
+  }
+
+  private static void validateReturnType(Expression expression) {
+    // TODO: Implement appropriate type validation here if possible
   }
 
   /**
@@ -99,11 +102,15 @@ public abstract class Statement extends BytecodeProducer {
     return new Statement() {
       @Override
       protected void doGen(CodeBuilder adapter) {
-        for (Statement statement : statements) {
-          statement.gen(adapter);
-        }
+        generateStatements(adapter, statements);
       }
     };
+  }
+
+  private static void generateStatements(CodeBuilder adapter, Iterable<? extends Statement> statements) {
+    for (Statement statement : statements) {
+      statement.gen(adapter);
+    }
   }
 
   protected Statement() {
@@ -143,16 +150,18 @@ public abstract class Statement extends BytecodeProducer {
       gen(builder);
       builder.endMethod();
     } catch (Throwable t) {
-      // ASM fails in bizarre ways, attach a trace of the thing we tried to generate to the
-      // exception.
-      String serialized;
-      try {
-        serialized = String.valueOf(this);
-        throw new RuntimeException("Failed to generate method:\n" + serialized, t);
-      } catch (Throwable e) {
-        throw new RuntimeException(
-            "Failed to generate method (and error during serialization = " + e + ")", t);
-      }
+      handleWriteMethodException(t);
+    }
+  }
+
+  private void handleWriteMethodException(Throwable t) {
+    String serialized;
+    try {
+      serialized = String.valueOf(this);
+      throw new RuntimeException("Failed to generate method:\n" + serialized, t);
+    } catch (Throwable e) {
+      throw new RuntimeException(
+          "Failed to generate method (and error during serialization = " + e + ")", t);
     }
   }
 
@@ -171,7 +180,7 @@ public abstract class Statement extends BytecodeProducer {
   }
 
   /**
-   * Returns a new statement identical to this one but with the given label applied at the start of
+   * Returns a new statement identical to this one but with the given label applied at the end of
    * the statement.
    */
   public final Statement labelEnd(Label label) {
