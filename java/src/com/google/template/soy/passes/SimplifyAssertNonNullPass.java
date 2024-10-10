@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -46,20 +47,30 @@ final class SimplifyAssertNonNullPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    for (AssertNonNullOpNode node :
-        SoyTreeUtils.getAllNodesOfType(file, AssertNonNullOpNode.class)) {
-
+    for (AssertNonNullOpNode node : SoyTreeUtils.getAllNodesOfType(file, AssertNonNullOpNode.class)) {
       if (node.getParent() instanceof DataAccessNode) {
-        ExprNode firstChild = node.getChild(0);
-        if (firstChild instanceof AbstractParentExprNode) {
-          ((AbstractParentExprNode) firstChild).setType(node.getType());
-        } else if (firstChild instanceof VarRefNode) {
-          ((VarRefNode) firstChild).setSubstituteType(node.getType());
-        } else if (SoyTypes.isNullish(firstChild.getType())) {
-          continue;
-        }
-        node.getParent().replaceChild(node, firstChild);
+        handleNonNullNode(node);
       }
     }
+  }
+
+  private void handleNonNullNode(AssertNonNullOpNode node) {
+    ExprNode firstChild = node.getChild(0);
+    if (firstChild instanceof AbstractParentExprNode) {
+      updateTypeForParentNode(node, (AbstractParentExprNode) firstChild);
+    } else if (firstChild instanceof VarRefNode) {
+      updateTypeForVarRefNode(node, (VarRefNode) firstChild);
+    } else if (SoyTypes.isNullish(firstChild.getType())) {
+      return;
+    }
+    node.getParent().replaceChild(node, firstChild);
+  }
+
+  private void updateTypeForParentNode(AssertNonNullOpNode node, AbstractParentExprNode firstChild) {
+    firstChild.setType(node.getType());
+  }
+
+  private void updateTypeForVarRefNode(AssertNonNullOpNode node, VarRefNode firstChild) {
+    firstChild.setSubstituteType(node.getType());
   }
 }
