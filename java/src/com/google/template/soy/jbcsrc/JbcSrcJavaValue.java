@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -30,7 +31,7 @@ final class JbcSrcJavaValue implements JavaValue {
 
   /** Constructs a JbcSrcJavaValue based on the Expression. */
   static JbcSrcJavaValue of(Expression expr) {
-    return new JbcSrcJavaValue(expr, /* methodSignature= */ null);
+    return new JbcSrcJavaValue(expr, null);
   }
 
   /**
@@ -95,12 +96,16 @@ final class JbcSrcJavaValue implements JavaValue {
 
   @Override
   public JbcSrcJavaValue coerceToSoyBoolean() {
-    return new JbcSrcJavaValue(((SoyExpression) expr).coerceToBoolean(), methodSignature);
+    return createCoercedValue(((SoyExpression) expr).coerceToBoolean());
   }
 
   @Override
   public JbcSrcJavaValue coerceToSoyString() {
-    return new JbcSrcJavaValue(((SoyExpression) expr).coerceToString(), methodSignature);
+    return createCoercedValue(((SoyExpression) expr).coerceToString());
+  }
+
+  private JbcSrcJavaValue createCoercedValue(SoyExpression newExpr) {
+    return new JbcSrcJavaValue(newExpr, methodSignature);
   }
 
   @Override
