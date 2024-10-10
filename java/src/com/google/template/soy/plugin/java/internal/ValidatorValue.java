@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -75,22 +76,7 @@ final class ValidatorValue implements JavaValue {
 
   static ValidatorValue forMethodReturnType(
       MethodSignature method, ValidatorErrorReporter reporter) {
-    SoyType type = null;
-    if (method.returnType() == boolean.class) {
-      type = BoolType.getInstance();
-    }
-    if (method.returnType() == int.class || method.returnType() == long.class) {
-      type = IntType.getInstance();
-    }
-    if (method.returnType() == int.class) {
-      type = IntType.getInstance();
-    }
-    if (method.returnType() == double.class) {
-      type = FloatType.getInstance();
-    }
-    if (method.returnType() == String.class) {
-      type = StringType.getInstance();
-    }
+    SoyType type = getSoyTypeFromReturnType(method.returnType());
     if (type != null) {
       return new ValidatorValue(
           AutoOneOf_ValidatorValue_ValueType.soyType(type), /* error= */ false, method, reporter);
@@ -100,6 +86,22 @@ final class ValidatorValue implements JavaValue {
         /* error= */ false,
         method,
         reporter);
+  }
+
+  private static SoyType getSoyTypeFromReturnType(Class<?> returnType) {
+    if (returnType == boolean.class) {
+      return BoolType.getInstance();
+    }
+    if (returnType == int.class || returnType == long.class) {
+      return IntType.getInstance();
+    }
+    if (returnType == double.class) {
+      return FloatType.getInstance();
+    }
+    if (returnType == String.class) {
+      return StringType.getInstance();
+    }
+    return null;
   }
 
   private ValidatorValue(
@@ -122,28 +124,27 @@ final class ValidatorValue implements JavaValue {
 
   @Override
   public ValidatorValue asSoyBoolean() {
-    return asValue(BoolType.getInstance(), "asSoyBoolean");
+    return convertToSoyType(BoolType.getInstance(), "asSoyBoolean");
   }
 
   @Override
   public ValidatorValue asSoyString() {
-    return asValue(StringType.getInstance(), "asSoyString");
+    return convertToSoyType(StringType.getInstance(), "asSoyString");
   }
 
   @Override
   public ValidatorValue asSoyInt() {
-    return asValue(IntType.getInstance(), "asSoyInt");
+    return convertToSoyType(IntType.getInstance(), "asSoyInt");
   }
 
   @Override
   public ValidatorValue asSoyFloat() {
-    return asValue(FloatType.getInstance(), "asSoyFloat");
+    return convertToSoyType(FloatType.getInstance(), "asSoyFloat");
   }
 
-  private ValidatorValue asValue(SoyType newType, String methodName) {
-    if (valueType.type() != ValueType.Type.SOY_TYPE) {
-      reporter.nonSoyExpressionNotConvertible(
-          isConstantNull() ? Object.class : valueType.clazz(), newType, methodName);
+  private ValidatorValue convertToSoyType(SoyType newType, String methodName) {
+    if (!isSoyType()) {
+      reportNonConvertible(newType, methodName);
       return forError(newType, reporter);
     }
     if (!valueType.soyType().isAssignableFromStrict(newType)) {
@@ -153,28 +154,32 @@ final class ValidatorValue implements JavaValue {
     return forSoyType(newType, reporter);
   }
 
+  private boolean isSoyType() {
+    return valueType.type() == ValueType.Type.SOY_TYPE;
+  }
+
+  private void reportNonConvertible(SoyType newType, String methodName) {
+    reporter.nonSoyExpressionNotConvertible(
+        isConstantNull() ? Object.class : valueType.clazz(), newType, methodName);
+  }
+
   @Override
   public ValidatorValue coerceToSoyBoolean() {
-    if (valueType.type() != ValueType.Type.SOY_TYPE) {
-      reporter.nonSoyExpressionNotCoercible(
-          isConstantNull() ? Object.class : valueType.clazz(),
-          BoolType.getInstance(),
-          "coerceToSoyBoolean");
-      return forError(BoolType.getInstance(), reporter);
-    }
-    return forSoyType(BoolType.getInstance(), reporter);
+    return coerceToType(BoolType.getInstance(), "coerceToSoyBoolean");
   }
 
   @Override
   public ValidatorValue coerceToSoyString() {
-    if (valueType.type() != ValueType.Type.SOY_TYPE) {
+    return coerceToType(StringType.getInstance(), "coerceToSoyString");
+  }
+
+  private ValidatorValue coerceToType(SoyType newType, String methodName) {
+    if (!isSoyType()) {
       reporter.nonSoyExpressionNotCoercible(
-          isConstantNull() ? Object.class : valueType.clazz(),
-          StringType.getInstance(),
-          "coerceToSoyString");
-      return forError(StringType.getInstance(), reporter);
+          isConstantNull() ? Object.class : valueType.clazz(), newType, methodName);
+      return forError(newType, reporter);
     }
-    return forSoyType(StringType.getInstance(), reporter);
+    return forSoyType(newType, reporter);
   }
 
   @Nullable
@@ -191,7 +196,7 @@ final class ValidatorValue implements JavaValue {
   }
 
   boolean hasSoyType() {
-    return valueType.type() == ValueType.Type.SOY_TYPE;
+    return isSoyType();
   }
 
   boolean isConstantNull() {
@@ -212,7 +217,6 @@ final class ValidatorValue implements JavaValue {
 
     abstract ValueType.Type type();
 
-    // note: this should be a void return, the mvn dep for AutoOneOf doesn't support that yet
     abstract boolean constantNull();
 
     abstract SoyType soyType();
