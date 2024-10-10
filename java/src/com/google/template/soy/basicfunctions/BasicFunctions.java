@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -19,14 +20,20 @@ package com.google.template.soy.basicfunctions;
 import com.google.common.collect.ImmutableList;
 import com.google.template.soy.plugin.restricted.SoySourceFunction;
 
+import java.util.Arrays;
+import java.util.List;
+
 /** Lists all functions in this package. */
 public class BasicFunctions {
 
   private BasicFunctions() {}
 
   public static ImmutableList<SoySourceFunction> functions() {
-    return ImmutableList.of(
-        // go/keep-sorted start
+    return ImmutableList.copyOf(getFunctions());
+  }
+
+  private static List<SoySourceFunction> getFunctions() {
+    return Arrays.asList(
         new CeilingFunction(),
         new ConcatListsFunction(),
         new ConcatMapsMethod(),
@@ -74,7 +81,7 @@ public class BasicFunctions {
         new StrToAsciiUpperCaseFunction(),
         new StrTrimMethod(),
         new StringListSortMethod(),
-        new VeHasSameIdMethod());
-    // go/keep-sorted end
+        new VeHasSameIdMethod()
+    );
   }
 }
