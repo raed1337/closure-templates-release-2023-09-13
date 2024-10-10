@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -18,11 +19,16 @@ package com.google.template.soy.incrementaldomsrc;
 import com.google.common.collect.ImmutableSet;
 import com.google.template.soy.jssrc.restricted.JsExpr;
 import com.google.template.soy.jssrc.restricted.SoyLibraryAssistedJsSrcPrintDirective;
+
 import java.util.List;
 import java.util.Set;
 
 /** Implements the |filterHtmlAttributes directive for incremental dom only. */
 final class FilterHtmlAttributesDirective implements SoyLibraryAssistedJsSrcPrintDirective {
+
+  private static final String DIRECTIVE_NAME = "|filterHtmlAttributes";
+  private static final Set<Integer> VALID_ARG_SIZES = ImmutableSet.of(1);
+  private static final String MODULE_PATH = "google3.javascript.template.soy.soyutils_directives";
 
   /**
    * Gets the name of the Soy print directive.
@@ -31,7 +37,7 @@ final class FilterHtmlAttributesDirective implements SoyLibraryAssistedJsSrcPrin
    */
   @Override
   public String getName() {
-    return "|filterHtmlAttributes";
+    return DIRECTIVE_NAME;
   }
 
   /**
@@ -42,20 +48,21 @@ final class FilterHtmlAttributesDirective implements SoyLibraryAssistedJsSrcPrin
    */
   @Override
   public Set<Integer> getValidArgsSizes() {
-    return ImmutableSet.of(1);
+    return VALID_ARG_SIZES;
   }
 
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
-    return new JsExpr(
-        String.format(
-            "goog.module.get('%s').$$filterHtmlAttributes(%s)",
-            "google3.javascript.template.soy.soyutils_directives", value.getText()),
-        Integer.MAX_VALUE);
+    return createJsExpr(value);
+  }
+
+  private JsExpr createJsExpr(JsExpr value) {
+    String jsCode = String.format("goog.module.get('%s').$$filterHtmlAttributes(%s)", MODULE_PATH, value.getText());
+    return new JsExpr(jsCode, Integer.MAX_VALUE);
   }
 
   @Override
   public ImmutableSet<String> getRequiredJsLibNames() {
-    return ImmutableSet.of("google3.javascript.template.soy.soyutils_directives");
+    return ImmutableSet.of(MODULE_PATH);
   }
 }
