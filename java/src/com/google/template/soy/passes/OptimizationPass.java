@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -33,9 +34,13 @@ final class OptimizationPass implements CompilerFileSetPass {
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     SimplifyVisitor visitor = SimplifyVisitor.create(idGenerator, sourceFiles, errorReporter);
+    processFiles(sourceFiles, visitor);
+    return Result.CONTINUE;
+  }
+
+  private void processFiles(ImmutableList<SoyFileNode> sourceFiles, SimplifyVisitor visitor) {
     for (SoyFileNode file : sourceFiles) {
       visitor.simplify(file);
     }
-    return Result.CONTINUE;
   }
 }
