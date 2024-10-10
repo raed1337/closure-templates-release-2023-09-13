@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -7,8 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -65,18 +65,10 @@ public class TargetExpr {
 
   @Override
   public boolean equals(Object other) {
-    if (other == null || this.getClass() != other.getClass()) {
-      return false;
-    }
+    if (this == other) return true;
+    if (!(other instanceof TargetExpr)) return false;
     TargetExpr otherCast = (TargetExpr) other;
-    if (this.text.equals(otherCast.text)) {
-      if (this.precedence != otherCast.precedence) {
-        throw new AssertionError(); // if text is equal, precedence should also be equal
-      }
-      return true;
-    } else {
-      return false;
-    }
+    return text.equals(otherCast.text) && precedence == otherCast.precedence;
   }
 
   @Override
