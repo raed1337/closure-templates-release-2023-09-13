@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -140,10 +141,7 @@ public final class TemplateDelegateNode extends TemplateNode {
   /** Returns the delegate template key (name and variant). */
   @VisibleForTesting
   DelTemplateKey getDelTemplateKey() {
-    if (delTemplateKey != null) {
-      return delTemplateKey;
-    }
-    return resolveVariantExpression();
+    return delTemplateKey != null ? delTemplateKey : resolveVariantExpression();
   }
 
   /** Returns the delegate priority. */
@@ -168,21 +166,17 @@ public final class TemplateDelegateNode extends TemplateNode {
   private DelTemplateKey resolveVariantExpression() {
     ExprRootNode delTemplateVariantExpr = delTemplateVariantExpr();
     if (delTemplateVariantExpr == null) {
-      delTemplateKey = DelTemplateKey.create(delTemplateName, "");
-      return delTemplateKey;
+      return DelTemplateKey.create(delTemplateName, "");
     }
-    ExprNode exprNode = delTemplateVariantExpr.getRoot();
+    return createDelTemplateKeyFromExpr(delTemplateVariantExpr.getRoot());
+  }
+
+  private DelTemplateKey createDelTemplateKeyFromExpr(ExprNode exprNode) {
     if (exprNode instanceof GlobalNode) {
       GlobalNode globalNode = (GlobalNode) exprNode;
-      // This global was not substituted.  This happens when TemplateRegistries are built for
-      // message extraction and parseinfo generation.  To make this 'work' we just use the Global
-      // name for the variant value.  This is fine and will help catch some errors.
-      // Because these nodes won't be used for code generation this should be safe.
-      // For this reason we also don't store the key, instead we just return it.
       return DelTemplateKey.create(delTemplateName, globalNode.getName());
     }
-    delTemplateKey =
-        DelTemplateKey.create(delTemplateName, TemplateNode.variantExprToString(exprNode));
+    delTemplateKey = DelTemplateKey.create(delTemplateName, TemplateNode.variantExprToString(exprNode));
     return delTemplateKey;
   }
 
@@ -198,29 +192,34 @@ public final class TemplateDelegateNode extends TemplateNode {
   public void validateVariantExpression(ErrorReporter errorReporter) {
     getAttributes().stream()
         .filter(a -> VARIANT_ATTR.equals(a.getName().identifier()))
-        .forEach(
-            a -> validateVariantExpression(a.valueAsExpr(errorReporter).getRoot(), errorReporter));
+        .forEach(a -> validateVariantExpression(a.valueAsExpr(errorReporter).getRoot(), errorReporter));
   }
 
   private static void validateVariantExpression(ExprNode primitiveNode, ErrorReporter reporter) {
     switch (primitiveNode.getKind()) {
       case STRING_NODE:
-        StringNode sn = (StringNode) primitiveNode;
-        if (!sn.getValue().isEmpty() && !BaseUtils.isIdentifier(sn.getValue())) {
-          reporter.report(sn.getSourceLocation(), INVALID_VARIANT_STRING, sn.getValue());
-        }
+        validateStringNode((StringNode) primitiveNode, reporter);
         break;
       case INTEGER_NODE:
-        IntegerNode in = (IntegerNode) primitiveNode;
-        if (in.getValue() < 0) {
-          reporter.report(in.getSourceLocation(), INVALID_VARIANT_INTEGER, in.getValue());
-        }
+        validateIntegerNode((IntegerNode) primitiveNode, reporter);
         break;
       case PROTO_ENUM_VALUE_NODE:
+        // No validation needed for proto enum values.
         break;
       default:
-        reporter.report(
-            primitiveNode.getSourceLocation(), INVALID_VARIANT_EXPR, primitiveNode.getKind());
+        reporter.report(primitiveNode.getSourceLocation(), INVALID_VARIANT_EXPR, primitiveNode.getKind());
+    }
+  }
+
+  private static void validateStringNode(StringNode sn, ErrorReporter reporter) {
+    if (!sn.getValue().isEmpty() && !BaseUtils.isIdentifier(sn.getValue())) {
+      reporter.report(sn.getSourceLocation(), INVALID_VARIANT_STRING, sn.getValue());
+    }
+  }
+
+  private static void validateIntegerNode(IntegerNode in, ErrorReporter reporter) {
+    if (in.getValue() < 0) {
+      reporter.report(in.getSourceLocation(), INVALID_VARIANT_INTEGER, in.getValue());
     }
   }
 }
