@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -39,53 +40,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Optional;
 
-/**
- * Bootstrap methods for handling calls that should fallback to a ClassLoader if necessary.
- *
- * <p>In order to support a flexible classloader set up we need to avoid generating direct bytecode
- * references. Instead we defer the linkage decision until runtime using {@code invokedynamic}.
- *
- * <p>See https://wiki.openjdk.java.net/display/HotSpot/Method+handles+and+invokedynamic for brutal
- * detail.
- *
- * <p>The main idea is that when the JVM first sees a given {@code invokedynamic} instruction it
- * calls the corresponding 'bootstrap method'. The method then returns a {@link CallSite} object
- * that tells the JVM how to actually invoke the method. The {@code CallSite} is primarily a wrapper
- * around a {@link MethodHandle} which is a flexible and JVM transparent object that can be used to
- * define the method to call.
- *
- * <p>In the case of Soy calls the dynamic behavior we want is relatively simple. If the target of
- * the {@code call} is defined by a different classloader than the callee, then dispatch to a
- * slowpath that goes through our {@link RenderContext} lookup class. Because this decision is
- * deferred until runtime we can ensure that the slowpath only occurs across classloader boundaries.
- *
- * <p>Other Ideas:
- *
- * <ul>
- *   <li>It might be possible to optimize {@code delcalls}, presumably many delcalls only have a
- *       single target or two possible targets, we could use MethodHandles.guardWithTest to allow
- *       inlining across such boundaries.
- *   <li>We could use a MutableCallsite for cross classloader calls and invalidate them when
- *       classloaders change. This would allow us to take advantage of JVM
- *       deoptimization/reoptimization.
- * </ul>
- */
 public final class ClassLoaderFallbackCallFactory {
-  // A testing hook to force all bootstraps to take the slowpaths.
   private static final boolean FORCE_SLOWPATH =
       Boolean.getBoolean("soy_jbcsrc_take_classloader_fallback_slowpath");
 
-  /**
-   * A testonly marker interface that may be implemented by classloaders to force this class to
-   * always select slowpaths.
-   */
   @VisibleForTesting
   public interface AlwaysSlowPath {}
 
-  /**
-   * Put all the handles in an inner class since they are only referenced when slowpaths are
-   * triggered which is rare.
-   */
   private static final class SlowPathHandles {
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
@@ -131,10 +92,12 @@ public final class ClassLoaderFallbackCallFactory {
         findLocalStaticOrDie(
             "slowPathTemplateValue",
             methodType(TemplateValue.class, SoyCallSite.class, String.class, RenderContext.class));
+
     private static final MethodHandle SLOWPATH_CONST =
         findLocalStaticOrDie(
             "slowPathConst",
             methodType(Object.class, SoyCallSite.class, String.class, RenderContext.class));
+
     private static final MethodHandle SLOWPATH_EXTERN =
         findLocalStaticOrDie(
             "slowPathExtern",
@@ -175,75 +138,54 @@ public final class ClassLoaderFallbackCallFactory {
 
   private ClassLoaderFallbackCallFactory() {}
 
-  /**
-   * A JVM bootstrap method for resolving references to templates in {@code {call ..}} commands.
-   * This is used when streaming escaping directives cannot be applied.
-   *
-   * <p>This roughly generates code that looks like {@code <callee-class>.template()} where {@code
-   * <callee-class>} is derived from the {@code templateName} parameter, additionally this supports
-   * a fallback where the callee class cannot be found directly (because it is owned by a different
-   * classloader).
-   *
-   * @param lookup An object that allows us to resolve classes/methods in the context of the
-   *     callsite. Provided automatically by invokeDynamic JVM infrastructure
-   * @param name The name of the invokeDynamic method being called. This is provided by
-   *     invokeDynamic JVM infrastructure and currently unused.
-   * @param type The type of the method being called. This will be the method signature of the
-   *     callsite we produce. Provided automatically by invokeDynamic JVM infrastructure. For this
-   *     method it is always (RenderContext)->CompiledTemplate.
-   * @param templateName A constant that is used for bootstrapping. this is the fully qualified soy
-   *     template name of the template being referenced.
-   */
   public static CallSite bootstrapTemplateLookup(
       MethodHandles.Lookup lookup, String name, MethodType type, String templateName)
       throws NoSuchMethodException, IllegalAccessException {
     if (!FORCE_SLOWPATH) {
-      Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
-      if (templateClass.isPresent()) {
-        CompiledTemplate template = getTemplate(lookup, templateClass.get(), templateName);
-        // the initial renderContext is ignored in this case
-        MethodHandle getter = constant(CompiledTemplate.class, template);
-        getter = dropArguments(getter, 0, RenderContext.class);
-        return new ConstantCallSite(getter);
-      }
+      return attemptTemplateLookup(lookup, type, templateName);
     }
+    return createSlowPathTemplateCallSite(templateName, type);
+  }
+
+  private static CallSite attemptTemplateLookup(MethodHandles.Lookup lookup, MethodType type, String templateName) throws NoSuchMethodException, IllegalAccessException {
+    Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
+    if (templateClass.isPresent()) {
+      CompiledTemplate template = getTemplate(lookup, templateClass.get(), templateName);
+      MethodHandle getter = constant(CompiledTemplate.class, template);
+      getter = dropArguments(getter, 0, RenderContext.class);
+      return new ConstantCallSite(getter);
+    }
+    return createSlowPathTemplateCallSite(templateName, type);
+  }
+
+  private static CallSite createSlowPathTemplateCallSite(String templateName, MethodType type) {
     MethodHandle slowPath = SlowPathHandles.SLOWPATH_TEMPLATE;
     slowPath = insertArguments(slowPath, 1, templateName);
     return new SoyCallSite(type, slowPath);
   }
 
-  /**
-   * A JVM bootstrap method for resolving {@code template(...)} references.
-   *
-   * <p>This roughly generates code that looks like {@code
-   * TemplateValue.create(<callee-class>.template())} where {@code <callee-class>} is derived from
-   * the {@code templateName} parameter, additionally this supports a fallback where the callee
-   * class cannot be found directly (because it is owned by a different classloader).
-   *
-   * @param lookup An object that allows us to resolve classes/methods in the context of the
-   *     callsite. Provided automatically by invokeDynamic JVM infrastructure
-   * @param name The name of the invokeDynamic method being called. This is provided by
-   *     invokeDynamic JVM infrastructure and currently unused.
-   * @param type The type of the method being called. This will be the method signature of the
-   *     callsite we produce. Provided automatically by invokeDynamic JVM infrastructure. For this
-   *     method it is always (RenderContext)->CompiledTemplate.TemplateValue.
-   * @param templateName A constant that is used for bootstrapping. this is the fully qualified soy
-   *     template name of the template being referenced.
-   */
   public static CallSite bootstrapTemplateValueLookup(
       MethodHandles.Lookup lookup, String name, MethodType type, String templateName)
       throws NoSuchMethodException, IllegalAccessException {
     if (!FORCE_SLOWPATH) {
-      Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
-      if (templateClass.isPresent()) {
-        CompiledTemplate template = getTemplate(lookup, templateClass.get(), templateName);
-        TemplateValue value = TemplateValue.create(templateName, template);
-        // the initial renderContext is ignored in this case
-        MethodHandle getter = constant(TemplateValue.class, value);
-        getter = dropArguments(getter, 0, RenderContext.class);
-        return new ConstantCallSite(getter);
-      }
+      return attemptTemplateValueLookup(lookup, type, templateName);
     }
+    return createSlowPathTemplateValueCallSite(templateName, type);
+  }
+
+  private static CallSite attemptTemplateValueLookup(MethodHandles.Lookup lookup, MethodType type, String templateName) throws NoSuchMethodException, IllegalAccessException {
+    Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
+    if (templateClass.isPresent()) {
+      CompiledTemplate template = getTemplate(lookup, templateClass.get(), templateName);
+      TemplateValue value = TemplateValue.create(templateName, template);
+      MethodHandle getter = constant(TemplateValue.class, value);
+      getter = dropArguments(getter, 0, RenderContext.class);
+      return new ConstantCallSite(getter);
+    }
+    return createSlowPathTemplateValueCallSite(templateName, type);
+  }
+
+  private static CallSite createSlowPathTemplateValueCallSite(String templateName, MethodType type) {
     MethodHandle slowPath = SlowPathHandles.SLOWPATH_TEMPLATE_VALUE;
     slowPath = insertArguments(slowPath, 1, templateName);
     return new SoyCallSite(type, slowPath);
@@ -252,11 +194,7 @@ public final class ClassLoaderFallbackCallFactory {
   private static CompiledTemplate getTemplate(
       MethodHandles.Lookup lookup, Class<?> templateClass, String templateName)
       throws NoSuchMethodException, IllegalAccessException {
-    // Use the lookup to find and invoke the method.  This ensures that we can access the
-    // factory using the permissions of the caller instead of the permissions of this class.
-    // This is needed because template() methods for private templates are package private.
     String methodName = Names.renderMethodNameFromSoyTemplateName(templateName);
-
     MethodHandle templateAccessor =
         lookup.findStatic(templateClass, methodName, SlowPathHandles.TEMPLATE_ACCESSOR_TYPE);
     try {
@@ -266,68 +204,39 @@ public final class ClassLoaderFallbackCallFactory {
     }
   }
 
-  /**
-   * A JVM bootstrap method for resolving {@code call} commands.
-   *
-   * <p>This roughly generates code that looks like {@code <callee-class>.render(...)} where {@code
-   * <callee-class>} is derived from the {@code templateName} parameter and {@code ...} corresponds
-   * to the dynamically resolved parameters, additionally this supports a fallback where the callee
-   * class cannot be found directly (because it is owned by a different classloader).
-   *
-   * @param lookup An object that allows us to resolve classes/methods in the context of the
-   *     callsite. Provided automatically by invokeDynamic JVM infrastructure
-   * @param name The name of the invokeDynamic method being called. This is provided by
-   *     invokeDynamic JVM infrastructure and currently unused.
-   * @param type The type of the method being called. This will be the method signature of the
-   *     callsite we produce. Provided automatically by invokeDynamic JVM infrastructure. For this
-   *     method it is either the main render signature or a positional signature
-   * @param templateName A constant that is used for bootstrapping. this is the fully qualified soy
-   *     template name of the template being referenced.
-   */
   public static CallSite bootstrapCall(
       MethodHandles.Lookup lookup, String name, MethodType type, String templateName)
       throws IllegalAccessException, NoSuchMethodException {
     if (!FORCE_SLOWPATH) {
-      Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
-      String methodName = Names.renderMethodNameFromSoyTemplateName(templateName);
-      if (templateClass.isPresent()) {
-        return new ConstantCallSite(lookup.findStatic(templateClass.get(), methodName, type));
-      }
+      return attemptCall(lookup, type, templateName);
     }
+    return createSlowPathCallSite(templateName, type);
+  }
 
+  private static CallSite attemptCall(MethodHandles.Lookup lookup, MethodType type, String templateName) throws NoSuchMethodException, IllegalAccessException {
+    Optional<Class<?>> templateClass = findTemplateClass(lookup, templateName);
+    String methodName = Names.renderMethodNameFromSoyTemplateName(templateName);
+    if (templateClass.isPresent()) {
+      return new ConstantCallSite(lookup.findStatic(templateClass.get(), methodName, type));
+    }
+    return createSlowPathCallSite(templateName, type);
+  }
+
+  private static CallSite createSlowPathCallSite(String templateName, MethodType type) {
     MethodHandle slowPathRenderHandle =
         type.equals(SlowPathHandles.RENDER_TYPE)
             ? SlowPathHandles.SLOWPATH_RENDER_RECORD
             : SlowPathHandles.SLOWPATH_RENDER_POSITIONAL;
     slowPathRenderHandle = insertArguments(slowPathRenderHandle, 1, templateName);
     if (!type.equals(SlowPathHandles.RENDER_TYPE)) {
-      // target type has a signature like (SVP,SVP,...SVP,SoyRecord,Appendable,RenderContext)
-      // we want to collect the leading SVPs into an array at the end of the slowpath
       int numParams = type.parameterCount();
-      int numPositionalParams =
-          numParams - 3; // 4 for the CallSite,ij params, appenable and context
-
-      // Turn slowPath from accepting a SoyValueProvider[] to a fixed number of
-      // SoyValueProvider arguments at position 1
+      int numPositionalParams = numParams - 3;
       slowPathRenderHandle =
           slowPathRenderHandle.asCollector(1, SoyValueProvider[].class, numPositionalParams);
     }
     return new SoyCallSite(type, slowPathRenderHandle);
   }
 
-  /**
-   * A JVM bootstrap method for resolving references to constants..
-   *
-   * @param lookup An object that allows us to resolve classes/methods in the context of the
-   *     callsite. Provided automatically by invokeDynamic JVM infrastructure
-   * @param name The name of the invokeDynamic method being called. This is provided by
-   *     invokeDynamic JVM infrastructure and currently unused.
-   * @param type The type of the method being called. This will be the method signature of the
-   *     callsite we produce. Provided automatically by invokeDynamic JVM infrastructure. For this
-   *     method it is always (RenderContext)->CompiledTemplate.
-   * @param constClassName The FQN of the class containing the constant.
-   * @param constName The local name of the constant.
-   */
   public static CallSite bootstrapConstLookup(
       MethodHandles.Lookup lookup,
       String name,
@@ -336,44 +245,34 @@ public final class ClassLoaderFallbackCallFactory {
       String constName)
       throws NoSuchMethodException, IllegalAccessException {
     if (!FORCE_SLOWPATH) {
-      ClassLoader callerClassLoader = lookup.lookupClass().getClassLoader();
-      try {
-        Class<?> constClass = callerClassLoader.loadClass(constClassName);
-        MethodHandle handle =
-            lookup.findStatic(
-                constClass, constName, methodType(type.returnType(), RenderContext.class));
-        return new ConstantCallSite(handle);
-      } catch (ClassNotFoundException classNotFoundException) {
-        // Fall back to using the RenderContext class loader.
-      }
+      return attemptConstLookup(lookup, type, constClassName, constName);
     }
+    return createSlowPathConstCallSite(constClassName, constName, type);
+  }
 
+  private static CallSite attemptConstLookup(MethodHandles.Lookup lookup, MethodType type, String constClassName, String constName) throws NoSuchMethodException, IllegalAccessException {
+    ClassLoader callerClassLoader = lookup.lookupClass().getClassLoader();
+    try {
+      Class<?> constClass = callerClassLoader.loadClass(constClassName);
+      MethodHandle handle =
+          lookup.findStatic(
+              constClass, constName, methodType(type.returnType(), RenderContext.class));
+      return new ConstantCallSite(handle);
+    } catch (ClassNotFoundException classNotFoundException) {
+      // Fall back to using the RenderContext class loader.
+    }
+    return createSlowPathConstCallSite(constClassName, constName, type);
+  }
+
+  private static CallSite createSlowPathConstCallSite(String constClassName, String constName, MethodType type) {
     MethodHandle slowPath = SlowPathHandles.SLOWPATH_CONST;
     slowPath =
         insertArguments(
             slowPath, 1, constClassName + '#' + constName + '#' + type.toMethodDescriptorString());
     return new SoyCallSite(
-        // adapt the return type of the slowpath to the current constant type
         type, slowPath.asType(slowPath.type().changeReturnType(type.returnType())));
   }
 
-  /**
-   * A JVM bootstrap method for resolving references to extern functions.
-   *
-   * <p>This translates as a direct static call to the extern, if the callee class cannot be
-   * resolved we redispatch through a SoyCallSite to allow a cross classloader call.
-   *
-   * @param lookup An object that allows us to resolve classes/methods in the context of the
-   *     callsite. Provided automatically by invokeDynamic JVM infrastructure
-   * @param name The name of the invokeDynamic method being called. This is provided by
-   *     invokeDynamic JVM infrastructure and currently unused.
-   * @param type The type of the method being called. This will be the method signature of the
-   *     callsite we produce. Provided automatically by invokeDynamic JVM infrastructure. For this
-   *     method it is always (RenderContext,...arguments)->return value according to the signature
-   *     of the extern function
-   * @param externName the name of the class that defines the extern
-   * @param externName the name of the extern
-   */
   public static CallSite bootstrapExternCall(
       MethodHandles.Lookup lookup,
       String name,
@@ -382,31 +281,34 @@ public final class ClassLoaderFallbackCallFactory {
       String externName)
       throws NoSuchMethodException, IllegalAccessException {
     if (!FORCE_SLOWPATH) {
-      ClassLoader callerClassLoader = lookup.lookupClass().getClassLoader();
-      try {
-        Class<?> constClass = callerClassLoader.loadClass(externClassName);
-        MethodHandle handle = lookup.findStatic(constClass, externName, type);
-        return new ConstantCallSite(handle);
-      } catch (ClassNotFoundException classNotFoundException) {
-        // Fall back to using the RenderContext class loader.
-      }
+      return attemptExternCall(lookup, type, externClassName, externName);
     }
+    return createSlowPathExternCallSite(externClassName, externName, type);
+  }
+
+  private static CallSite attemptExternCall(MethodHandles.Lookup lookup, MethodType type, String externClassName, String externName) throws NoSuchMethodException, IllegalAccessException {
+    ClassLoader callerClassLoader = lookup.lookupClass().getClassLoader();
+    try {
+      Class<?> constClass = callerClassLoader.loadClass(externClassName);
+      MethodHandle handle = lookup.findStatic(constClass, externName, type);
+      return new ConstantCallSite(handle);
+    } catch (ClassNotFoundException classNotFoundException) {
+      // Fall back to using the RenderContext class loader.
+    }
+    return createSlowPathExternCallSite(externClassName, externName, type);
+  }
+
+  private static CallSite createSlowPathExternCallSite(String externClassName, String externName, MethodType type) {
     MethodHandle slowPath = SlowPathHandles.SLOWPATH_EXTERN;
     slowPath =
         insertArguments(
             slowPath,
             1,
             externClassName + '#' + externName + '#' + type.toMethodDescriptorString());
-    // collect all arguments except the RenderContext into an array
     slowPath = slowPath.asCollector(Object[].class, type.parameterCount() - 1);
     return new SoyCallSite(type, slowPath.asType(type.insertParameterTypes(0, SoyCallSite.class)));
   }
 
-  /**
-   * The "slow path" for resolving constants. When the default class loader can't resolve the
-   * constant's static method, the bootstrap method returns this one instead. It delegates to
-   * RenderContext, which uses the CompiledTemplate's class loader to find the method.
-   */
   public static Object slowPathConst(
       SoyCallSite callSite, String constantFqn, RenderContext context) throws Throwable {
     CompiledTemplates templates = context.getTemplates();
@@ -415,11 +317,6 @@ public final class ClassLoaderFallbackCallFactory {
     return constMethod.invoke(context);
   }
 
-  /**
-   * The "slow path" for resolving constants. When the default class loader can't resolve the
-   * constant's static method, the bootstrap method returns this one instead. It delegates to
-   * RenderContext, which uses the CompiledTemplate's class loader to find the method.
-   */
   public static Object slowPathExtern(
       SoyCallSite callSite, String externFqn, RenderContext context, Object[] args)
       throws Throwable {
@@ -427,9 +324,6 @@ public final class ClassLoaderFallbackCallFactory {
     MethodHandle externMethod = templates.getConstOrExternMethod(externFqn);
 
     callSite.update(templates, externMethod);
-
-    // use a slower dynamic call for the slowpath.  On subsequent calls the fastpath will be
-    // selected.
     return externMethod.invokeWithArguments(ObjectArrays.concat(context, args));
   }
 
@@ -441,16 +335,11 @@ public final class ClassLoaderFallbackCallFactory {
     try {
       clazz = callerClassLoader.loadClass(className);
     } catch (ClassNotFoundException classNotFoundException) {
-      // expected, if this happens we need to resolve by falling back to one of our slowpaths
-      // which typically disptach the call through RenderContext
       return Optional.empty();
     }
-    // Test if we should send this class through the slowpath anyway
     if (clazz.getClassLoader() instanceof AlwaysSlowPath) {
       Method method =
           clazz.getDeclaredMethod(Names.renderMethodNameFromSoyTemplateName(templateName));
-      // We can't take the slowpath for private templates.  Private templates are represented as
-      // default access methods.
       if (Modifier.isPublic(method.getModifiers())) {
         return Optional.empty();
       }
@@ -458,7 +347,6 @@ public final class ClassLoaderFallbackCallFactory {
     return Optional.of(clazz);
   }
 
-  /** The slow path for resolving template. */
   public static CompiledTemplate slowPathTemplate(
       SoyCallSite callSite, String templateName, RenderContext context) {
     CompiledTemplates templates = context.getTemplates();
@@ -467,10 +355,6 @@ public final class ClassLoaderFallbackCallFactory {
     return template;
   }
 
-  /**
-   * The slow path for resolving template values, this is called whenever the set of compiled
-   * templates changes.
-   */
   public static TemplateValue slowPathTemplateValue(
       SoyCallSite callSite, String templateName, RenderContext context) {
     CompiledTemplates templates = context.getTemplates();
@@ -479,7 +363,6 @@ public final class ClassLoaderFallbackCallFactory {
     return value;
   }
 
-  /** The slow path for a call using positional call style. */
   public static RenderResult slowPathRenderPositional(
       SoyCallSite callSite,
       String templateName,
@@ -490,18 +373,12 @@ public final class ClassLoaderFallbackCallFactory {
       throws Throwable {
     CompiledTemplates templates = context.getTemplates();
     MethodHandle renderMethod = templates.getPositionalRenderMethod(templateName, params.length);
-    // Set the target so future calls will go here directly
     callSite.update(templates, renderMethod);
-    // NOTE: we don't need to handle any state since if we are detaching on the next re-attach we
-    // will call back into the same function directly
     Object[] args =
         ObjectArrays.concat(params, new Object[] {ij, appendable, context}, Object.class);
-    // This call style involves some boxing and should be equivalent to a reflective call in terms
-    // of speed.
     return (RenderResult) renderMethod.invokeWithArguments(args);
   }
 
-  /** The slow path for a call. */
   public static RenderResult slowPathRenderRecord(
       SoyCallSite callSite,
       String templateName,
@@ -512,25 +389,11 @@ public final class ClassLoaderFallbackCallFactory {
       throws Throwable {
     CompiledTemplates templates = context.getTemplates();
     MethodHandle renderMethod = templates.getRenderMethod(templateName);
-    callSite.update(
-        templates,
-        // Set the target so future calls will go here directly
-        renderMethod);
-    // NOTE: we don't need to handle any state since if we are detaching on the next re-attach we
-    // will call back into the same function directly
+    callSite.update(templates, renderMethod);
     return (RenderResult) renderMethod.invoke(params, ij, appendable, context);
   }
 
-  /**
-   * A mutable callsite that we can update whenever we observe that the CompiledTemplates changes.
-   *
-   * <p>If there are multiple versions of CompiledTemplates being used concurrently then there might
-   * be some thrashing, however, the cost of that will just be some churn in methodhandle creation
-   * which should be cheap.
-   */
   private static final class SoyCallSite extends MutableCallSite {
-
-    // The condition for the fast path
     private final MethodHandle test;
     private final MethodHandle slowPath;
 
@@ -541,24 +404,11 @@ public final class ClassLoaderFallbackCallFactory {
       int renderContextIndex = slowPath.type().parameterList().indexOf(RenderContext.class);
       checkState(renderContextIndex != -1);
       this.slowPath = slowPath;
-      // We want to adapt test to have the signature
-      // (int,..type.args,RenderContext,...args)boolean so we add dummy arguments to match
-      this.test =
-          MethodHandles.dropArgumentsToMatch(
-              SlowPathHandles.IS_CACHE_VALID, 1, type.parameterList(), renderContextIndex);
-      // Always start calling directly to the slowpath
+      this.test = MethodHandles.dropArgumentsToMatch(SlowPathHandles.IS_CACHE_VALID, 1, type.parameterList(), renderContextIndex);
       setTarget(slowPath);
     }
 
     void update(CompiledTemplates newTemplates, MethodHandle newTarget) {
-      // rebuild the target to use the newTarget, we guard calls on the templates pointer still
-      // being correct.
-      // the gencode looks like
-      // newTemplates == context.getTemplates() ? newTarget(...) : slowPath(....)
-      // However, because newTarget by definition points at symbols in another classloader, we use
-      // weak references to preserve collectability.  This means that all instances of newTarget
-      // should be strongly referenced by CompiledTemplates so that when it goes away so do our
-      // weak references.
       newTarget =
           MethodHandles.foldArguments(
               MethodHandles.exactInvoker(newTarget.type()),
