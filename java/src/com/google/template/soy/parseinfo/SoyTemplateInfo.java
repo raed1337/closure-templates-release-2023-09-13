@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -76,7 +77,6 @@ public class SoyTemplateInfo {
 
   /** Returns the partial template name (starting from the last dot), e.g. {@code .myTemplate}. */
   public final String getPartialName() {
-    String name = getName();
     return name.substring(name.lastIndexOf('.'));
   }
 
@@ -95,14 +95,15 @@ public class SoyTemplateInfo {
    * returns {@link ParamRequisiteness#REQUIRED}.
    */
   public final ImmutableSet<String> getRequiredParamNames() {
-    return paramMap.keySet().stream()
-        .filter(n -> paramMap.get(n) == ParamRequisiteness.REQUIRED)
+    return paramMap.entrySet().stream()
+        .filter(entry -> entry.getValue() == ParamRequisiteness.REQUIRED)
+        .map(ImmutableMap.Entry::getKey)
         .collect(toImmutableSet());
   }
 
   /** Returns true if this template has a parameter names {@code paramName}. */
   public final boolean hasParam(String paramName) {
-    return getParamNames().contains(paramName);
+    return paramMap.containsKey(paramName);
   }
 
   /** Returns whether {@code paramName} is required, optional, or indirect. */
