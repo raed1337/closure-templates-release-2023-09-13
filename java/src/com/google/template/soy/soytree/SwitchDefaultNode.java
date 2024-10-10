@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -33,6 +34,7 @@ public final class SwitchDefaultNode extends CaseOrDefaultNode
   /**
    * @param id The id for this node.
    * @param sourceLocation The node's source location.
+   * @param openTagLocation The location of the opening tag.
    */
   public SwitchDefaultNode(int id, SourceLocation sourceLocation, SourceLocation openTagLocation) {
     super(id, sourceLocation, openTagLocation, "default");
@@ -42,6 +44,7 @@ public final class SwitchDefaultNode extends CaseOrDefaultNode
    * Copy constructor.
    *
    * @param orig The node to copy.
+   * @param copyState The state used for copying.
    */
   private SwitchDefaultNode(SwitchDefaultNode orig, CopyState copyState) {
     super(orig, copyState);
@@ -57,6 +60,11 @@ public final class SwitchDefaultNode extends CaseOrDefaultNode
     return new SwitchDefaultNode(this, copyState);
   }
 
+  /**
+   * Retrieves the attributes associated with this node.
+   *
+   * @return An immutable list of command tag attributes (empty for default node).
+   */
   @Override
   public ImmutableList<CommandTagAttribute> getAttributes() {
     return ImmutableList.of();
