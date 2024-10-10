@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -75,40 +76,46 @@ final class RewriteShortFormCallsPass implements CompilerFileSetPass {
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
     for (SoyFileNode file : sourceFiles) {
-      run(file, idGenerator);
+      processFile(file, idGenerator);
     }
     return Result.CONTINUE;
   }
 
-  public void run(SoyFileNode file, IdGenerator nodeIdGen) {
+  private void processFile(SoyFileNode file, IdGenerator nodeIdGen) {
     ImmutableListMultimap<VarDefn, VarRefNode> vars =
         SoyTreeUtils.allNodesOfType(file, VarRefNode.class)
             .collect(toImmutableListMultimap(VarRefNode::getDefnDecl, v -> v));
 
     int maxDepth = 20; // safeguard
     AtomicBoolean mutated = new AtomicBoolean(true);
+    
     // Must check recursively because mutations create new CallParamValueNode, which are also
     // processed.
     while (mutated.get() && --maxDepth > 0) {
       mutated.set(false);
-      SoyTreeUtils.allNodes(file)
-          .forEach(
-              n -> {
-                boolean m = false;
-                if (n instanceof PrintNode) {
-                  m = visitPrintNode((PrintNode) n, nodeIdGen);
-                } else if (n instanceof LetValueNode) {
-                  m = visitLetValueNode((LetValueNode) n, nodeIdGen, vars);
-                } else if (n instanceof CallParamValueNode) {
-                  m = visitCallParamValueNode((CallParamValueNode) n, nodeIdGen);
-                }
-                mutated.set(mutated.get() || m);
-              });
+      processNodes(file, nodeIdGen, vars, mutated);
     }
 
     if (maxDepth == 0) {
       errorReporter.report(file.getSourceLocation(), OVERFLOW);
     }
+  }
+
+  private void processNodes(SoyFileNode file, IdGenerator nodeIdGen,
+      ImmutableListMultimap<VarDefn, VarRefNode> vars, AtomicBoolean mutated) {
+    SoyTreeUtils.allNodes(file)
+        .forEach(
+            n -> {
+              boolean m = false;
+              if (n instanceof PrintNode) {
+                m = visitPrintNode((PrintNode) n, nodeIdGen);
+              } else if (n instanceof LetValueNode) {
+                m = visitLetValueNode((LetValueNode) n, nodeIdGen, vars);
+              } else if (n instanceof CallParamValueNode) {
+                m = visitCallParamValueNode((CallParamValueNode) n, nodeIdGen);
+              }
+              mutated.set(mutated.get() || m);
+            });
   }
 
   private boolean visitPrintNode(PrintNode node, IdGenerator nodeIdGen) {
@@ -128,48 +135,58 @@ final class RewriteShortFormCallsPass implements CompilerFileSetPass {
       LetValueNode node, IdGenerator nodeIdGen, ImmutableListMultimap<VarDefn, VarRefNode> vars) {
     CallBasicNode call = convert(node.getExpr(), nodeIdGen);
     if (call != null) {
-      TemplateType templateType = (TemplateType) call.getCalleeExpr().getType();
-      SourceLocation loc = node.getSourceLocation();
-      SanitizedContentKind kind = templateType.getContentKind().getSanitizedContentKind();
-      LetContentNode contentNode =
-          new LetContentNode(
-              nodeIdGen.genId(),
-              loc,
-              loc,
-              node.getVarName(),
-              loc,
-              getKindAttr(loc, kind),
-              ErrorReporter.exploding());
-      contentNode.addChild(call);
-      contentNode.getVar().setType(SanitizedType.getTypeForContentKind(kind));
-      node.getParent().replaceChild(node, contentNode);
-      for (VarRefNode varRefNode : vars.get(node.getVar())) {
-        varRefNode.setDefn(contentNode.getVar());
-      }
+      createLetContentNode(node, nodeIdGen, call, vars);
       return true;
     }
     return false;
   }
 
+  private void createLetContentNode(LetValueNode node, IdGenerator nodeIdGen,
+      CallBasicNode call, ImmutableListMultimap<VarDefn, VarRefNode> vars) {
+    TemplateType templateType = (TemplateType) call.getCalleeExpr().getType();
+    SourceLocation loc = node.getSourceLocation();
+    SanitizedContentKind kind = templateType.getContentKind().getSanitizedContentKind();
+    LetContentNode contentNode =
+        new LetContentNode(
+            nodeIdGen.genId(),
+            loc,
+            loc,
+            node.getVarName(),
+            loc,
+            getKindAttr(loc, kind),
+            ErrorReporter.exploding());
+    contentNode.addChild(call);
+    contentNode.getVar().setType(SanitizedType.getTypeForContentKind(kind));
+    node.getParent().replaceChild(node, contentNode);
+    for (VarRefNode varRefNode : vars.get(node.getVar())) {
+      varRefNode.setDefn(contentNode.getVar());
+    }
+  }
+
   private boolean visitCallParamValueNode(CallParamValueNode node, IdGenerator nodeIdGen) {
     CallBasicNode call = convert(node.getExpr(), nodeIdGen);
     if (call != null) {
-      TemplateType templateType = (TemplateType) call.getCalleeExpr().getType();
-      SourceLocation loc = node.getSourceLocation();
-      SanitizedContentKind kind = templateType.getContentKind().getSanitizedContentKind();
-      CallParamContentNode contentNode =
-          new CallParamContentNode(
-              nodeIdGen.genId(),
-              loc,
-              loc,
-              node.getKey(),
-              getKindAttr(loc, kind),
-              ErrorReporter.exploding());
-      contentNode.addChild(call);
-      node.getParent().replaceChild(node, contentNode);
+      createCallParamContentNode(node, nodeIdGen, call);
       return true;
     }
     return false;
+  }
+
+  private void createCallParamContentNode(CallParamValueNode node, IdGenerator nodeIdGen,
+      CallBasicNode call) {
+    TemplateType templateType = (TemplateType) call.getCalleeExpr().getType();
+    SourceLocation loc = node.getSourceLocation();
+    SanitizedContentKind kind = templateType.getContentKind().getSanitizedContentKind();
+    CallParamContentNode contentNode =
+        new CallParamContentNode(
+            nodeIdGen.genId(),
+            loc,
+            loc,
+            node.getKey(),
+            getKindAttr(loc, kind),
+            ErrorReporter.exploding());
+    contentNode.addChild(call);
+    node.getParent().replaceChild(node, contentNode);
   }
 
   private static CommandTagAttribute getKindAttr(SourceLocation loc, SanitizedContentKind kind) {
@@ -221,6 +238,17 @@ final class RewriteShortFormCallsPass implements CompilerFileSetPass {
             ErrorReporter.exploding());
     call.setOriginalShortFormExprEquivalence(exprEquivalence.wrap(expr.copy(new CopyState())));
     call.getCalleeExpr().setType(type);
+    addCallParamValueNodes(fnNode, nodeIdGen, call);
+
+    // Allow CheckTemplateCallsPass to find stricthtml violations. This will be more strict than if
+    // the HtmlRewriter had been run on the transformed AST because we have to assume PCDATA state.
+    call.setIsPcData(true);
+
+    return call;
+  }
+
+  private void addCallParamValueNodes(FunctionNode fnNode, IdGenerator nodeIdGen, 
+      CallBasicNode call) {
     for (int i = 0; i < fnNode.getParamNames().size(); i++) {
       Identifier id = fnNode.getParamNames().get(i);
       CallParamValueNode valueNode =
@@ -232,11 +260,5 @@ final class RewriteShortFormCallsPass implements CompilerFileSetPass {
       valueNode.getExpr().setType(fnNode.getParams().get(i).getType());
       call.addChild(valueNode);
     }
-
-    // Allow CheckTemplateCallsPass to find stricthtml violations. This will be more strict than if
-    // the HtmlRewriter had been run on the transformed AST because we have to assume PCDATA state.
-    call.setIsPcData(true);
-
-    return call;
   }
 }
