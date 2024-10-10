@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -54,21 +55,32 @@ class ModernFeatureInvariantsEnforcementPass implements CompilerFileSetPass {
         continue;
       }
 
-      List<ConstNode> constants = file.getConstants();
-      if (!constants.isEmpty()) {
-        error = true;
-        constants.forEach(
-            c -> errorReporter.report(c.getSourceLocation(), UNIQUE_NS_REQUIRED, "{const}"));
-      }
-
-      List<ExternNode> externs = file.getExterns();
-      if (!externs.isEmpty()) {
-        error = true;
-        externs.forEach(
-            c -> errorReporter.report(c.getSourceLocation(), UNIQUE_NS_REQUIRED, "{extern}"));
-      }
+      error |= reportErrorsForConstants(file);
+      error |= reportErrorsForExterns(file);
     }
 
     return error ? Result.STOP : Result.CONTINUE;
+  }
+
+  private boolean reportErrorsForConstants(SoyFileNode file) {
+    List<ConstNode> constants = file.getConstants();
+    if (constants.isEmpty()) {
+      return false;
+    }
+    
+    constants.forEach(
+        c -> errorReporter.report(c.getSourceLocation(), UNIQUE_NS_REQUIRED, "{const}"));
+    return true;
+  }
+
+  private boolean reportErrorsForExterns(SoyFileNode file) {
+    List<ExternNode> externs = file.getExterns();
+    if (externs.isEmpty()) {
+      return false;
+    }
+    
+    externs.forEach(
+        c -> errorReporter.report(c.getSourceLocation(), UNIQUE_NS_REQUIRED, "{extern}"));
+    return true;
   }
 }
