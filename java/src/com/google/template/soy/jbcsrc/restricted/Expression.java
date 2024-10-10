@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -46,59 +47,14 @@ import java.util.EnumSet;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Type;
 
-/**
- * An expression has a {@link #resultType()} and can {@link #gen generate} code to evaluate the
- * expression.
- *
- * <p>Expressions should:
- *
- * <ul>
- *   <li>have no side effects
- *   <li>be idempotent (you can compose them multiple times and get sensible results)
- *   <li>produce <em>exactly 1</em> <i>value</i> onto the runtime stack
- *   <li>not <em>consume</em> stack items
- * </ul>
- *
- * <p>These rules make it easier to compose and reason about the effect of composing expressions. In
- * particular it makes it easier to maintain the stack height and type invariants of the JVM.
- *
- * <p>Due to these constraints there are some natural consequences, a few examples include:
- *
- * <ul>
- *   <li>An expression should never branch to a label outside of the same expression. (Note: {@code
- *       return} and {@code throw} are special cases that are allowed)
- * </ul>
- */
 public abstract class Expression extends BytecodeProducer {
 
-  /**
-   * Expression features track additional metadata for expressions.
-   *
-   * <p>Features should be defined such that not setting a feature on an expression is a safe
-   * default. That way if they get accidentally dropped in a transformation we simply generate less
-   * efficient code, not incorrect code.
-   */
   public enum Feature {
-    /**
-     * The expression is guaranteed to not return Java null. This is not necessarily the same as
-     * Soy's null and undefined values.
-     */
     NON_JAVA_NULLABLE,
-    /** The expression is guaranteed to not return NullData or UndefinedData. */
     NON_SOY_NULLISH,
-    /**
-     * The expression is 'cheap'. As a rule of thumb, if it involves allocation, it is not cheap. If
-     * you need to allocate a local variable to calculate the expression, it is not cheap.
-     *
-     * <p>Cheapness is useful when deciding if it would be reasonable to evaluate an expression more
-     * than once if the alternative is generating additional fields and save/restore code.
-     */
     CHEAP
-    // TODO(lukes): an idempotent feature would be useful some expressions are not safe to gen more
-    // than once.
   }
 
-  /** An immutable wrapper of an EnumSet of {@link Feature}. */
   public static final class Features {
     private static final Features EMPTY = new Features(EnumSet.noneOf(Feature.class));
 
@@ -125,7 +81,6 @@ public abstract class Expression extends BytecodeProducer {
         case Type.SHORT:
         case Type.LONG:
         case Type.FLOAT:
-          // primitives are never null
           features = features.plus(Feature.NON_JAVA_NULLABLE);
           break;
         case Type.VOID:
@@ -135,7 +90,6 @@ public abstract class Expression extends BytecodeProducer {
           throw new AssertionError("unexpected type " + expressionType);
       }
 
-      // Save some calculations.
       if (features.has(Feature.NON_SOY_NULLISH) || !features.has(Feature.NON_JAVA_NULLABLE)) {
         return features;
       }
@@ -149,9 +103,6 @@ public abstract class Expression extends BytecodeProducer {
       boolean isGenerated = Names.isGenerated(expressionType);
       if ((BytecodeUtils.isDefinitelyAssignableFrom(BytecodeUtils.SOY_VALUE_TYPE, expressionType)
           || !isGenerated)) {
-        // Boxed types like StringData are rare but are NON_SOY_NULLISH.
-        // Unboxed types like String, List, etc NON_SOY_NULLISH, since they are
-        // NON_JAVA_NULLABLE.
         features = features.plus(Feature.NON_SOY_NULLISH);
       }
 
@@ -194,14 +145,12 @@ public abstract class Expression extends BytecodeProducer {
     }
 
     private EnumSet<Feature> copyFeatures() {
-      // Can't use EnumSet.copyOf() because it throws on empty collections!
       EnumSet<Feature> newSet = EnumSet.noneOf(Feature.class);
       newSet.addAll(set);
       return newSet;
     }
   }
 
-  /** Returns true if all referenced expressions are {@linkplain #isCheap() cheap}. */
   public static boolean areAllCheap(Iterable<? extends Expression> args) {
     for (Expression arg : args) {
       if (!arg.isCheap()) {
@@ -211,12 +160,10 @@ public abstract class Expression extends BytecodeProducer {
     return true;
   }
 
-  /** Returns true if all referenced expressions are {@linkplain #isCheap() cheap}. */
   public static boolean areAllCheap(Expression first, Expression... rest) {
     return areAllCheap(ImmutableList.<Expression>builder().add(first).add(rest).build());
   }
 
-  /** Checks that the given expressions are compatible with the given types. */
   static void checkTypes(ImmutableList<Type> types, Iterable<? extends Expression> exprs) {
     int size = Iterables.size(exprs);
     checkArgument(
@@ -224,7 +171,6 @@ public abstract class Expression extends BytecodeProducer {
         "Supplied the wrong number of parameters. Expected %s, got %s",
         types,
         exprs);
-    // checkIsAssignableTo is an no-op if DEBUG is false
     if (Flags.DEBUG) {
       int i = 0;
       for (Expression expr : exprs) {
@@ -255,16 +201,9 @@ public abstract class Expression extends BytecodeProducer {
     this.features = Features.forType(resultType, features);
   }
 
-  /**
-   * Generate code to evaluate the expression.
-   *
-   * <p>The generated code satisfies the invariant that the top of the runtime stack will contain a
-   * value with this {@link #resultType()} immediately after evaluation of the code.
-   */
   @Override
   protected abstract void doGen(CodeBuilder adapter);
 
-  /** Returns an identical {@link Expression} with the given source location. */
   public Expression withSourceLocation(SourceLocation location) {
     checkNotNull(location);
     if (location.equals(this.location)) {
@@ -273,17 +212,14 @@ public abstract class Expression extends BytecodeProducer {
     return new DelegatingExpression(this, location);
   }
 
-  /** The type of the expression. */
   public final Type resultType() {
     return resultType;
   }
 
-  /** Whether or not this expression is {@link Feature#CHEAP cheap}. */
   public boolean isCheap() {
     return features.has(Feature.CHEAP);
   }
 
-  /** Whether or not this expression is {@link Feature#NON_JAVA_NULLABLE non nullable}. */
   public boolean isNonJavaNullable() {
     return features.has(Feature.NON_JAVA_NULLABLE);
   }
@@ -292,20 +228,14 @@ public abstract class Expression extends BytecodeProducer {
     return features.has(Feature.NON_SOY_NULLISH);
   }
 
-  /**
-   * Returns all the feature bits. Typically, users will want to invoke one of the convenience
-   * accessors {@link #isCheap()} or {@link #isNonJavaNullable()}.
-   */
   public Features features() {
     return features;
   }
 
-  /** Check that this expression is assignable to {@code expected}. */
   public final void checkAssignableTo(Type expected) {
     checkAssignableTo(expected, "");
   }
 
-  /** Check that this expression is assignable to {@code expected}. */
   @FormatMethod
   public final void checkAssignableTo(Type expected, String fmt, Object... args) {
     if (Flags.DEBUG && !BytecodeUtils.isPossiblyAssignableFrom(expected, resultType())) {
@@ -321,11 +251,6 @@ public abstract class Expression extends BytecodeProducer {
     }
   }
 
-  /**
-   * Convert this expression to a statement, by executing it and throwing away the result.
-   *
-   * <p>This is useful for invoking non-void methods when we don't care about the result.
-   */
   public Statement toStatement() {
     return new Statement() {
       @Override
@@ -347,49 +272,26 @@ public abstract class Expression extends BytecodeProducer {
     };
   }
 
-  /** Returns an equivalent expression where {@link #isCheap()} returns {@code true}. */
   public Expression asCheap() {
-    if (isCheap()) {
-      return this;
-    }
-    return new DelegatingExpression(this, features.plus(Feature.CHEAP));
+    return isCheap() ? this : new DelegatingExpression(this, features.plus(Feature.CHEAP));
   }
 
-  /** Returns an equivalent expression where {@link #isNonJavaNullable()} returns {@code true}. */
   public Expression asNonJavaNullable() {
-    if (isNonJavaNullable()) {
-      return this;
-    }
-    return new DelegatingExpression(this, features.plus(Feature.NON_JAVA_NULLABLE));
+    return isNonJavaNullable() ? this : new DelegatingExpression(this, features.plus(Feature.NON_JAVA_NULLABLE));
   }
 
   public Expression asJavaNullable() {
-    if (!isNonJavaNullable()) {
-      return this;
-    }
-    return new DelegatingExpression(this, features.minus(Feature.NON_JAVA_NULLABLE));
+    return !isNonJavaNullable() ? this : new DelegatingExpression(this, features.minus(Feature.NON_JAVA_NULLABLE));
   }
 
   public Expression asNonSoyNullish() {
-    if (isNonSoyNullish()) {
-      return this;
-    }
-    return new DelegatingExpression(this, features.plus(Feature.NON_SOY_NULLISH));
+    return isNonSoyNullish() ? this : new DelegatingExpression(this, features.plus(Feature.NON_SOY_NULLISH));
   }
 
   public Expression asSoyNullish() {
-    if (!isNonSoyNullish()) {
-      return this;
-    }
-    return new DelegatingExpression(
-        this, BytecodeUtils.SOY_VALUE_TYPE, features.minus(Feature.NON_SOY_NULLISH));
+    return !isNonSoyNullish() ? this : new DelegatingExpression(this, BytecodeUtils.SOY_VALUE_TYPE, features.minus(Feature.NON_SOY_NULLISH));
   }
 
-  /**
-   * Returns an expression that performs a checked cast from the current type to the target type.
-   *
-   * @throws IllegalArgumentException if either type is not a reference type.
-   */
   public Expression checkedCast(Type target) {
     checkArgument(
         target.getSort() == Type.OBJECT,
@@ -411,35 +313,18 @@ public abstract class Expression extends BytecodeProducer {
     };
   }
 
-  /**
-   * Returns an expression that performs a checked cast from the current type to the target type.
-   *
-   * @throws IllegalArgumentException if either type is not a reference type.
-   */
   public Expression checkedCast(Class<?> target) {
     return checkedCast(Type.getType(target));
   }
 
-  /**
-   * A simple helper that calls through to {@link MethodRef#invoke(Expression...)}, but allows a
-   * more natural fluent call style.
-   */
   public Expression invoke(MethodRef method, Expression... args) {
     return method.invoke(ImmutableList.<Expression>builder().add(this).add(args).build());
   }
 
-  /**
-   * A simple helper that calls through to {@link MethodRef#invokeVoid(Expression...)}, but allows a
-   * more natural fluent call style.
-   */
   public Statement invokeVoid(MethodRef method, Expression... args) {
     return method.invokeVoid(ImmutableList.<Expression>builder().add(this).add(args).build());
   }
 
-  /**
-   * Returns a new expression identical to this one but with the given label applied at the start of
-   * the expression.
-   */
   public Expression labelStart(Label label) {
     return new Expression(resultType(), features) {
       @Override
@@ -450,10 +335,6 @@ public abstract class Expression extends BytecodeProducer {
     };
   }
 
-  /**
-   * Returns a new expression identical to this one but with the given label applied at the end of
-   * the expression.
-   */
   public Expression labelEnd(Label label) {
     return new Expression(resultType(), features) {
       @Override
@@ -464,13 +345,6 @@ public abstract class Expression extends BytecodeProducer {
     };
   }
 
-  /**
-   * Inserts a runtime type check that this expression matches {@code type}. These checks are
-   * typically inserted to validate user-supplied values are the expected type and fail early. The
-   * resulting checks typically must call a method rather than a simple bytecode instruction since
-   * NULL and UNDEFINED values must pass any type check but are represented as subclasses of {@link
-   * SoyValue}.
-   */
   public Expression checkedSoyCast(SoyType type) {
     type = SoyTypes.tryRemoveNullish(type);
     if (BytecodeUtils.isDefinitelyAssignableFrom(BytecodeUtils.SOY_VALUE_TYPE, resultType)) {
@@ -589,11 +463,9 @@ public abstract class Expression extends BytecodeProducer {
         return this.checkedCast(runtimeType);
       }
     }
-    // Expression is not boxed but the soy type can only be a boxed value. Throw.
     return this.checkedCast(BytecodeUtils.SOY_VALUE_TYPE);
   }
 
-  /** Subclasses can override this to supply extra properties for the toString method. */
   @ForOverride
   protected void extraToStringProperties(MoreObjects.ToStringHelper helper) {}
 
@@ -601,7 +473,6 @@ public abstract class Expression extends BytecodeProducer {
   public String toString() {
     String name = getClass().getSimpleName();
     if (name.isEmpty()) {
-      // provide a default for anonymous subclasses
       name = "Expression";
     }
     MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(name).omitNullValues();
