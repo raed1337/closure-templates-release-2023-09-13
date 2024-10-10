@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -48,6 +50,14 @@ import java.util.List;
 public final class ConcatAttributeValuesFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method CONCAT_ATTRIBUTE_VALUES_METHOD =
+      JavaValueFactory.createMethod(
+          BasicFunctionsRuntime.class,
+          "concatAttributeValues",
+          SoyValue.class,
+          SoyValue.class,
+          String.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -63,21 +73,10 @@ public final class ConcatAttributeValuesFunction
         .call(args.get(0), args.get(1), args.get(2));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method CONCAT_ATTRIBUTE_VALUES =
-        JavaValueFactory.createMethod(
-            BasicFunctionsRuntime.class,
-            "concatAttributeValues",
-            SoyValue.class,
-            SoyValue.class,
-            String.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(
-        Methods.CONCAT_ATTRIBUTE_VALUES, args.get(0), args.get(1), args.get(2));
+        CONCAT_ATTRIBUTE_VALUES_METHOD, args.get(0), args.get(1), args.get(2));
   }
 }
