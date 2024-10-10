@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -48,6 +49,7 @@ import org.objectweb.asm.commons.TableSwitchGenerator;
  */
 public final class CodeBuilder extends MethodVisitor {
   private final GeneratorAdapter adapter;
+  private final List<LineNumberTableEntry> lineNumberTable = new ArrayList<>();
 
   @AutoValue
   abstract static class LineNumberTableEntry {
@@ -56,11 +58,8 @@ public final class CodeBuilder extends MethodVisitor {
     }
 
     abstract Label label();
-
     abstract int lineNumber();
   }
-
-  private final List<LineNumberTableEntry> lineNumberTable = new ArrayList<>();
 
   public CodeBuilder(int access, Method method, MethodVisitor mv) {
     this(mv, access, method.getName(), method.getDescriptor());
@@ -336,34 +335,28 @@ public final class CodeBuilder extends MethodVisitor {
 
   /** See {@link GeneratorAdapter#endMethod()} */
   public void endMethod() {
-    if (!lineNumberTable.isEmpty()) {
-      // There may be a lot of redundancy in our lineNumberTable due to how annotations are added.
-      // Rather than changing callsites to be more careful it is easier to compress things here..
-      // sort by bytecode offset and then filter out redundant annotations.  An annotation is
-      // redundant if either:
-      // 1. It has the same line number as the previous entry, in which case it is not needed.  When
-      //    finding line numbers for instructions the jvm looks for the latest entry that is <= the
-      //    index of the instruction we care about.
-      // 2. There are multiple annotations at a single location and the other annotation has a
-      //    greater line number.
-      // Sort by increasing bytecode offset and then by decreasing line number.  This ordering
-      // means that when looking at an element we can decide whether we should write an entry
-      // just by looking at the previous item.
-      lineNumberTable.sort(
-          comparing((LineNumberTableEntry entry) -> entry.label().getOffset())
-              .thenComparing(comparingInt(LineNumberTableEntry::lineNumber).reversed()));
-      LineNumberTableEntry previous = lineNumberTable.get(0);
-      super.visitLineNumber(previous.lineNumber(), previous.label());
-      for (int i = 1; i < lineNumberTable.size(); i++) {
-        LineNumberTableEntry current = lineNumberTable.get(i);
-        if (current.lineNumber() != previous.lineNumber()
-            && current.label().getOffset() != previous.label().getOffset()) {
-          super.visitLineNumber(current.lineNumber(), current.label());
-          previous = current;
-        }
+    compressLineNumberTable();
+    adapter.endMethod();
+  }
+
+  private void compressLineNumberTable() {
+    if (lineNumberTable.isEmpty()) return;
+
+    lineNumberTable.sort(
+        comparing((LineNumberTableEntry entry) -> entry.label().getOffset())
+            .thenComparing(comparingInt(LineNumberTableEntry::lineNumber).reversed()));
+    
+    LineNumberTableEntry previous = lineNumberTable.get(0);
+    super.visitLineNumber(previous.lineNumber(), previous.label());
+    
+    for (int i = 1; i < lineNumberTable.size(); i++) {
+      LineNumberTableEntry current = lineNumberTable.get(i);
+      if (current.lineNumber() != previous.lineNumber() && 
+          current.label().getOffset() != previous.label().getOffset()) {
+        super.visitLineNumber(current.lineNumber(), current.label());
+        previous = current;
       }
     }
-    adapter.endMethod();
   }
 
   /** See {@link GeneratorAdapter#swap()} */
@@ -378,7 +371,6 @@ public final class CodeBuilder extends MethodVisitor {
 
   @Override
   public void visitLineNumber(int lineNumber, Label label) {
-    // buffer all the entries so we can compress them in endMethod()
     lineNumberTable.add(LineNumberTableEntry.create(label, lineNumber));
   }
 }
