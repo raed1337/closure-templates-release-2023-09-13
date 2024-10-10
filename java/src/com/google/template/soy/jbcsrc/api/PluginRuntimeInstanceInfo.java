@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -78,15 +79,20 @@ public abstract class PluginRuntimeInstanceInfo {
     Map<String, PluginRuntimeInstanceInfo> pluginNameToClassNameMap = new LinkedHashMap<>();
     try (InputStream inputStream = byteSource.openStream()) {
       BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, UTF_8));
-      for (String line = reader.readLine(); line != null; line = reader.readLine()) {
-        PluginRuntimeInstanceInfo pluginRuntimeInstanceInfo = fromMetaInfEntry(line);
-        pluginNameToClassNameMap.merge(
-            pluginRuntimeInstanceInfo.pluginName(),
-            pluginRuntimeInstanceInfo,
-            PluginRuntimeInstanceInfo::merge);
+      String line;
+      while ((line = reader.readLine()) != null) {
+        processLine(pluginNameToClassNameMap, line);
       }
     }
     return ImmutableList.copyOf(pluginNameToClassNameMap.values());
+  }
+
+  private static void processLine(Map<String, PluginRuntimeInstanceInfo> pluginMap, String line) {
+    PluginRuntimeInstanceInfo pluginRuntimeInstanceInfo = fromMetaInfEntry(line);
+    pluginMap.merge(
+        pluginRuntimeInstanceInfo.pluginName(),
+        pluginRuntimeInstanceInfo,
+        PluginRuntimeInstanceInfo::merge);
   }
 
   /**
@@ -103,7 +109,7 @@ public abstract class PluginRuntimeInstanceInfo {
   }
 
   /**
-   * Converts a entry in the Soy plugins META_INF file back into a {@code
+   * Converts an entry in the Soy plugins META_INF file back into a {@code
    * PluginRuntimeInstanceInfo}. This is the inverse of {@link #toMetaInfEntry()}.
    */
   private static PluginRuntimeInstanceInfo fromMetaInfEntry(String metaInfEntry) {
