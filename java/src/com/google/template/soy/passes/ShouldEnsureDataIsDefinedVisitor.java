@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -37,79 +38,97 @@ public final class ShouldEnsureDataIsDefinedVisitor {
 
   /** Runs this pass on the given template. */
   public boolean exec(TemplateNode template) {
-
-    boolean hasOptional = false;
+    if (hasRequiredParams(template)) {
+      return false;
+    }
+    
+    boolean hasOptional = hasOptionalParams(template);
+    if (hasOptional) {
+      return true;
+    }
+    
+    return checkForDataReferences(template);
+  }
+  
+  private boolean hasRequiredParams(TemplateNode template) {
     for (TemplateParam param : template.getParams()) {
-      if (param.isImplicit()
-          && !(template.getTemplateContentKind()
-              instanceof TemplateContentKind.ElementContentKind)) {
+      if (param.isImplicit() && !(template.getTemplateContentKind() instanceof TemplateContentKind.ElementContentKind)) {
         continue;
       }
       if (param.isRequired()) {
-        // If there exists a required param, then data should already be defined (no need to
-        // ensure).
-        return false;
-      } else {
-        hasOptional = true;
+        return true;
       }
     }
-    if (hasOptional) {
-      // If all params are optional (and there is at least one), then we need to ensure data is
-      // defined.  This is because the only legal way to have an optional param is if you reference
-      // it somewhere in the template, so there is no need to check.
-      return true;
+    return false;
+  }
+
+  private boolean hasOptionalParams(TemplateNode template) {
+    for (TemplateParam param : template.getParams()) {
+      if (!param.isRequired()) {
+        return true;
+      }
     }
-    // If we get here then the template has no declared params and we are observing a v1 compatible
-    // template.  Search for things that could be data references:
-    // * possibleParams
-    // * data=All calls
-    // others?
-    return new AbstractNodeVisitor<Node, Boolean>() {
-      boolean shouldEnsureDataIsDefined;
+    return false;
+  }
+  
+  private boolean checkForDataReferences(TemplateNode template) {
+    return new DataReferenceVisitor().exec(template);
+  }
 
-      @Override
-      public Boolean exec(Node node) {
-        visit(node);
-        return shouldEnsureDataIsDefined;
-      }
+  private static class DataReferenceVisitor extends AbstractNodeVisitor<Node, Boolean> {
+    boolean shouldEnsureDataIsDefined;
 
-      @Override
-      public void visit(Node node) {
-        if (node instanceof VarRefNode) {
-          VarRefNode varRefNode = (VarRefNode) node;
-          VarDefn var = varRefNode.getDefnDecl();
-          // Don't include injected params in this analysis
-          if ((var.kind() == VarDefn.Kind.PARAM)
-              && !((TemplateParam) var).isImplicit()
-              && (var.kind() != VarDefn.Kind.PARAM // a soydoc param -> not ij
-                  || !var.isInjected())) { // an {@param but not {@inject
-            shouldEnsureDataIsDefined = true;
-            return;
-          }
-        }
-        if (node instanceof CallNode) {
-          if (((CallNode) node).isPassingAllData()) {
-            shouldEnsureDataIsDefined = true;
-            return;
-          }
-        }
-        if (node instanceof ParentNode) {
-          for (Node child : ((ParentNode<?>) node).getChildren()) {
-            visit(child);
-            if (shouldEnsureDataIsDefined) {
-              return;
-            }
-          }
-        }
-        if (node instanceof ExprHolderNode) {
-          for (ExprRootNode expr : ((ExprHolderNode) node).getExprList()) {
-            visit(expr);
-            if (shouldEnsureDataIsDefined) {
-              return;
-            }
-          }
+    @Override
+    public Boolean exec(Node node) {
+      visit(node);
+      return shouldEnsureDataIsDefined;
+    }
+
+    @Override
+    public void visit(Node node) {
+      if (node instanceof VarRefNode) {
+        checkVarRefNode((VarRefNode) node);
+      } else if (node instanceof CallNode) {
+        checkCallNode((CallNode) node);
+      } else if (node instanceof ParentNode) {
+        checkParentNode((ParentNode<?>) node);
+      } else if (node instanceof ExprHolderNode) {
+        checkExprHolderNode((ExprHolderNode) node);
+      }
+    }
+
+    private void checkVarRefNode(VarRefNode varRefNode) {
+      VarDefn var = varRefNode.getDefnDecl();
+      if ((var.kind() == VarDefn.Kind.PARAM)
+          && !((TemplateParam) var).isImplicit()
+          && (var.kind() != VarDefn.Kind.PARAM // a soydoc param -> not ij
+              || !var.isInjected())) { // an {@param but not {@inject
+        shouldEnsureDataIsDefined = true;
+      }
+    }
+
+    private void checkCallNode(CallNode callNode) {
+      if (callNode.isPassingAllData()) {
+        shouldEnsureDataIsDefined = true;
+      }
+    }
+
+    private void checkParentNode(ParentNode<?> parentNode) {
+      for (Node child : parentNode.getChildren()) {
+        visit(child);
+        if (shouldEnsureDataIsDefined) {
+          return;
         }
       }
-    }.exec(template);
+    }
+
+    private void checkExprHolderNode(ExprHolderNode exprHolderNode) {
+      for (ExprRootNode expr : exprHolderNode.getExprList()) {
+        visit(expr);
+        if (shouldEnsureDataIsDefined) {
+          return;
+        }
+      }
+    }
   }
 }
