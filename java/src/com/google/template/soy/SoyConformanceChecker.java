@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -64,22 +65,27 @@ public final class SoyConformanceChecker extends AbstractSoyCompiler {
   private ValidatedConformanceConfig parseConformanceConfig() {
     ValidatedConformanceConfig config = ValidatedConformanceConfig.EMPTY;
     for (File conformanceConfig : conformanceConfigs) {
-      try (InputStreamReader stream =
-          new InputStreamReader(new FileInputStream(conformanceConfig), StandardCharsets.UTF_8)) {
-        ConformanceConfig.Builder builder = ConformanceConfig.newBuilder();
-        TextFormat.getParser().merge(stream, builder);
-        config = config.concat(ValidatedConformanceConfig.create(builder.build()));
-      } catch (IllegalArgumentException e) {
-        throw new CommandLineError(
-            "Error parsing conformance proto: " + conformanceConfig + ": " + e.getMessage());
-      } catch (InvalidProtocolBufferException e) {
-        throw new CommandLineError(
-            "Invalid conformance proto: " + conformanceConfig + ": " + e.getMessage());
-      } catch (IOException e) {
-        throw new CommandLineError(
-            "Unable to read conformance proto: " + conformanceConfig + ": " + e.getMessage());
-      }
+      config = processConformanceConfigFile(conformanceConfig, config);
     }
     return config;
+  }
+
+  private ValidatedConformanceConfig processConformanceConfigFile(File conformanceConfig, 
+      ValidatedConformanceConfig currentConfig) {
+    try (InputStreamReader stream =
+        new InputStreamReader(new FileInputStream(conformanceConfig), StandardCharsets.UTF_8)) {
+      ConformanceConfig.Builder builder = ConformanceConfig.newBuilder();
+      TextFormat.getParser().merge(stream, builder);
+      return currentConfig.concat(ValidatedConformanceConfig.create(builder.build()));
+    } catch (IllegalArgumentException e) {
+      throw new CommandLineError(
+          "Error parsing conformance proto: " + conformanceConfig + ": " + e.getMessage());
+    } catch (InvalidProtocolBufferException e) {
+      throw new CommandLineError(
+          "Invalid conformance proto: " + conformanceConfig + ": " + e.getMessage());
+    } catch (IOException e) {
+      throw new CommandLineError(
+          "Unable to read conformance proto: " + conformanceConfig + ": " + e.getMessage());
+    }
   }
 }
