@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -63,19 +64,11 @@ public final class TopoSort<T> {
         });
 
     // Tracking reverse deps avoids worst case O(n^2) sort.
-    for (Map.Entry<T, Set<T>> entry : deps.entrySet()) {
-      for (T to : entry.getValue()) {
-        Set<T> rev = revDeps.get(to);
-        Preconditions.checkNotNull(rev, "Successor %s of %s not in input", to, entry.getKey());
-        rev.add(entry.getKey());
-      }
-    }
+    populateReverseDeps(deps, revDeps);
 
     List<T> reordered = new ArrayList<>(deps.size());
-
     Set<T> cleared = ImmutableSet.of();
-    Collection<T> candidateLeaves =
-        deps.keySet().stream().filter(k -> deps.get(k).isEmpty()).collect(Collectors.toList());
+    Collection<T> candidateLeaves = getCandidateLeaves(deps);
 
     // Topological sort.
     while (!deps.isEmpty()) {
@@ -83,14 +76,8 @@ public final class TopoSort<T> {
       Set<T> nextCandidateLeaves = new LinkedHashSet<>();
 
       for (T possibleLeaf : candidateLeaves) {
-        Set<T> leafDeps = deps.get(possibleLeaf);
-        leafDeps.removeAll(cleared);
-        if (leafDeps.isEmpty()) {
-          reordered.add(possibleLeaf);
-          deps.remove(possibleLeaf);
-
-          nextCleared.add(possibleLeaf);
-          nextCandidateLeaves.addAll(revDeps.get(possibleLeaf));
+        if (processLeaf(deps, reordered, cleared, nextCleared, nextCandidateLeaves, possibleLeaf, revDeps)) {
+          continue;
         }
       }
 
@@ -106,9 +93,37 @@ public final class TopoSort<T> {
     return ImmutableList.copyOf(reordered);
   }
 
+  private void populateReverseDeps(Map<T, Set<T>> deps, Map<T, Set<T>> revDeps) {
+    for (Map.Entry<T, Set<T>> entry : deps.entrySet()) {
+      for (T to : entry.getValue()) {
+        Set<T> rev = revDeps.computeIfAbsent(to, k -> new HashSet<>());
+        Preconditions.checkNotNull(rev, "Successor %s of %s not in input", to, entry.getKey());
+        rev.add(entry.getKey());
+      }
+    }
+  }
+
+  private Collection<T> getCandidateLeaves(Map<T, Set<T>> deps) {
+    return deps.keySet().stream().filter(k -> deps.get(k).isEmpty()).collect(Collectors.toList());
+  }
+
+  private boolean processLeaf(Map<T, Set<T>> deps, List<T> reordered, Set<T> cleared, 
+                              Set<T> nextCleared, Set<T> nextCandidateLeaves, T possibleLeaf, 
+                              Map<T, Set<T>> revDeps) {
+    Set<T> leafDeps = deps.get(possibleLeaf);
+    leafDeps.removeAll(cleared);
+    if (leafDeps.isEmpty()) {
+      reordered.add(possibleLeaf);
+      deps.remove(possibleLeaf);
+
+      nextCleared.add(possibleLeaf);
+      nextCandidateLeaves.addAll(revDeps.get(possibleLeaf));
+      return true;
+    }
+    return false;
+  }
+
   private static <T> ImmutableList<T> findCycle(Map<T, Set<T>> remaining) {
-    // Because all remaining nodes are not leaves and all have at least one dep, every one must
-    // be part of at least one cycle. So it doesn't matter where we start searching from.
     T root = remaining.keySet().iterator().next();
 
     Set<T> visited = new HashSet<>();
@@ -118,8 +133,6 @@ public final class TopoSort<T> {
       throw new IllegalArgumentException("no cycle found");
     }
 
-    // Chain now contains a traversal with a cycle in it. But the cycle might not be the entire
-    // chain so let's trim it to just the cycle.
     T lastItem = chain.getLast();
     while (!chain.getFirst().equals(lastItem)) {
       chain.removeFirst();
@@ -128,8 +141,7 @@ public final class TopoSort<T> {
     return ImmutableList.copyOf(chain);
   }
 
-  private static <T> boolean dfs(
-      Set<T> visited, Deque<T> chain, T node, Function<T, Iterable<T>> successors) {
+  private static <T> boolean dfs(Set<T> visited, Deque<T> chain, T node, Function<T, Iterable<T>> successors) {
     chain.addLast(node);
 
     if (!visited.add(node)) {
