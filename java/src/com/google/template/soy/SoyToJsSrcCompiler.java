@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -144,38 +145,40 @@ public final class SoyToJsSrcCompiler extends AbstractSoyCompiler {
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) throws IOException {
     SoyFileSet sfs = sfsBuilder.build();
+    SoyJsSrcOptions jsSrcOptions = createJsSrcOptions();
 
-    // Create SoyJsSrcOptions.
+    if (!locales.isEmpty()) {
+      compileLocalizedJs(sfs, jsSrcOptions);
+    } else {
+      outputFiles.writeFiles(
+          srcs, sfs.compileToJsSrcInternal(jsSrcOptions, /*msgBundle=*/ null), /*locale=*/ null);
+    }
+  }
+
+  private SoyJsSrcOptions createJsSrcOptions() {
     SoyJsSrcOptions jsSrcOptions = new SoyJsSrcOptions();
     jsSrcOptions.setDependOnCssHeader(dependOnCssHeader);
     jsSrcOptions.setShouldGenerateGoogMsgDefs(shouldGenerateGoogMsgDefs);
     jsSrcOptions.setGoogMsgsAreExternal(googMsgsAreExternal);
     jsSrcOptions.setBidiGlobalDir(bidiGlobalDir);
     jsSrcOptions.setUseGoogIsRtlForBidiGlobalDir(useGoogIsRtlForBidiGlobalDir);
+    return jsSrcOptions;
+  }
 
-    // Compile.
-    boolean generateLocalizedJs = !locales.isEmpty();
-    if (generateLocalizedJs) {
-      for (String locale : locales) {
-        String msgFilePath =
-            MainEntryPointUtils.buildFilePath(
-                messageFilePathFormat, locale, /*inputFilePath=*/ null);
+  private void compileLocalizedJs(SoyFileSet sfs, SoyJsSrcOptions jsSrcOptions) throws IOException {
+    for (String locale : locales) {
+      String msgFilePath = MainEntryPointUtils.buildFilePath(messageFilePathFormat, locale, null);
+      SoyMsgBundle msgBundle = loadMsgBundle(msgFilePath);
 
-        SoyMsgBundle msgBundle =
-            new SoyMsgBundleHandler(messagePlugin).createFromFile(new File(msgFilePath));
-        if (msgBundle.getLocaleString() == null) {
-          // TODO: Remove this check (but make sure no projects depend on this behavior).
-          // There was an error reading the message file. We continue processing only if the locale
-          // begins with "en", because falling back to the Soy source will probably be fine.
-          if (!locale.startsWith("en")) {
-            throw new IOException("Error opening or reading message file " + msgFilePath);
-          }
-        }
-        outputFiles.writeFiles(srcs, sfs.compileToJsSrcInternal(jsSrcOptions, msgBundle), locale);
-      }
-    } else {
-      outputFiles.writeFiles(
-          srcs, sfs.compileToJsSrcInternal(jsSrcOptions, /*msgBundle=*/ null), /*locale=*/ null);
+      outputFiles.writeFiles(srcs, sfs.compileToJsSrcInternal(jsSrcOptions, msgBundle), locale);
     }
+  }
+
+  private SoyMsgBundle loadMsgBundle(String msgFilePath) throws IOException {
+    SoyMsgBundle msgBundle = new SoyMsgBundleHandler(messagePlugin).createFromFile(new File(msgFilePath));
+    if (msgBundle.getLocaleString() == null && !msgFilePath.startsWith("en")) {
+      throw new IOException("Error opening or reading message file " + msgFilePath);
+    }
+    return msgBundle;
   }
 }
