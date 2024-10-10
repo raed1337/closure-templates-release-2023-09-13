@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -98,12 +99,20 @@ public final class MsgSelectNode extends AbstractParentCommandNode<CaseOrDefault
       ExprRootNode selectExpr,
       List<CommandTagAttribute> attributes,
       ErrorReporter errorReporter) {
-    SourceLocation phNameLocation = null;
+    String phName = extractPlaceholderName(attributes, errorReporter);
+    return new MsgSelectNode(
+        id,
+        sourceLocation,
+        openTagLocation,
+        selectExpr,
+        createMessagePlaceholder(selectExpr, phName));
+  }
+
+  private static String extractPlaceholderName(List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
     String phName = null;
     for (CommandTagAttribute attribute : attributes) {
       if (PHNAME_ATTR.equals(attribute.getName().identifier())) {
-        phNameLocation = attribute.getValueLocation();
-        phName = validatePlaceholderName(attribute.getValue(), phNameLocation, errorReporter);
+        phName = validatePlaceholderName(attribute.getValue(), attribute.getValueLocation(), errorReporter);
       } else {
         errorReporter.report(
             attribute.getName().location(),
@@ -113,15 +122,13 @@ public final class MsgSelectNode extends AbstractParentCommandNode<CaseOrDefault
             PHNAME_ATTR);
       }
     }
-    return new MsgSelectNode(
-        id,
-        sourceLocation,
-        openTagLocation,
-        selectExpr,
-        (phName == null)
-            ? MessagePlaceholder.create(
-                genNaiveBaseNameForExpr(selectExpr.getRoot(), FALLBACK_BASE_SELECT_VAR_NAME))
-            : MessagePlaceholder.createWithUserSuppliedName(phName, phNameLocation));
+    return phName;
+  }
+
+  private static MessagePlaceholder createMessagePlaceholder(ExprRootNode selectExpr, String phName) {
+    return (phName == null)
+        ? MessagePlaceholder.create(genNaiveBaseNameForExpr(selectExpr.getRoot(), FALLBACK_BASE_SELECT_VAR_NAME))
+        : MessagePlaceholder.createWithUserSuppliedName(phName, null);
   }
 
   /**
