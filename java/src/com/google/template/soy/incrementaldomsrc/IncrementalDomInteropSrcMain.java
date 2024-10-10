@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -22,7 +23,14 @@ import java.util.List;
 
 /** Important: Do not use outside of Soy code (treat as superpackage-private). */
 public class IncrementalDomInteropSrcMain {
-  public IncrementalDomInteropSrcMain() {}
+
+  private final SoyJsSrcOptions options;
+
+  public IncrementalDomInteropSrcMain() {
+    this.options = new SoyJsSrcOptions();
+    this.options.setShouldGenerateGoogModules(true);
+  }
+
   /**
    * Generates code that, when in a mod, will modify a SoyJS template to use an IDOM one instead.
    *
@@ -32,8 +40,6 @@ public class IncrementalDomInteropSrcMain {
    *     JS file. The generated JS files correspond one-to-one to the original Soy source files.
    */
   public List<String> genJsSrc(SoyFileSetNode soyTree, ErrorReporter errorReporter) {
-    SoyJsSrcOptions options = new SoyJsSrcOptions();
-    options.setShouldGenerateGoogModules(true);
     return new GenIncrementalDomInteropVisitor(options, null, null, null, null, null, null, null)
         .gen(soyTree, errorReporter);
   }
