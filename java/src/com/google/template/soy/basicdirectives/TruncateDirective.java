@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -34,9 +35,10 @@ import com.google.template.soy.pysrc.restricted.PyFunctionExprBuilder;
 import com.google.template.soy.pysrc.restricted.SoyPySrcPrintDirective;
 import com.google.template.soy.shared.restricted.SoyJavaPrintDirective;
 import com.google.template.soy.shared.restricted.SoyPurePrintDirective;
+import org.objectweb.asm.Type;
+
 import java.util.List;
 import java.util.Set;
-import org.objectweb.asm.Type;
 
 /**
  * A directive that truncates a string to a maximum length if it is too long, optionally adding
@@ -61,31 +63,33 @@ final class TruncateDirective
 
   @Override
   public SoyValue applyForJava(SoyValue value, List<SoyValue> args) {
-    int maxLen;
+    int maxLen = parseMaxLength(args);
+    boolean doAddEllipsis = parseAddEllipsis(args);
+    String str = value.coerceToString();
+    return StringData.forValue(BasicDirectivesRuntime.truncate(str, maxLen, doAddEllipsis));
+  }
+
+  private int parseMaxLength(List<SoyValue> args) {
     try {
-      maxLen = args.get(0).integerValue();
+      return args.get(0).integerValue();
     } catch (SoyDataException sde) {
       throw new IllegalArgumentException(
           "Could not parse first parameter of '|truncate' as integer (value was \""
-              + args.get(0).stringValue()
-              + "\").",
+              + args.get(0).stringValue() + "\").",
           sde);
     }
+  }
 
-    String str = value.coerceToString();
-    boolean doAddEllipsis;
+  private boolean parseAddEllipsis(List<SoyValue> args) {
     if (args.size() == 2) {
       try {
-        doAddEllipsis = args.get(1).booleanValue();
+        return args.get(1).booleanValue();
       } catch (SoyDataException sde) {
         throw new IllegalArgumentException(
             "Could not parse second parameter of '|truncate' as boolean.", sde);
       }
-    } else {
-      doAddEllipsis = true; // default to true
     }
-
-    return StringData.forValue(BasicDirectivesRuntime.truncate(str, maxLen, doAddEllipsis));
+    return true; // default to true
   }
 
   private static final class JbcSrcMethods {
@@ -124,7 +128,7 @@ final class TruncateDirective
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
     String maxLenExprText = args.get(0).getText();
-    String doAddEllipsisExprText = (args.size() == 2) ? args.get(1).getText() : "true" /*default*/;
+    String doAddEllipsisExprText = (args.size() == 2) ? args.get(1).getText() : "true"; // default
 
     return new JsExpr(
         "soy.$$truncate("
@@ -144,8 +148,6 @@ final class TruncateDirective
 
   @Override
   public PyExpr applyForPySrc(PyExpr value, List<PyExpr> args) {
-    // Truncation always wants a string, so to potentially save an unnecessary conversion, we do
-    // optional coercing at compile time.
     PyExpr input = value.toPyString();
     PyExpr maxLen = args.get(0);
     PyExpr doAddEllipsis = (args.size() == 2) ? args.get(1) : new PyExpr("True", Integer.MAX_VALUE);
