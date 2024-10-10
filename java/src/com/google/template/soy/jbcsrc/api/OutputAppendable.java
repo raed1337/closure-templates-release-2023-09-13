@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -79,28 +80,28 @@ public final class OutputAppendable extends AbstractLoggingAdvisingAppendable {
       LoggingFunctionInvocation funCall, ImmutableList<Function<String, String>> escapers)
       throws IOException {
     String value = logger.evalLoggingFunction(funCall);
+    value = applyEscapers(value, escapers);
+    outputAppendable.append(value);
+  }
+
+  private String applyEscapers(String value, ImmutableList<Function<String, String>> escapers) {
     for (Function<String, String> directive : escapers) {
       value = directive.apply(value);
     }
-    outputAppendable.append(value);
+    return value;
   }
 
   @Override
   protected void doEnterLoggableElement(LogStatement statement) {
-    Optional<SafeHtml> veDebugOutput = logger.enter(statement);
-    if (veDebugOutput.isPresent()) {
-      try {
-        appendDebugOutput(veDebugOutput.get().getSafeHtmlString());
-      } catch (IOException ioException) {
-        googleLogger.atWarning().withCause(ioException).log(
-            "Something went wrong while outputting VE debug info to the DOM");
-      }
-    }
+    handleLoggableElement(statement, logger.enter(statement));
   }
 
   @Override
   protected void doExitLoggableElement() {
-    Optional<SafeHtml> veDebugOutput = logger.exit();
+    handleLoggableElement(null, logger.exit());
+  }
+
+  private void handleLoggableElement(LogStatement statement, Optional<SafeHtml> veDebugOutput) {
     if (veDebugOutput.isPresent()) {
       try {
         appendDebugOutput(veDebugOutput.get().getSafeHtmlString());
