@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -60,30 +61,35 @@ public class TemplateDelegateNodeBuilder extends TemplateNodeBuilder<TemplateDel
     setCommonCommandValues(attrs);
 
     this.delTemplateName = templateName.identifier();
+    processAttributes(attrs);
+    this.delPriority = soyFileHeaderInfo.getPriority();
+    genInternalTemplateNameHelper(templateName);
+    return this;
+  }
+
+  private void processAttributes(List<CommandTagAttribute> attrs) {
     for (CommandTagAttribute attribute : attrs) {
       Identifier name = attribute.getName();
       if (COMMON_ATTRIBUTE_NAMES.contains(name.identifier())) {
         continue;
       }
-      switch (name.identifier()) {
-        case "variant":
-          // need to get variant parsing out of this.  maybe we can expose some sort of limited
-          // primitiveOrGlobal parsing solution?
-          this.delTemplateVariantExpr = attribute.valueAsExpr(errorReporter);
-          break;
-        default:
-          errorReporter.report(
-              name.location(),
-              CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-              name.identifier(),
-              "deltemplate",
-              ImmutableList.builder().addAll(COMMON_ATTRIBUTE_NAMES).add("variant").build());
-      }
+      handleAttribute(name, attribute);
     }
+  }
 
-    this.delPriority = soyFileHeaderInfo.getPriority();
-    genInternalTemplateNameHelper(templateName);
-    return this;
+  private void handleAttribute(Identifier name, CommandTagAttribute attribute) {
+    switch (name.identifier()) {
+      case "variant":
+        this.delTemplateVariantExpr = attribute.valueAsExpr(errorReporter);
+        break;
+      default:
+        errorReporter.report(
+            name.location(),
+            CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
+            name.identifier(),
+            "deltemplate",
+            ImmutableList.builder().addAll(COMMON_ATTRIBUTE_NAMES).add("variant").build());
+    }
   }
 
   /**
@@ -92,19 +98,7 @@ public class TemplateDelegateNodeBuilder extends TemplateNodeBuilder<TemplateDel
    */
   private void genInternalTemplateNameHelper(Identifier originalNameIdentifier) {
     Preconditions.checkState(id != null);
-    // encode all the deltemplate information into the name to get a unique string
-    // though... it might make more sense for this to not have a user visible name given that the
-    // calling convention is indirect.
-    String variant = "";
-    if (delTemplateVariantExpr != null) {
-      // this is hacky.  perhaps we should come up with a less ambiguous strategy
-      ExprNode expr = delTemplateVariantExpr.getRoot();
-      if (expr instanceof StringNode) {
-        variant = ((StringNode) expr).getValue();
-      } else {
-        variant = expr.toSourceString();
-      }
-    }
+    String variant = getVariant();
     String generatedPartialTemplateName =
         partialDeltemplateTemplateName(delTemplateName, soyFileHeaderInfo.getModName(), variant);
     setTemplateNames(
@@ -113,6 +107,14 @@ public class TemplateDelegateNodeBuilder extends TemplateNodeBuilder<TemplateDel
             originalNameIdentifier.identifier(),
             originalNameIdentifier.location()),
         soyFileHeaderInfo.getNamespace());
+  }
+
+  private String getVariant() {
+    if (delTemplateVariantExpr != null) {
+      ExprNode expr = delTemplateVariantExpr.getRoot();
+      return expr instanceof StringNode ? ((StringNode) expr).getValue() : expr.toSourceString();
+    }
+    return "";
   }
 
   /** Returns the inferred 'partial' name for a deltemplate. */
@@ -132,7 +134,6 @@ public class TemplateDelegateNodeBuilder extends TemplateNodeBuilder<TemplateDel
   @Override
   public TemplateDelegateNode build() {
     Preconditions.checkState(id != null && cmdText != null);
-
     return new TemplateDelegateNode(this, soyFileHeaderInfo, delTemplateName, delPriority, params);
   }
 
