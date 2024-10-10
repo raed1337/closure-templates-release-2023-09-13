@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -35,9 +36,10 @@ import com.google.template.soy.shared.restricted.SoyPurePrintDirective;
 import com.google.template.soy.types.SanitizedType.HtmlType;
 import com.google.template.soy.types.StringType;
 import com.google.template.soy.types.UnionType;
+
+import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Set;
-import javax.annotation.Nonnull;
 
 /**
  * A directive that replaces newlines (\n, \r, or \r\n) with HTML line breaks (&lt;br&gt;).
@@ -63,8 +65,7 @@ final class ChangeNewlineToBrDirective
   @Override
   @Nonnull
   public SanitizedContent.ContentKind getContentKind() {
-    // This directive expects HTML as input and produces HTML as output.
-    return SanitizedContent.ContentKind.HTML;
+    return SanitizedContent.ContentKind.HTML; // HTML input and output
   }
 
   @Override
@@ -77,23 +78,18 @@ final class ChangeNewlineToBrDirective
     static final MethodRef CHANGE_NEWLINE_TO_BR =
         MethodRef.create(BasicDirectivesRuntime.class, "changeNewlineToBr", SoyValue.class);
     static final MethodRef CHANGE_NEWLINE_TO_BR_STREAMING =
-        MethodRef.create(
-            BasicDirectivesRuntime.class,
-            "changeNewlineToBrStreaming",
-            LoggingAdvisingAppendable.class);
+        MethodRef.create(BasicDirectivesRuntime.class, "changeNewlineToBrStreaming", LoggingAdvisingAppendable.class);
   }
 
   @Override
-  public SoyExpression applyForJbcSrc(
-      JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
+  public SoyExpression applyForJbcSrc(JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
     return SoyExpression.forSoyValue(
         UnionType.of(StringType.getInstance(), HtmlType.getInstance()),
         JbcSrcMethods.CHANGE_NEWLINE_TO_BR.invoke(value.box()));
   }
 
   @Override
-  public AppendableAndOptions applyForJbcSrcStreaming(
-      JbcSrcPluginContext context, Expression delegateAppendable, List<SoyExpression> args) {
+  public AppendableAndOptions applyForJbcSrcStreaming(JbcSrcPluginContext context, Expression delegateAppendable, List<SoyExpression> args) {
     return AppendableAndOptions.create(
         JbcSrcMethods.CHANGE_NEWLINE_TO_BR_STREAMING.invoke(delegateAppendable));
   }
