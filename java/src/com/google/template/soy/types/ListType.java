@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -53,17 +54,21 @@ public final class ListType extends SoyType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType srcType, UnknownAssignmentPolicy policy) {
-    if (srcType.getKind() == Kind.LIST) {
-      ListType srcListType = (ListType) srcType;
-      if (srcListType == EMPTY_LIST) {
-        return true;
-      } else if (this == EMPTY_LIST) {
-        return false;
-      }
-      // Lists are covariant (because values are immutable.)
-      return elementType.isAssignableFromInternal(srcListType.elementType, policy);
+    if (srcType.getKind() != Kind.LIST) {
+      return false;
     }
-    return false;
+    
+    return isAssignableFromListType((ListType) srcType, policy);
+  }
+
+  private boolean isAssignableFromListType(ListType srcListType, UnknownAssignmentPolicy policy) {
+    if (srcListType == EMPTY_LIST) {
+      return true;
+    } else if (this == EMPTY_LIST) {
+      return false;
+    }
+    // Lists are covariant (because values are immutable.)
+    return elementType.isAssignableFromInternal(srcListType.elementType, policy);
   }
 
   @Override
