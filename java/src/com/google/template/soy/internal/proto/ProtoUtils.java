@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -75,10 +76,7 @@ public final class ProtoUtils {
       return false;
     }
     Descriptor valueDesc = getMapValueMessageType(fieldDescriptor);
-    if (valueDesc == null) {
-      return false;
-    }
-    return SAFE_PROTO_TYPES.contains(valueDesc.getFullName());
+    return valueDesc != null && SAFE_PROTO_TYPES.contains(valueDesc.getFullName());
   }
 
   /**
@@ -88,12 +86,9 @@ public final class ProtoUtils {
   @Nullable
   public static Descriptor getMapValueMessageType(FieldDescriptor mapField) {
     FieldDescriptor valueDesc = getMapValueFieldDescriptor(mapField);
-    if (valueDesc.getType() == FieldDescriptor.Type.MESSAGE) {
-      return valueDesc.getMessageType();
-    } else {
-      return null;
-    }
+    return valueDesc.getType() == FieldDescriptor.Type.MESSAGE ? valueDesc.getMessageType() : null;
   }
+
   /**
    * Returns the field descriptor representing the type of the value of the map field. Returns null
    * if the map value isn't a message.
@@ -115,19 +110,15 @@ public final class ProtoUtils {
   /** Returns the JS name of the import for the given extension, suitable for goog.require. */
   public static String getJsExtensionImport(FieldDescriptor desc) {
     Descriptor scope = desc.getExtensionScope();
-    if (scope != null) {
-      return calculateUnprefixedJsName(scope);
-    }
-    return getJsPackage(desc.getFile()) + "." + computeJsExtensionName(desc);
+    return (scope != null) ? calculateUnprefixedJsName(scope) : getJsPackage(desc.getFile()) + "." + computeJsExtensionName(desc);
   }
 
   /** Returns the JS name of the extension, suitable for passing to getExtension(). */
   public static String getJsExtensionName(FieldDescriptor desc) {
     Descriptor scope = desc.getExtensionScope();
-    if (scope != null) {
-      return calculateUnprefixedJsName(scope) + "." + computeJsExtensionName(desc);
-    }
-    return getJsPackage(desc.getFile()) + "." + computeJsExtensionName(desc);
+    return (scope != null) 
+        ? calculateUnprefixedJsName(scope) + "." + computeJsExtensionName(desc) 
+        : getJsPackage(desc.getFile()) + "." + computeJsExtensionName(desc);
   }
 
   /** Performs camelcase translation. */
@@ -139,10 +130,7 @@ public final class ProtoUtils {
   /** Returns the expected javascript package for protos based on the .proto file. */
   private static String getJsPackage(FileDescriptor file) {
     String protoPackage = file.getPackage();
-    if (!protoPackage.isEmpty()) {
-      return "proto." + protoPackage;
-    }
-    return "proto";
+    return protoPackage.isEmpty() ? "proto" : "proto." + protoPackage;
   }
 
   public static boolean shouldJsIgnoreField(FieldDescriptor fieldDescriptor) {
@@ -160,13 +148,7 @@ public final class ProtoUtils {
 
   /** Returns true if this field has a valid jstype annotation. */
   public static boolean hasJsType(FieldDescriptor fieldDescriptor) {
-    if (!JS_TYPEABLE_FIELDS.contains(fieldDescriptor.getType())) {
-      return false;
-    }
-    if (fieldDescriptor.getOptions().hasJstype()) {
-      return true;
-    }
-    return false;
+    return JS_TYPEABLE_FIELDS.contains(fieldDescriptor.getType()) && fieldDescriptor.getOptions().hasJstype();
   }
 
   /** Returns true if this field is an unsigned integer. */
@@ -183,11 +165,7 @@ public final class ProtoUtils {
   }
 
   public static JSType getJsType(FieldDescriptor fieldDescriptor) {
-    boolean hasJstype = fieldDescriptor.getOptions().hasJstype();
-    if (hasJstype) {
-      return fieldDescriptor.getOptions().getJstype();
-    }
-    return null;
+    return fieldDescriptor.getOptions().hasJstype() ? fieldDescriptor.getOptions().getJstype() : null;
   }
 
   public static String calculateJsEnumName(EnumDescriptor descriptor) {
@@ -204,8 +182,7 @@ public final class ProtoUtils {
   }
 
   public static String calculateUnprefixedJsName(GenericDescriptor descriptor) {
-    String jsPackage = getJsPackage(descriptor.getFile());
-    return jsPackage + "." + calculateFileLocalName(descriptor);
+    return getJsPackage(descriptor.getFile()) + "." + calculateFileLocalName(descriptor);
   }
 
   /** Describes the mutability of a proto type. */
@@ -222,12 +199,10 @@ public final class ProtoUtils {
 
   public static String getJsFieldSpecificSuffix(FieldDescriptor fieldDesc) {
     Map<FieldDescriptor, String> fieldSpecificSuffixes = new HashMap<>();
-
     return fieldSpecificSuffixes.getOrDefault(fieldDesc, "");
   }
 
   public static OneofDescriptor getContainingOneof(FieldDescriptor fd) {
-    return
-    fd.getContainingOneof();
+    return fd.getContainingOneof();
   }
 }
