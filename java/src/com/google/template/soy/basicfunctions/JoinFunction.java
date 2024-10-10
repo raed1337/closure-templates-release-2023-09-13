@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -33,6 +34,7 @@ import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -66,7 +68,7 @@ public final class JoinFunction
         .call(factory.global("map").call(factory.global("str"), args.get(0)));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
+  // Lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
     static final Method JOIN =
         JavaValueFactory.createMethod(
