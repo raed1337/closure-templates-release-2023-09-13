@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -45,13 +46,7 @@ public final class MsgFallbackGroupNode extends AbstractParentSoyNode<MsgNode>
         SplitLevelTopNode<MsgNode>,
         StatementNode {
 
-  /**
-   * Escaping directives names (including the vertical bar) to apply to the return value. With
-   * strict autoescape, the result of each call site is escaped, which is potentially a no-op if the
-   * template's return value is the correct SanitizedContent object.
-   */
   private ImmutableList<SoyPrintDirective> escapingDirectiveNames = ImmutableList.of();
-
   @Nullable private HtmlContext htmlContext;
 
   /**
@@ -73,11 +68,6 @@ public final class MsgFallbackGroupNode extends AbstractParentSoyNode<MsgNode>
     this.htmlContext = orig.htmlContext;
   }
 
-  /**
-   * Gets the HTML context (typically tag, attribute value, HTML PCDATA, or plain text) which this
-   * node appears in. This affects how the node is escaped (for traditional backends) or how it's
-   * passed to incremental DOM APIs.
-   */
   @Override
   public HtmlContext getHtmlContext() {
     return Preconditions.checkNotNull(
@@ -96,7 +86,6 @@ public final class MsgFallbackGroupNode extends AbstractParentSoyNode<MsgNode>
   @Override
   public String toSourceString() {
     StringBuilder sb = new StringBuilder();
-    // Note: The first MsgNode takes care of generating the 'msg' tag.
     appendSourceStringForChildren(sb);
     sb.append("{/msg}");
     return sb.toString();
