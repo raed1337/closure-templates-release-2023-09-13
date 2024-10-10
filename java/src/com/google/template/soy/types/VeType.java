@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -25,8 +26,6 @@ public final class VeType extends SoyType {
 
   public static final VeType NO_DATA = new VeType(Optional.empty());
 
-  // This isn't a soyType to avoid triggering issues with strict deps and protos.  Not sure if that
-  // makes sense though given imports.
   private final Optional<String> dataType;
 
   private VeType(Optional<String> dataType) {
@@ -35,6 +34,10 @@ public final class VeType extends SoyType {
 
   public static VeType of(String dataType) {
     Preconditions.checkNotNull(dataType);
+    return createVeType(dataType);
+  }
+
+  private static VeType createVeType(String dataType) {
     if (NullType.getInstance().toString().equals(dataType)) {
       return NO_DATA;
     }
@@ -52,14 +55,17 @@ public final class VeType extends SoyType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType srcType) {
-    if (srcType.getKind() == Kind.VE) {
-      VeType otherVe = (VeType) srcType;
-      if (dataType.isPresent() && dataType.get().equals(AnyType.getInstance().toString())) {
-        return true;
-      }
-      return dataType.equals(otherVe.dataType);
+    if (srcType.getKind() != Kind.VE) {
+      return false;
     }
-    return false;
+    return isAssignableFromVeType((VeType) srcType);
+  }
+
+  private boolean isAssignableFromVeType(VeType otherVe) {
+    if (dataType.isPresent() && dataType.get().equals(AnyType.getInstance().toString())) {
+      return true;
+    }
+    return dataType.equals(otherVe.dataType);
   }
 
   @Override
@@ -76,9 +82,7 @@ public final class VeType extends SoyType {
 
   @Override
   public boolean equals(Object other) {
-    return other != null
-        && other.getClass() == this.getClass()
-        && ((VeType) other).dataType.equals(this.dataType);
+    return other instanceof VeType && ((VeType) other).dataType.equals(this.dataType);
   }
 
   @Override
