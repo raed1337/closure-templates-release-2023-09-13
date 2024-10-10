@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -44,13 +45,7 @@ public final class ImportNode extends AbstractSoyNode {
 
   private final StringNode path;
   private ImportType importType;
-  /**
-   * If this is NOT a module import (* as) then store the {@link
-   * com.google.template.soy.types.TemplateModuleImportType} or {@link
-   * com.google.template.soy.types.ProtoModuleImportType} here as a convenience.
-   */
   private SoyType moduleType;
-
   private Optional<SoyFileNode.CssPath> requiredCssPath;
 
   /** Only Proto and CSS are supported right now. */
@@ -67,10 +62,7 @@ public final class ImportNode extends AbstractSoyNode {
     this.path = path;
     this.importType = ImportType.UNKNOWN;
     this.requiredCssPath = Optional.empty();
-
-    for (ImportedVar defn : identifiers) {
-      defn.onParentInit(getSourceFilePath());
-    }
+    identifiers.forEach(defn -> defn.onParentInit(getSourceFilePath()));
   }
 
   /**
@@ -80,19 +72,21 @@ public final class ImportNode extends AbstractSoyNode {
    */
   private ImportNode(ImportNode orig, CopyState copyState) {
     super(orig, copyState);
-    this.identifiers =
-        orig.identifiers.stream()
-            .map(
-                prev -> {
-                  ImportedVar next = prev.copy(copyState);
-                  copyState.updateRefs(prev, next);
-                  return next;
-                })
-            .collect(toImmutableList());
+    this.identifiers = copyIdentifiers(orig, copyState);
     this.path = orig.path.copy(copyState);
     this.importType = orig.importType;
     this.requiredCssPath = orig.requiredCssPath;
     this.moduleType = orig.moduleType;
+  }
+
+  private ImmutableList<ImportedVar> copyIdentifiers(ImportNode orig, CopyState copyState) {
+    return orig.identifiers.stream()
+        .map(prev -> {
+          ImportedVar next = prev.copy(copyState);
+          copyState.updateRefs(prev, next);
+          return next;
+        })
+        .collect(toImmutableList());
   }
 
   @Override
@@ -108,9 +102,13 @@ public final class ImportNode extends AbstractSoyNode {
   public void setImportType(ImportType importType) {
     this.importType = importType;
     if (importType == ImportType.CSS) {
-      String sourcePath = "google3/" + getPath().substring(0, getPath().length() - ".css".length());
+      String sourcePath = createCssSourcePath();
       this.requiredCssPath = Optional.of(new SoyFileNode.CssPath(sourcePath));
     }
+  }
+
+  private String createCssSourcePath() {
+    return "google3/" + getPath().substring(0, getPath().length() - ".css".length());
   }
 
   public ImportType getImportType() {
@@ -125,25 +123,12 @@ public final class ImportNode extends AbstractSoyNode {
     return SourceFilePath.create(path.getValue());
   }
 
-  /**
-   * Whether this is a module import (e.g. "import * as foo from ..."), as opposed to a symbol
-   * import node (e.g. "import {foo,bar,baz} from ...").
-   */
   public boolean isModuleImport() {
     return identifiers.size() == 1 && identifiers.get(0).isModuleImport();
   }
 
-  /**
-   * Returns the module alias (e.g. "foo" if the import is "import * as foo from 'my_foo.soy';").
-   * This should only be called on module import nodes (i.e. if {@link #isModuleImport} node is
-   * true).
-   */
-  public String getModuleAlias() {
-    checkState(
-        isModuleImport(),
-        "Module alias can only be retrieved for module imports (e.g. \"import * as fooTemplates"
-            + " from 'my_foo.soy';\")");
-    return identifiers.get(0).name();
+  public Optional<String> getModuleAlias() {
+    return isModuleImport() ? Optional.of(identifiers.get(0).name()) : Optional.empty();
   }
 
   public SoyType getModuleType() {
@@ -169,29 +154,21 @@ public final class ImportNode extends AbstractSoyNode {
 
   @Override
   public String toSourceString() {
-    String exprs = "";
-    if (!identifiers.isEmpty()) {
-      exprs =
-          String.format(
-              "{%s} from ",
-              identifiers.stream()
-                  .map(i -> i.isAliased() ? i.getSymbol() + " as " + i.name() : i.name())
-                  .collect(joining(",")));
-    }
-    return String.format("import %s'%s'", exprs, path.getValue());
+    return String.format("import %s'%s'", formatIdentifiers(), path.getValue());
   }
 
-  /**
-   * Visits all {@link ImportedVar} descending from this import node. {@code visitor} is called once
-   * for each var. The second argument to {@code visitor} is the (nullable) type of the parent var,
-   * or the {@link #getModuleType()} for a top level var.
-   */
+  private String formatIdentifiers() {
+    return identifiers.isEmpty() ? "" : String.format("{%s} from ", 
+        identifiers.stream()
+            .map(i -> i.isAliased() ? i.getSymbol() + " as " + i.name() : i.name())
+            .collect(joining(",")));
+  }
+
   public void visitVars(BiConsumer<ImportedVar, SoyType> visitor) {
     getIdentifiers().forEach(id -> visitVars(id, getModuleType(), visitor));
   }
 
-  private static void visitVars(
-      ImportedVar id, SoyType parentType, BiConsumer<ImportedVar, SoyType> visitor) {
+  private static void visitVars(ImportedVar id, SoyType parentType, BiConsumer<ImportedVar, SoyType> visitor) {
     visitor.accept(id, parentType);
     id.getNestedTypes()
         .forEach(nestedType -> visitVars(id.nested(nestedType), id.typeOrDefault(null), visitor));
