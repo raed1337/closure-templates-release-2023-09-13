@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -31,6 +32,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -51,6 +53,12 @@ import java.util.List;
 public final class StringListSortMethod
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method LIST_SORT_FN = getListSortMethod();
+
+  private static Method getListSortMethod() {
+    return JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "stringListSort", List.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -63,15 +71,9 @@ public final class StringListSortMethod
     return factory.global("runtime.string_list_sort").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method LIST_SORT_FN =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "stringListSort", List.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.LIST_SORT_FN, args.get(0));
+    return factory.callStaticMethod(LIST_SORT_FN, args.get(0));
   }
 }
