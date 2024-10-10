@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -16,7 +17,6 @@
 
 package com.google.template.soy.jbcsrc.runtime;
 
-
 import com.google.template.soy.data.LoggingAdvisingAppendable;
 import com.google.template.soy.data.SoyValue;
 import com.google.template.soy.data.SoyValueProvider;
@@ -29,7 +29,7 @@ import java.io.IOException;
  * implementations.
  *
  * <p>This class resolves to a {@link SoyValueProvider} and calls {@link
- * SoyValueProvider#renderAndResolve}. If you don't neeed to box as a value provider, use {@link
+ * SoyValueProvider#renderAndResolve}. If you don't need to box as a value provider, use {@link
  * DetachableSoyValueProvider} instead, which resolves to a {@link SoyValue} and calls {@link
  * SoyValue#render}.
  */
@@ -45,20 +45,20 @@ public abstract class DetachableSoyValueProviderProvider implements SoyValueProv
   @Override
   public final RenderResult status() {
     if (resolvedValueProvider == null) {
-      RenderResult subResult = doResolveDelegate();
-      if (!subResult.isDone()) {
-        return subResult;
-      }
+      return handleUnresolvedProvider();
     }
     return resolvedValueProvider.status();
+  }
+
+  private RenderResult handleUnresolvedProvider() {
+    RenderResult subResult = doResolveDelegate();
+    return subResult.isDone() ? resolvedValueProvider.status() : subResult;
   }
 
   @Override
   public RenderResult renderAndResolve(LoggingAdvisingAppendable appendable, boolean isLast)
       throws IOException {
     RenderResult result = status();
-    // This means we have not made enough progress to even begin delegating, keep calling status()
-    // until we have.
     if (resolvedValueProvider == null) {
       return result;
     }
