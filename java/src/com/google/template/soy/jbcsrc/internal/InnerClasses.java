@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -56,7 +57,7 @@ public final class InnerClasses {
   }
 
   /**
-   * Register the name (or a simpl mangling of it) as an inner class with the given access
+   * Register the name (or a simple mangling of it) as an inner class with the given access
    * modifiers.
    *
    * @return A {@link TypeInfo} with the full (possibly mangled) class name
@@ -71,7 +72,7 @@ public final class InnerClasses {
   /**
    * Adds the data for an inner class.
    *
-   * @throws java.lang.IllegalArgumentException if the class wasn't previous registered via {@link
+   * @throws java.lang.IllegalArgumentException if the class wasn't previously registered via {@link
    *     #registerInnerClass(String, int)} or {@link #registerInnerClassWithGeneratedName(String,
    *     int)}.
    */
@@ -82,7 +83,7 @@ public final class InnerClasses {
 
   private void checkRegistered(TypeInfo type) {
     if (!classNames.has(type.simpleName())) {
-      throw new IllegalArgumentException(type + " wasn't registered");
+      throw new IllegalArgumentException("The type " + type + " has not been registered as an inner class.");
     }
   }
 
@@ -91,7 +92,7 @@ public final class InnerClasses {
    *
    * <p>Registering an inner class is confusing. The inner class needs to call this and so does the
    * outer class. Confirmed by running ASMIfier. Also, failure to call visitInnerClass on both
-   * classes either breaks reflective apis (like class.getSimpleName()/getEnclosingClass), or causes
+   * classes either breaks reflective APIs (like class.getSimpleName()/getEnclosingClass), or causes
    * verifier errors (like IncompatibleClassChangeError).
    */
   public void registerAsInnerClass(ClassVisitor visitor, TypeInfo innerClass) {
@@ -101,10 +102,9 @@ public final class InnerClasses {
 
   /** Registers all inner classes to the given outer class. */
   public void registerAllInnerClasses(ClassVisitor visitor) {
-    for (Map.Entry<TypeInfo, Integer> entry : innerClassesAccessModifiers.entrySet()) {
-      TypeInfo innerClass = entry.getKey();
-      doRegister(visitor, innerClass);
-    }
+    innerClassesAccessModifiers.forEach((innerClass, accessModifier) -> 
+      doRegister(visitor, innerClass)
+    );
   }
 
   private void doRegister(ClassVisitor visitor, TypeInfo innerClass) {
