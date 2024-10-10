@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -45,8 +46,8 @@ public final class LogNode extends AbstractBlockCommandNode
     return Kind.LOG_NODE;
   }
 
-  @SuppressWarnings("unchecked")
   @Override
+  @SuppressWarnings("unchecked")
   public ParentSoyNode<StandaloneNode> getParent() {
     return (ParentSoyNode<StandaloneNode>) super.getParent();
   }
