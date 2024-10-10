@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -18,9 +19,18 @@ package com.google.template.soy.types;
 
 /** Abstract base class for {@link LegacyObjectMapType} and {@link MapType}. */
 public abstract class AbstractMapType extends SoyType {
+  
   /** Returns the type for keys of this map. */
   public abstract SoyType getKeyType();
 
   /** Returns the type for values in this map. */
   public abstract SoyType getValueType();
+
+  /** 
+   * Utility method to check if key and value types are not null. 
+   * This improves the safety of the map type by ensuring valid types.
+   */
+  public boolean hasValidTypes() {
+    return getKeyType() != null && getValueType() != null;
+  }
 }
