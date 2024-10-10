@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -60,7 +61,11 @@ abstract class AbstractCommandNode extends AbstractSoyNode implements CommandNod
 
   @Override
   public String getCommandText() {
-    return "";
+    return getCommandTextInternal();
+  }
+
+  protected String getCommandTextInternal() {
+    return ""; // Placeholder for any future logic related to command text
   }
 
   /**
@@ -75,6 +80,10 @@ abstract class AbstractCommandNode extends AbstractSoyNode implements CommandNod
     String base = selfEnding ? TAG_STRING_SELF_ENDING : TAG_STRING;
     String commandName = getCommandName();
     String commandText = getCommandText();
+    return formatTagString(base, commandName, commandText);
+  }
+
+  private String formatTagString(String base, String commandName, String commandText) {
     String tagText = String.format("%s %s", commandName, commandText);
     return String.format(base, tagText.trim());
   }
