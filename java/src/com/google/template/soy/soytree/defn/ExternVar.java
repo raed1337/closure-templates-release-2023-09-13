@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -43,6 +44,9 @@ public final class ExternVar extends AbstractVarDefn {
   }
 
   public void setType(SoyType type) {
+    if (type == null) {
+      throw new IllegalArgumentException("Type parameter cannot be null");
+    }
     this.type = type;
   }
 }
