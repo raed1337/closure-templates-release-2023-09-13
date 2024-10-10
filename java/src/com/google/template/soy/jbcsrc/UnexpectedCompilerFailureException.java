@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -42,15 +43,30 @@ final class UnexpectedCompilerFailureException extends RuntimeException {
   }
 
   String printSoyStack() {
+    return buildSoyStackTrace();
+  }
+
+  private String buildSoyStackTrace() {
     StringBuilder sb = new StringBuilder();
     for (Node node : compilationPath) {
-      sb.append(node.getClass().getSimpleName())
-          .append(": ")
-          .append(node.getSourceLocation())
-          .append("\n");
+      appendNodeInfo(sb, node);
     }
     // delete last \n
-    return sb.deleteCharAt(sb.length() - 1).toString();
+    return removeLastNewLine(sb);
+  }
+
+  private void appendNodeInfo(StringBuilder sb, Node node) {
+    sb.append(node.getClass().getSimpleName())
+        .append(": ")
+        .append(node.getSourceLocation())
+        .append("\n");
+  }
+
+  private String removeLastNewLine(StringBuilder sb) {
+    if (sb.length() > 0) {
+      sb.deleteCharAt(sb.length() - 1);
+    }
+    return sb.toString();
   }
 
   @Override
