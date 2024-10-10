@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -35,9 +36,10 @@ public final class IntType extends PrimitiveType {
 
   @Override
   boolean doIsAssignableFromNonUnionType(SoyType srcType) {
-    Kind kind = srcType.getKind();
-    // enums are implicitly assignable to ints since that is the runtime representation in all
-    // backends
+    return isAssignableFrom(srcType.getKind());
+  }
+
+  private boolean isAssignableFrom(Kind kind) {
     return kind == Kind.INT || kind == Kind.PROTO_ENUM;
   }
 
@@ -50,6 +52,7 @@ public final class IntType extends PrimitiveType {
   void doToProto(SoyTypeP.Builder builder) {
     builder.setPrimitive(SoyTypeP.PrimitiveTypeP.INT);
   }
+
   /** Return the single instance of this type. */
   public static IntType getInstance() {
     return INSTANCE;
