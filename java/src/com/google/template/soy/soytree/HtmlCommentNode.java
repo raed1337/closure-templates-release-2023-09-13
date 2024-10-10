@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -62,12 +63,20 @@ public final class HtmlCommentNode extends AbstractParentSoyNode<StandaloneNode>
 
   @Override
   public String toSourceString() {
+    return buildCommentString();
+  }
+
+  private String buildCommentString() {
     StringBuilder sb = new StringBuilder();
     sb.append("<!--");
+    appendChildrenToStringBuilder(sb);
+    sb.append("-->");
+    return sb.toString();
+  }
+
+  private void appendChildrenToStringBuilder(StringBuilder sb) {
     for (StandaloneNode node : this.getChildren()) {
       sb.append(node.toSourceString());
     }
-    sb.append("-->");
-    return sb.toString();
   }
 }
