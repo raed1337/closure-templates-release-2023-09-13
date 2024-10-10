@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -52,11 +53,9 @@ public final class StrSplitMethod
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    if (args.size() == 3) {
-      return args.get(0).invokeMethod("split", args.get(1), args.get(2));
-    }
-
-    return args.get(0).invokeMethod("split", args.get(1));
+    return args.size() == 3 
+        ? args.get(0).invokeMethod("split", args.get(1), args.get(2)) 
+        : args.get(0).invokeMethod("split", args.get(1));
   }
 
   @Override
@@ -75,10 +74,8 @@ public final class StrSplitMethod
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(
-        Methods.STR_SPLIT,
-        args.get(0),
-        args.get(1),
-        args.size() == 3 ? args.get(2) : factory.constantNull());
+    JavaValue delimiter = args.get(1);
+    JavaValue limit = args.size() == 3 ? args.get(2) : factory.constantNull();
+    return factory.callStaticMethod(Methods.STR_SPLIT, args.get(0), delimiter, limit);
   }
 }
