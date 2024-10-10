@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -61,20 +62,31 @@ public final class RestoreGlobalsPass implements CompilerFilePass {
 
     @Override
     protected void visitVarRefNode(VarRefNode varRef) {
-      if (varRef.getDefnDecl() != null) {
+      if (isVariableDefined(varRef) || isOriginalVariable(varRef) || isLocalVariable(varRef)) {
         return;
       }
 
-      boolean isOriginalVar = varRef.getName().startsWith("$");
-      if (isOriginalVar) {
-        return;
+      ExprNode node = findParentNode(varRef);
+      if (node.getParent().getKind() == Kind.METHOD_CALL_NODE) {
+        replaceWithFunctionNode(varRef, (MethodCallNode) node.getParent(), node);
+      } else {
+        replaceWithGlobalNode(varRef, node);
       }
+    }
 
-      if (getLocalVariables().lookup(varRef) != null) {
-        return;
-      }
+    private boolean isVariableDefined(VarRefNode varRef) {
+      return varRef.getDefnDecl() != null;
+    }
 
-      // Turn all unresolved VAR_REF + (FIELD_ACCESS)* back into global nodes.
+    private boolean isOriginalVariable(VarRefNode varRef) {
+      return varRef.getName().startsWith("$");
+    }
+
+    private boolean isLocalVariable(VarRefNode varRef) {
+      return getLocalVariables().lookup(varRef) != null;
+    }
+
+    private ExprNode findParentNode(VarRefNode varRef) {
       ExprNode node = varRef;
       while (node.getParent() != null) {
         if (node.getParent().getKind() == Kind.FIELD_ACCESS_NODE
@@ -84,32 +96,25 @@ public final class RestoreGlobalsPass implements CompilerFilePass {
           break;
         }
       }
+      return node;
+    }
 
-      if (node.getParent().getKind() == Kind.METHOD_CALL_NODE
-          && !((MethodCallNode) node.getParent()).isNullSafe()
-          && node.getParent().getChildIndex(node) == 0) {
-        // This method call is actually a function call with a dotted identifier.
-        MethodCallNode methodNode = (MethodCallNode) node.getParent();
+    private void replaceWithFunctionNode(VarRefNode varRef, MethodCallNode methodNode, ExprNode node) {
+      if (!methodNode.isNullSafe() && methodNode.getChildIndex(node) == 0) {
         String fullName = node.toSourceString() + "." + methodNode.getMethodName().identifier();
-        FunctionNode functionNode =
-            CallableExprBuilder.builder(methodNode)
-                .setTarget(null)
-                .setIdentifier(
-                    Identifier.create(
-                        fullName,
-                        union(varRef.getSourceLocation(), methodNode.getMethodName().location())))
-                .setSourceLocation(
-                    union(varRef.getSourceLocation(), methodNode.getSourceLocation()))
-                .buildFunction();
+        FunctionNode functionNode = CallableExprBuilder.builder(methodNode)
+            .setTarget(null)
+            .setIdentifier(Identifier.create(fullName, union(varRef.getSourceLocation(), methodNode.getMethodName().location())))
+            .setSourceLocation(union(varRef.getSourceLocation(), methodNode.getSourceLocation()))
+            .buildFunction();
         methodNode.getParent().replaceChild(methodNode, functionNode);
-      } else {
-        GlobalNode globalNode =
-            new GlobalNode(
-                Identifier.create(
-                    node.toSourceString(),
-                    union(varRef.getSourceLocation(), node.getSourceLocation())));
-        node.getParent().replaceChild(node, globalNode);
       }
+    }
+
+    private void replaceWithGlobalNode(VarRefNode varRef, ExprNode node) {
+      GlobalNode globalNode = new GlobalNode(
+          Identifier.create(node.toSourceString(), union(varRef.getSourceLocation(), node.getSourceLocation())));
+      node.getParent().replaceChild(node, globalNode);
     }
   }
 
