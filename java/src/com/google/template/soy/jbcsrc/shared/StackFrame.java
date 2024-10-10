@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -38,9 +39,15 @@ public class StackFrame {
 
   /** The logical position in the suspended frame. A non-negative number. */
   public final int stateNumber;
+  
   /** The child frame in the stack. */
   StackFrame child;
 
+  /**
+   * Constructs a StackFrame with the specified state number.
+   *
+   * @param stateNumber A non-negative integer representing the logical position in the suspended frame.
+   */
   public StackFrame(int stateNumber) {
     this.stateNumber = stateNumber;
   }
