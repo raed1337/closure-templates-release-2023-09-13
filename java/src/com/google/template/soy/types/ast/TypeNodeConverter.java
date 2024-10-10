@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -143,13 +144,7 @@ public final class TypeNodeConverter
               new StringArgGenericTypeInfo(1) {
                 @Override
                 SoyType create(List<String> types, TypeInterner interner) {
-                  String tag = "";
-                  if (types.size() == 1) {
-                    String type = types.get(0);
-                    if (!"?".equals(type)) {
-                      tag = type;
-                    }
-                  }
+                  String tag = types.size() == 1 && !"?".equals(types.get(0)) ? types.get(0) : "";
                   return interner.getOrCreateElementType(tag);
                 }
               })
@@ -173,9 +168,6 @@ public final class TypeNodeConverter
       super(numParams);
     }
 
-    /**
-     * Creates the given type. There are guaranteed to be exactly {@link #numParams} in the list.
-     */
     abstract SoyType create(List<SoyType> types, TypeInterner interner);
   }
 
@@ -214,10 +206,6 @@ public final class TypeNodeConverter
       return this;
     }
 
-    /**
-     * Set to true if {@link TypeNode} inputs will be parsed from non-template sources. If true then
-     * FQ proto names will be supported.
-     */
     @CanIgnoreReturnValue
     public Builder setSystemExternal(boolean systemExternal) {
       this.systemExternal = systemExternal;
@@ -262,11 +250,6 @@ public final class TypeNodeConverter
     this.disableAllTypeChecking = disableAllTypeChecking;
   }
 
-  /**
-   * Converts a TypeNode into a SoyType.
-   *
-   * <p>If any errors are encountered they are reported to the error reporter.
-   */
   public SoyType getOrCreateType(TypeNode node) {
     return node.accept(this);
   }
@@ -274,20 +257,25 @@ public final class TypeNodeConverter
   @Override
   public SoyType visit(NamedTypeNode node) {
     String name = node.name().identifier();
+    handleDashNotAllowed(name, node);
+    SoyType type = resolveNamedType(name, node);
+    node.setResolvedType(type);
+    return type;
+  }
 
-    // This is OK to check unconditionally because where '-' is allowed (in the TemplateType return
-    // type generics) NamedTypeNode is not parsed here. It is processed with TypeNode::toString.
+  private void handleDashNotAllowed(String name, NamedTypeNode node) {
     if (name.contains("-")) {
       errorReporter.report(node.sourceLocation(), DASH_NOT_ALLOWED);
-      node.setResolvedType(UnknownType.getInstance());
-      return UnknownType.getInstance();
     }
+  }
 
+  private SoyType resolveNamedType(String name, NamedTypeNode node) {
     SoyType type =
         typeRegistry instanceof SoyTypeRegistry
             ? TypeRegistries.getTypeOrProtoFqn(
                 (SoyTypeRegistry) typeRegistry, errorReporter, node.name())
             : typeRegistry.getType(name);
+
     if (type == null && protoRegistry != null) {
       type = protoRegistry.getProtoType(name);
     }
@@ -301,25 +289,32 @@ public final class TypeNodeConverter
             name,
             genericType.formatNumTypeParams());
       } else {
-        if (!disableAllTypeChecking) {
-          errorReporter.report(
-              node.sourceLocation(),
-              UNKNOWN_TYPE,
-              name,
-              SoyErrors.getDidYouMeanMessage(typeRegistry.getAllSortedTypeNames(), name));
-        }
+        reportUnknownType(name, node);
       }
-      type = UnknownType.getInstance();
-    } else if (type.getKind() == Kind.PROTO) {
-      SanitizedType safeProtoType = SAFE_PROTO_TO_SANITIZED_TYPE.get(type.toString());
+      return UnknownType.getInstance();
+    }
+    return checkSafeProtoType(type, node, name);
+  }
 
+  private void reportUnknownType(String name, NamedTypeNode node) {
+    if (!disableAllTypeChecking) {
+      errorReporter.report(
+          node.sourceLocation(),
+          UNKNOWN_TYPE,
+          name,
+          SoyErrors.getDidYouMeanMessage(typeRegistry.getAllSortedTypeNames(), name));
+    }
+  }
+
+  private SoyType checkSafeProtoType(SoyType type, NamedTypeNode node, String name) {
+    if (type.getKind() == Kind.PROTO) {
+      SanitizedType safeProtoType = SAFE_PROTO_TO_SANITIZED_TYPE.get(type.toString());
       if (safeProtoType != null) {
         String safeProtoNativeType = safeProtoType.getContentKind().asAttributeValue();
         errorReporter.report(node.sourceLocation(), SAFE_PROTO_TYPE, safeProtoNativeType, name);
-        type = UnknownType.getInstance();
+        return UnknownType.getInstance();
       }
     }
-    node.setResolvedType(type);
     return type;
   }
 
@@ -328,8 +323,7 @@ public final class TypeNodeConverter
     return visit(node, GENERIC_TYPES);
   }
 
-  private SoyType visit(
-      GenericTypeNode node, ImmutableMap<String, BaseGenericTypeInfo> genericTypes) {
+  private SoyType visit(GenericTypeNode node, ImmutableMap<String, BaseGenericTypeInfo> genericTypes) {
     ImmutableList<TypeNode> args = node.arguments();
     String name = node.name();
     BaseGenericTypeInfo genericType = genericTypes.get(name);
@@ -338,46 +332,51 @@ public final class TypeNodeConverter
       return UnknownType.getInstance();
     }
     if (args.size() < genericType.numParams) {
-      errorReporter.report(
-          // blame the '>'
-          node.sourceLocation().getEndLocation(),
-          EXPECTED_TYPE_PARAM,
-          name,
-          genericType.formatNumTypeParams());
+      reportExpectedTypeParam(node, name, genericType);
       return UnknownType.getInstance();
     } else if (args.size() > genericType.numParams) {
-      errorReporter.report(
-          // blame the first unexpected argument
-          args.get(genericType.numParams).sourceLocation(),
-          UNEXPECTED_TYPE_PARAM,
-          name,
-          genericType.formatNumTypeParams());
+      reportUnexpectedTypeParam(args, genericType, node, name);
       return UnknownType.getInstance();
     }
 
-    SoyType type;
-    if (genericType instanceof GenericTypeInfo) {
-      type =
-          ((GenericTypeInfo) genericType)
-              .create(args.stream().map(this).collect(toImmutableList()), interner);
-    } else if (genericType instanceof StringArgGenericTypeInfo) {
-      type =
-          ((StringArgGenericTypeInfo) genericType)
-              .create(args.stream().map(TypeNode::toString).collect(Collectors.toList()), interner);
-    } else {
-      throw new AssertionError();
-    }
+    SoyType type = createType(node, genericType, args);
     node.setResolvedType(type);
     return type;
   }
 
+  private void reportExpectedTypeParam(GenericTypeNode node, String name, BaseGenericTypeInfo genericType) {
+    errorReporter.report(
+        // blame the '>'
+        node.sourceLocation().getEndLocation(),
+        EXPECTED_TYPE_PARAM,
+        name,
+        genericType.formatNumTypeParams());
+  }
+
+  private void reportUnexpectedTypeParam(ImmutableList<TypeNode> args, BaseGenericTypeInfo genericType,
+                                          GenericTypeNode node, String name) {
+    errorReporter.report(
+        // blame the first unexpected argument
+        args.get(genericType.numParams).sourceLocation(),
+        UNEXPECTED_TYPE_PARAM,
+        name,
+        genericType.formatNumTypeParams());
+  }
+
+  private SoyType createType(GenericTypeNode node, BaseGenericTypeInfo genericType, ImmutableList<TypeNode> args) {
+    if (genericType instanceof GenericTypeInfo) {
+      return ((GenericTypeInfo) genericType)
+          .create(args.stream().map(this).collect(toImmutableList()), interner);
+    } else if (genericType instanceof StringArgGenericTypeInfo) {
+      return ((StringArgGenericTypeInfo) genericType)
+          .create(args.stream().map(TypeNode::toString).collect(Collectors.toList()), interner);
+    } else {
+      throw new AssertionError();
+    }
+  }
+
   @Override
   public SoyType visit(UnionTypeNode node) {
-    // Copy the result of the transform because transform is lazy. The union evaluation code short
-    // circuits if it sees a ? type so for types like ?|list<?> the union evaluation would get
-    // short circuited and the lazy transform would never visit list<?>. By copying the transform
-    // result (which the transform documentation recommends to avoid lazy evaluation), we ensure
-    // that all type nodes are visited.
     SoyType type =
         interner.getOrCreateUnionType(
             node.candidates().stream().map(this).collect(toImmutableList()));
@@ -387,56 +386,35 @@ public final class TypeNodeConverter
 
   @Override
   public SoyType visit(RecordTypeNode node) {
-    // LinkedHashMap insertion order iteration on values() is important here.
     Map<String, RecordType.Member> map = Maps.newLinkedHashMap();
     for (RecordTypeNode.Property property : node.properties()) {
-      RecordType.Member oldType =
-          map.put(
-              property.name(),
-              RecordType.memberOf(
-                  property.name(), property.optional(), property.type().accept(this)));
-      if (oldType != null) {
-        errorReporter.report(property.nameLocation(), DUPLICATE_RECORD_FIELD, property.name());
-        // restore old mapping and keep going
-        map.put(property.name(), oldType);
-      }
+      processRecordProperty(property, map);
     }
     SoyType type = interner.getOrCreateRecordType(map.values());
     node.setResolvedType(type);
     return type;
   }
 
+  private void processRecordProperty(RecordTypeNode.Property property, Map<String, RecordType.Member> map) {
+    RecordType.Member oldType =
+        map.put(
+            property.name(),
+            RecordType.memberOf(
+                property.name(), property.optional(), property.type().accept(this)));
+    if (oldType != null) {
+      errorReporter.report(property.nameLocation(), DUPLICATE_RECORD_FIELD, property.name());
+      map.put(property.name(), oldType);
+    }
+  }
+
   @Override
   public SoyType visit(TemplateTypeNode node) {
     Map<String, TemplateType.Parameter> map = new LinkedHashMap<>();
     for (TemplateTypeNode.Parameter parameter : node.parameters()) {
-      TemplateType.Parameter oldParameter =
-          map.put(
-              parameter.name(),
-              TemplateType.Parameter.builder()
-                  .setName(parameter.name())
-                  .setKind(parameter.kind())
-                  .setType(parameter.type().accept(this))
-                  .setRequired(true)
-                  .setImplicit(false)
-                  .build());
-      if (oldParameter != null) {
-        errorReporter.report(
-            parameter.nameLocation(), DUPLICATE_TEMPLATE_ARGUMENT, parameter.name());
-        map.put(parameter.name(), oldParameter);
-      }
+      processTemplateParameter(parameter, map);
     }
     SoyType returnType = handleReturnTypeOfTemplateType(node.returnType());
-    // Validate return type.
-    if (!ALLOWED_TEMPLATE_RETURN_TYPES.contains(returnType.getKind())) {
-      errorReporter.report(node.returnType().sourceLocation(), INVALID_TEMPLATE_RETURN_TYPE);
-    }
-    // There is no syntax for specifying the usevarianttype in a template type literal. This means
-    // "variant" won't work on calls of template-typed template parameters.
-    // There is also no syntax for specifying legacydeltemplatenamespace. This is ok since that is
-    // used to calculate whether positional-style calls are possible, and they aren't possible on
-    // template-typed template parameters to start with. legacydeltemplatenamespace is also a
-    // temporary feature for the go/symbolize-deltemplates migration.
+    validateReturnType(node, returnType);
     SoyType type =
         interner.internTemplateType(
             TemplateType.declaredTypeOf(
@@ -445,22 +423,50 @@ public final class TypeNodeConverter
     return type;
   }
 
+  private void processTemplateParameter(TemplateTypeNode.Parameter parameter, Map<String, TemplateType.Parameter> map) {
+    TemplateType.Parameter oldParameter =
+        map.put(
+            parameter.name(),
+            TemplateType.Parameter.builder()
+                .setName(parameter.name())
+                .setKind(parameter.kind())
+                .setType(parameter.type().accept(this))
+                .setRequired(true)
+                .setImplicit(false)
+                .build());
+    if (oldParameter != null) {
+      errorReporter.report(
+          parameter.nameLocation(), DUPLICATE_TEMPLATE_ARGUMENT, parameter.name());
+      map.put(parameter.name(), oldParameter);
+    }
+  }
+
+  private void validateReturnType(TemplateTypeNode node, SoyType returnType) {
+    if (!ALLOWED_TEMPLATE_RETURN_TYPES.contains(returnType.getKind())) {
+      errorReporter.report(node.returnType().sourceLocation(), INVALID_TEMPLATE_RETURN_TYPE);
+    }
+  }
+
   @Override
   public SoyType visit(FunctionTypeNode node) {
     Map<String, FunctionType.Parameter> map = new LinkedHashMap<>();
     for (FunctionTypeNode.Parameter parameter : node.parameters()) {
-      FunctionType.Parameter oldParameter =
-          map.put(
-              parameter.name(),
-              FunctionType.Parameter.of(parameter.name(), parameter.type().accept(this)));
-      if (oldParameter != null) {
-        errorReporter.report(parameter.nameLocation(), DUPLICATE_FUNCTION_PARAM, parameter.name());
-        map.put(parameter.name(), oldParameter);
-      }
+      processFunctionParameter(parameter, map);
     }
     SoyType type = interner.intern(FunctionType.of(map.values(), node.returnType().accept(this)));
     node.setResolvedType(type);
     return type;
+  }
+
+  private void processFunctionParameter(FunctionTypeNode.Parameter parameter, Map<String, FunctionType.Parameter> map) {
+    FunctionType.Parameter oldParameter =
+        map.put(
+            parameter.name(),
+            FunctionType.Parameter.of(parameter.name(), parameter.type().accept(this)));
+    if (oldParameter != null) {
+      errorReporter.report(parameter.nameLocation(), DUPLICATE_FUNCTION_PARAM, parameter.name());
+      map.put(parameter.name(), oldParameter);
+    }
   }
 
   private SoyType handleReturnTypeOfTemplateType(TypeNode node) {
