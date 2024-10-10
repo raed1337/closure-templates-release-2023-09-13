@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -44,19 +45,23 @@ final class CheckNonEmptyMsgNodesPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    for (MsgFallbackGroupNode groupNode :
-        SoyTreeUtils.getAllNodesOfType(file, MsgFallbackGroupNode.class)) {
-      for (MsgNode msg : groupNode.getChildren()) {
-        if (isEmpty(msg)) {
-          errorReporter.report(msg.getSourceLocation(), EMPTY_MSG_ERROR);
-          // remove the whole group.
-          // a number of msgnode methods throw if there are no children and having a fallback group
-          // with 0 children is also unexpected.
-          groupNode.getParent().removeChild(groupNode);
-          break;
-        }
+    for (MsgFallbackGroupNode groupNode : SoyTreeUtils.getAllNodesOfType(file, MsgFallbackGroupNode.class)) {
+      processGroupNode(groupNode);
+    }
+  }
+
+  private void processGroupNode(MsgFallbackGroupNode groupNode) {
+    for (MsgNode msg : groupNode.getChildren()) {
+      if (isEmpty(msg)) {
+        errorReporter.report(msg.getSourceLocation(), EMPTY_MSG_ERROR);
+        removeGroupNode(groupNode);
+        break;
       }
     }
+  }
+  
+  private void removeGroupNode(MsgFallbackGroupNode groupNode) {
+    groupNode.getParent().removeChild(groupNode);
   }
 
   /**
@@ -67,10 +72,9 @@ final class CheckNonEmptyMsgNodesPass implements CompilerFilePass {
    */
   private static boolean isEmpty(MsgNode msg) {
     for (SoyNode child : msg.getChildren()) {
-      if (child instanceof RawTextNode && ((RawTextNode) child).getRawText().isEmpty()) {
-        continue;
+      if (!(child instanceof RawTextNode) || !((RawTextNode) child).getRawText().isEmpty()) {
+        return false;
       }
-      return false;
     }
     return true;
   }
