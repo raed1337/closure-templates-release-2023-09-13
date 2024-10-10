@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -30,6 +31,7 @@ import com.google.template.soy.shared.internal.Sanitizers;
 import com.google.template.soy.shared.restricted.SoyJavaPrintDirective;
 import com.google.template.soy.shared.restricted.SoyPurePrintDirective;
 import com.google.template.soy.types.SanitizedType;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -47,7 +49,7 @@ final class FilterLegacyUriBehaviorDirective
         SoyPySrcPrintDirective,
         SoyJbcSrcPrintDirective {
 
-  private static final ImmutableSet<Integer> VALID_ARGS_SIZES = ImmutableSet.of(0);
+  private static final Set<Integer> VALID_ARGS_SIZES = Collections.singleton(0);
 
   @Override
   public String getName() {
