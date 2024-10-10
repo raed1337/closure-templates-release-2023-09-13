@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -31,18 +32,29 @@ import java.lang.invoke.MethodHandles;
  * result.
  */
 public final class LargeStringConstantFactory {
+  
   public static String bootstrapLargeStringConstant(
       MethodHandles.Lookup lookup, String name, Class<?> type, String... parts) {
+    int size = calculateTotalSize(parts);
+    String concatenatedString = concatenateParts(parts, size);
+    
+    // Return a constant method handle.  All future invocations will just return the string value.
+    return concatenatedString;
+  }
+
+  private static int calculateTotalSize(String... parts) {
     int size = 0;
     for (String part : parts) {
       size += part.length();
     }
+    return size;
+  }
+
+  private static String concatenateParts(String[] parts, int size) {
     StringBuilder sb = new StringBuilder(size);
     for (String part : parts) {
       sb.append(part);
     }
-
-    // Return a constant method handle.  All future invocations will just return the string value.
     return sb.toString();
   }
 
