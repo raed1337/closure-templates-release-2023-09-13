@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -61,66 +62,15 @@ final class TemplateVariableManager implements LocalVariableManager {
   abstract static class Scope implements LocalVariableManager.Scope {
     private Scope() {}
 
-    /**
-     * Creates a 'trivial' variable.
-     *
-     * <p>This simply registers an expression within the scope so it can be looked up via {@link
-     * #getVariable}, but it does not use a local variable or generate save/restore logic, the
-     * expression will simply be evaluated on every reference. So it is only reasonable for
-     * 'trivial' expressions that just read fields or refer to other local variables.
-     */
     abstract void createTrivial(String name, Expression expression);
-
-    /**
-     * Creates a new 'synthetic' variable. A synthetic variable is a variable that is introduced by
-     * the compiler rather than having a user defined name.
-     *
-     * @param name A proposed name for the variable, the actual variable name may be modified to
-     *     ensure uniqueness
-     * @param initializer The expression that can be used to derive the initial value. Note, this
-     *     expression must be able to be saved to gen() more than once if {@code strategy} is {@code
-     *     DERIVED}.
-     * @param strategy Set this to {@code DERIVED} if the value of the variable is trivially
-     *     derivable from other variables already defined.
-     */
-    abstract Variable createSynthetic(
-        SyntheticVarName name, Expression initializer, SaveStrategy strategy);
-
-    /**
-     * Creates a new user-defined variable.
-     *
-     * @param name The name of the variable, the name is assumed to be unique (enforced by the
-     *     ResolveNamesPass).
-     * @param initializer The expression that can be used to initialize the variable
-     * @param strategy Set this to {@code DERIVED} if the value of the variable is trivially
-     *     derivable from other variables already defined.
-     */
+    abstract Variable createSynthetic(SyntheticVarName name, Expression initializer, SaveStrategy strategy);
     abstract Variable create(String name, Expression initializer, SaveStrategy strategy);
   }
 
-  /**
-   * A sufficiently unique identifier.
-   *
-   * <p>This key will uniquely identify a currently 'active' variable, but may not be unique over
-   * all possible variables.
-   */
   @AutoValue
   abstract static class VarKey {
     enum Kind {
-      /**
-       * Includes @param, @inject, {let..}, and loop vars.
-       *
-       * <p>Uniqueness of local variable names is enforced by the ResolveNamesPass pass, we just
-       * need uniqueness for the field names
-       */
       USER_DEFINED,
-
-      /**
-       * There are certain operations in which a value must be used multiple times and may have
-       * expensive initialization. For example, the collection being looped over in a {@code
-       * foreach} loop. For these we generate 'synthetic' variables to efficiently reference the
-       * expression.
-       */
       SYNTHETIC
     }
 
@@ -133,7 +83,6 @@ final class TemplateVariableManager implements LocalVariableManager {
     }
 
     abstract Kind kind();
-
     abstract Object name();
   }
 
@@ -154,17 +103,6 @@ final class TemplateVariableManager implements LocalVariableManager {
     }
   }
 
-  /**
-   * A variable that needs to be saved/restored.
-   *
-   * <p>Each variable has:
-   *
-   * <ul>
-   *   <li>A {@link Expression} that can be used to save the field.
-   *   <li>A {@link Expression} that can be used to restore the field.
-   *   <li>A {@link LocalVariable} that can be used to read the value.
-   * </ul>
-   */
   static final class Variable extends AbstractVariable {
     private final Expression initExpression;
     private final LocalVariable local;
@@ -173,17 +111,21 @@ final class TemplateVariableManager implements LocalVariableManager {
 
     private Variable(Expression initExpression, LocalVariable local, SaveStrategy strategy) {
       this.initExpression = initExpression;
-      if (initExpression.isNonJavaNullable()) {
-        local = local.asNonJavaNullable();
-      }
-      if (initExpression.isNonSoyNullish()) {
-        local = local.asNonSoyNullish();
-      }
-      this.local = local;
-      this.initializer = local.initialize(initExpression);
+      this.local = adjustLocal(local, initExpression);
+      this.initializer = this.local.initialize(initExpression);
       this.strategy = strategy;
     }
 
+    private LocalVariable adjustLocal(LocalVariable local, Expression initExpression) {
+      if (initExpression.isNonJavaNullable()) {
+        return local.asNonJavaNullable();
+      }
+      if (initExpression.isNonSoyNullish()) {
+        return local.asNonSoyNullish();
+      }
+      return local;
+    }
+    
     Statement initializer() {
       return initializer;
     }
@@ -208,28 +150,15 @@ final class TemplateVariableManager implements LocalVariableManager {
       Label methodBegin,
       Label methodEnd,
       boolean isStatic) {
-    this.delegate =
-        new SimpleLocalVariableManager(
-            owner,
-            methodArguments,
-            parameterNames,
-            methodBegin,
-            methodEnd,
-            /* isStatic= */ isStatic);
+    this.delegate = new SimpleLocalVariableManager(owner, methodArguments, parameterNames, methodBegin, methodEnd, isStatic);
     activeScope = new ScopeImpl();
-    // seed our map with all the method parameters from our delegate.
-    delegate
-        .allActiveVariables()
-        .forEach(
-            (key, value) ->
-                activeScope.variablesByKey.put(VarKey.create(key), new TrivialVariable(value)));
+    delegate.allActiveVariables().forEach((key, value) -> activeScope.variablesByKey.put(VarKey.create(key), new TrivialVariable(value)));
   }
 
   public void updateParameterTypes(Type[] parameterTypes, List<String> parameterNames) {
     delegate.updateParameterTypes(parameterTypes, parameterNames);
   }
 
-  /** Enters a new scope. Variables may only be defined within a scope. */
   @Override
   public Scope enterScope() {
     return new ScopeImpl();
@@ -237,9 +166,7 @@ final class TemplateVariableManager implements LocalVariableManager {
 
   private class ScopeImpl extends Scope {
     final ScopeImpl parent;
-
     final LocalVariableManager.Scope delegateScope = delegate.enterScope();
-
     final List<VarKey> activeVariables = new ArrayList<>();
     final Map<VarKey, AbstractVariable> variablesByKey = new LinkedHashMap<>();
 
@@ -248,63 +175,56 @@ final class TemplateVariableManager implements LocalVariableManager {
       TemplateVariableManager.this.activeScope = this;
     }
 
-      @Override
-      void createTrivial(String name, Expression expression) {
-        putVariable(VarKey.create(name), new TrivialVariable(expression));
-      }
+    @Override
+    void createTrivial(String name, Expression expression) {
+      putVariable(VarKey.create(name), new TrivialVariable(expression));
+    }
 
-      @Override
-      Variable createSynthetic(
-          SyntheticVarName varName, Expression initExpr, SaveStrategy strategy) {
-        return doCreate(
-            // synthetics are prefixed by $ by convention
-            "$" + varName.name(), initExpr, VarKey.create(varName), strategy);
-      }
+    @Override
+    Variable createSynthetic(SyntheticVarName varName, Expression initExpr, SaveStrategy strategy) {
+      return doCreate("$" + varName.name(), initExpr, VarKey.create(varName), strategy);
+    }
 
-      @Override
-      Variable create(String name, Expression initExpr, SaveStrategy strategy) {
-        return doCreate(name, initExpr, VarKey.create(name), strategy);
-      }
+    @Override
+    Variable create(String name, Expression initExpr, SaveStrategy strategy) {
+      return doCreate(name, initExpr, VarKey.create(name), strategy);
+    }
 
-      @Override
-      public LocalVariable createTemporary(String proposedName, Type type) {
-        return delegateScope.createTemporary(proposedName, type);
-      }
+    @Override
+    public LocalVariable createTemporary(String proposedName, Type type) {
+      return delegateScope.createTemporary(proposedName, type);
+    }
 
-      @Override
-      public LocalVariable createNamedLocal(String name, Type type) {
-        LocalVariable var = delegateScope.createNamedLocal(name, type);
-        putVariable(VarKey.create(name), new TrivialVariable(var));
-        return var;
-      }
+    @Override
+    public LocalVariable createNamedLocal(String name, Type type) {
+      LocalVariable var = delegateScope.createNamedLocal(name, type);
+      putVariable(VarKey.create(name), new TrivialVariable(var));
+      return var;
+    }
 
-      @Override
-      public Statement exitScope() {
-        for (VarKey key : activeVariables) {
-          AbstractVariable var = variablesByKey.remove(key);
-          if (var == null) {
-            throw new IllegalStateException("no variable active for key: " + key);
-          }
+    @Override
+    public Statement exitScope() {
+      for (VarKey key : activeVariables) {
+        AbstractVariable var = variablesByKey.remove(key);
+        if (var == null) {
+          throw new IllegalStateException("no variable active for key: " + key);
         }
-      TemplateVariableManager.this.activeScope = parent;
-        return delegateScope.exitScope();
       }
+      TemplateVariableManager.this.activeScope = parent;
+      return delegateScope.exitScope();
+    }
 
     Variable doCreate(String proposedName, Expression initExpr, VarKey key, SaveStrategy strategy) {
-        Variable var =
-            new Variable(
-                initExpr,
-                delegateScope.createTemporary(proposedName, initExpr.resultType()),
-                strategy);
-        putVariable(key, var);
-        return var;
-      }
+      Variable var = new Variable(initExpr, delegateScope.createTemporary(proposedName, initExpr.resultType()), strategy);
+      putVariable(key, var);
+      return var;
+    }
 
     void putVariable(VarKey key, AbstractVariable var) {
-        AbstractVariable old = variablesByKey.put(key, var);
-        if (old != null) {
-          throw new IllegalStateException("multiple variables active for key: " + key);
-        }
+      AbstractVariable old = variablesByKey.put(key, var);
+      if (old != null) {
+        throw new IllegalStateException("multiple variables active for key: " + key);
+      }
       activeVariables.add(key);
     }
 
@@ -314,17 +234,14 @@ final class TemplateVariableManager implements LocalVariableManager {
         if (parent != null) {
           return parent.getVariable(key);
         }
-        throw new IllegalStateException(
-            "no variable: '" + key + "' is bound. " + variablesByKey.keySet() + " are in scope");
+        throw new IllegalStateException("no variable: '" + key + "' is bound. " + variablesByKey.keySet() + " are in scope");
       }
       return variable.accessor();
     }
 
-    /** Returns all variables currently in scope in creation order. */
     Stream<AbstractVariable> allVariables() {
       var direct = variablesByKey.values().stream();
       if (parent != null) {
-        // Put parents first to preserve ordering
         return Streams.concat(parent.allVariables(), direct);
       }
       return direct;
@@ -336,19 +253,11 @@ final class TemplateVariableManager implements LocalVariableManager {
     delegate.generateTableEntries(ga);
   }
 
-  /**
-   * Looks up a user defined variable with the given name. The variable must have been created in a
-   * currently active scope.
-   */
   @Override
   public Expression getVariable(String name) {
     return getVariable(VarKey.create(name));
   }
 
-  /**
-   * Looks up a synthetic variable with the given name. The variable must have been created in a
-   * currently active scope.
-   */
   Expression getVariable(SyntheticVarName name) {
     return getVariable(VarKey.create(name));
   }
@@ -357,11 +266,9 @@ final class TemplateVariableManager implements LocalVariableManager {
     return activeScope.getVariable(varKey);
   }
 
-  /** Statements for saving and restoring local variables in class fields. */
   @AutoValue
   abstract static class SaveRestoreState {
     abstract Statement save();
-
     abstract Optional<Function<LocalVariable, Statement>> restore();
   }
 
@@ -370,23 +277,9 @@ final class TemplateVariableManager implements LocalVariableManager {
   }
 
   private static final Handle BOOTSTRAP_SAVE_HANDLE =
-      MethodRef.create(
-              SaveStateMetaFactory.class,
-              "bootstrapSaveState",
-              MethodHandles.Lookup.class,
-              String.class,
-              MethodType.class)
-          .asHandle();
+      MethodRef.create(SaveStateMetaFactory.class, "bootstrapSaveState", MethodHandles.Lookup.class, String.class, MethodType.class).asHandle();
   private static final Handle BOOTSTRAP_RESTORE_HANDLE =
-      MethodRef.create(
-              SaveStateMetaFactory.class,
-              "bootstrapRestoreState",
-              MethodHandles.Lookup.class,
-              String.class,
-              MethodType.class,
-              MethodType.class,
-              int.class)
-          .asHandle();
+      MethodRef.create(SaveStateMetaFactory.class, "bootstrapRestoreState", MethodHandles.Lookup.class, String.class, MethodType.class, MethodType.class, int.class).asHandle();
 
   private static Type simplifyType(Type type) {
     switch (type.getSort()) {
@@ -407,129 +300,94 @@ final class TemplateVariableManager implements LocalVariableManager {
     }
   }
 
-  /** Returns a {@link SaveRestoreState} for the current state of the variable set. */
-  SaveRestoreState saveRestoreState(
-      RenderContextExpression renderContextExpression, int stateNumber) {
-    // The map is in insertion order.  This is important since it means derived variables will work.
-    // we save in reverse order and then reverse again to restore so derived variables work.  The
-    // save and restore logic need to be in opposite orders because we are pushing and popping onto
-    // a stack.
-    // The map is in insertion order.  This is important since it means derived variables will work.
-    // So our restore logic needs to be executed in the same order in order to restore derived
-    // variable directly.
-    ImmutableList<Variable> restoresInOrder =
-        activeScope
-            .allVariables()
-            .filter(v -> !(v instanceof TrivialVariable))
-            .map(v -> (Variable) v)
-            .collect(toImmutableList());
+  SaveRestoreState saveRestoreState(RenderContextExpression renderContextExpression, int stateNumber) {
+    ImmutableList<Variable> restoresInOrder = activeScope.allVariables().filter(v -> !(v instanceof TrivialVariable)).map(v -> (Variable) v).collect(toImmutableList());
 
-    // Save order is not necessarily important, but we are saving into a synthetically created
-    // StackFrame class generated by our bootstrap method.  To reduce the number of classes
-    // generated and avoid boxing primitives we store a simplified set of field types. See
-    // SaveStateMetaFactory.simplifyType.
-    // So imagine we have 3 locals in scope with the following types (CompiledTemplate, long,
-    // LoggingAdvisingAppendable), this will simplify to (Object, long, Object).
-    // Now imagine another saveRestoreState with the followwing 3 locals (SoyValueProvider,
-    // LoggingAdvisingAppendable, long), this will simplify to (Object, Object, long).
-    // Ideally these two states would share a stack frame class, this would allow us to generate
-    // fewer classes and should shorten bootstrap time.
+    ImmutableList<Variable> storesToPerform = prepareStoresToPerform(restoresInOrder);
+    List<Type> methodTypeParams = prepareMethodTypeParams(storesToPerform);
 
-    // in order to do this, we need to canonicalize the order of the save operations.  The order
-    // itself doesn't really matter, just that all save restore sites perform the same operation.
-    ImmutableList<Variable> storesToPerform =
-        restoresInOrder.stream()
-            .filter(v -> v.strategy == SaveStrategy.STORE)
-            // sort based on the 'sort' of the local, getSort() returns a unique integer for every
-            // primitive type and object/array.
-            .sorted(comparing(v -> v.accessor().resultType().getSort()))
-            .collect(toImmutableList());
+    Type saveStateMethodType = Type.getMethodType(Type.VOID_TYPE, methodTypeParams.toArray(new Type[0]));
+    Statement saveState = createSaveStateStatement(renderContextExpression, stateNumber, storesToPerform, saveStateMethodType);
+
+    Optional<Function<LocalVariable, Statement>> restoreFromFrame = createRestoreFromFrame(restoresInOrder, storesToPerform, saveStateMethodType);
+    ImmutableList<Statement> restoreDerivedVariables = createRestoreDerivedVariables(restoresInOrder);
+
+    return new AutoValue_TemplateVariableManager_SaveRestoreState(saveState, createRestoreFunction(restoreFromFrame, restoreDerivedVariables));
+  }
+
+  private ImmutableList<Variable> prepareStoresToPerform(ImmutableList<Variable> restoresInOrder) {
+    return restoresInOrder.stream()
+        .filter(v -> v.strategy == SaveStrategy.STORE)
+        .sorted(comparing(v -> v.accessor().resultType().getSort()))
+        .collect(toImmutableList());
+  }
+
+  private List<Type> prepareMethodTypeParams(ImmutableList<Variable> storesToPerform) {
     List<Type> methodTypeParams = new ArrayList<>();
     methodTypeParams.add(BytecodeUtils.RENDER_CONTEXT_TYPE);
     methodTypeParams.add(Type.INT_TYPE);
     for (Variable variable : storesToPerform) {
-      // Type simplification isn't strictly necessary, but it does reduce the number of MethodType
-      // constants we create which can save on constant pool size.
       methodTypeParams.add(simplifyType(variable.accessor().resultType()));
     }
+    return methodTypeParams;
+  }
 
-    Type saveStateMethodType =
-        Type.getMethodType(Type.VOID_TYPE, methodTypeParams.toArray(new Type[0]));
-    Statement saveState =
-        new Statement() {
-          @Override
-          protected void doGen(CodeBuilder cb) {
-            renderContextExpression.gen(cb);
-            // Because this is a constant, we could pass it to the visitInvokeDynamicInsn as a
-            // constant bootstrap argument.  There is no real benefit though since all we do is
-            // arrange to pass it to a constructor so we can just as easily do that here. Bootstrap
-            // arguments are mostly valuable when we can leverage them at linkage time.
-            cb.pushInt(stateNumber);
-            // load all variables onto the stack
-            for (Variable var : storesToPerform) {
-              var.accessor().gen(cb);
-            }
-            cb.visitInvokeDynamicInsn(
-                "save", saveStateMethodType.getDescriptor(), BOOTSTRAP_SAVE_HANDLE);
+  private Statement createSaveStateStatement(RenderContextExpression renderContextExpression, int stateNumber, ImmutableList<Variable> storesToPerform, Type saveStateMethodType) {
+    return new Statement() {
+      @Override
+      protected void doGen(CodeBuilder cb) {
+        renderContextExpression.gen(cb);
+        cb.pushInt(stateNumber);
+        for (Variable var : storesToPerform) {
+          var.accessor().gen(cb);
+        }
+        cb.visitInvokeDynamicInsn("save", saveStateMethodType.getDescriptor(), BOOTSTRAP_SAVE_HANDLE);
+      }
+    };
+  }
+
+  private Optional<Function<LocalVariable, Statement>> createRestoreFromFrame(ImmutableList<Variable> restoresInOrder, ImmutableList<Variable> storesToPerform, Type saveStateMethodType) {
+    ImmutableMap<Variable, Integer> storeToSlotIndex = IntStream.range(0, storesToPerform.size())
+        .boxed()
+        .collect(toImmutableMap(storesToPerform::get, index -> index));
+    
+    ImmutableList<Variable> variablesToRestoreFromStorage = restoresInOrder.stream()
+        .filter(v -> v.strategy == SaveStrategy.STORE)
+        .collect(toImmutableList());
+
+    return variablesToRestoreFromStorage.isEmpty() 
+        ? Optional.empty() 
+        : Optional.of(createRestoreStatement(storeToSlotIndex, variablesToRestoreFromStorage, saveStateMethodType));
+  }
+
+  private Function<LocalVariable, Statement> createRestoreStatement(ImmutableMap<Variable, Integer> storeToSlotIndex, ImmutableList<Variable> variablesToRestoreFromStorage, Type saveStateMethodType) {
+    return (stackFrameVar) -> new Statement() {
+      @Override
+      protected void doGen(CodeBuilder cb) {
+        stackFrameVar.loadUnchecked(cb);
+        for (int i = 0; i < variablesToRestoreFromStorage.size(); i++) {
+          if (i < variablesToRestoreFromStorage.size() - 1) {
+            cb.dup();
           }
-        };
-    // Restore instructions
-    // A side effect of save logic is that StackFrame type is created
-    // So we can predict its name and generate direct references to it.
-    // for each store, we use invokedynamic to retrieve the value from our generated StackFrame
-    // To do this we need to know the index of the variable in the 'storesToPerform' list
-    ImmutableMap<Variable, Integer> storeToSlotIndex =
-        IntStream.range(0, storesToPerform.size())
-            .boxed()
-            .collect(toImmutableMap(storesToPerform::get, index -> index));
-    ImmutableList<Variable> variablesToRestoreFromStorage =
-        restoresInOrder.stream()
-            .filter(v -> v.strategy == SaveStrategy.STORE)
-            .collect(toImmutableList());
-    Optional<Function<LocalVariable, Statement>> restoreFromFrame =
-        variablesToRestoreFromStorage.isEmpty()
-            ? Optional.empty()
-            : Optional.of(
-                (stackFrameVar) ->
-                    new Statement() {
-                      @Override
-                      protected void doGen(CodeBuilder cb) {
-                        stackFrameVar.loadUnchecked(cb);
-                        for (int i = 0; i < variablesToRestoreFromStorage.size(); i++) {
-                          if (i < variablesToRestoreFromStorage.size() - 1) {
-                            // duplicate the reference to the stack frame at the top of the stack
-                            // for all but the last restore operation
-                            cb.dup();
-                          }
-                          Variable variableToRestore = variablesToRestoreFromStorage.get(i);
-                          Type varType = variableToRestore.accessor().resultType();
-                          cb.visitInvokeDynamicInsn(
-                              "restoreLocal",
-                              Type.getMethodType(varType, BytecodeUtils.STACK_FRAME_TYPE)
-                                  .getDescriptor(),
-                              BOOTSTRAP_RESTORE_HANDLE,
-                              saveStateMethodType,
-                              storeToSlotIndex.get(variableToRestore));
-                          variableToRestore.local.storeUnchecked(cb);
-                        }
-                      }
-                    });
+          Variable variableToRestore = variablesToRestoreFromStorage.get(i);
+          Type varType = variableToRestore.accessor().resultType();
+          cb.visitInvokeDynamicInsn("restoreLocal", Type.getMethodType(varType, BytecodeUtils.STACK_FRAME_TYPE).getDescriptor(), BOOTSTRAP_RESTORE_HANDLE, saveStateMethodType, storeToSlotIndex.get(variableToRestore));
+          variableToRestore.local.storeUnchecked(cb);
+        }
+      }
+    };
+  }
 
-    ImmutableList<Statement> restoreDerivedVariables =
-        restoresInOrder.stream()
-            .filter(var -> var.strategy == SaveStrategy.DERIVED)
-            .map(v -> v.local.store(v.initExpression))
-            .collect(toImmutableList());
-    return new AutoValue_TemplateVariableManager_SaveRestoreState(
-        saveState,
-        !restoreFromFrame.isPresent() && restoreDerivedVariables.isEmpty()
-            ? Optional.empty()
-            : Optional.of(
-                (LocalVariable variable) ->
-                    Statement.concat(
-                        restoreFromFrame
-                            .orElse((LocalVariable v) -> Statement.NULL_STATEMENT)
-                            .apply(variable),
-                        Statement.concat(restoreDerivedVariables))));
+  private ImmutableList<Statement> createRestoreDerivedVariables(ImmutableList<Variable> restoresInOrder) {
+    return restoresInOrder.stream()
+        .filter(var -> var.strategy == SaveStrategy.DERIVED)
+        .map(v -> v.local.store(v.initExpression))
+        .collect(toImmutableList());
+  }
+
+  private Optional<Function<LocalVariable, Statement>> createRestoreFunction(Optional<Function<LocalVariable, Statement>> restoreFromFrame, ImmutableList<Statement> restoreDerivedVariables) {
+    return !restoreFromFrame.isPresent() && restoreDerivedVariables.isEmpty()
+        ? Optional.empty()
+        : Optional.of((LocalVariable variable) -> Statement.concat(restoreFromFrame.orElse((LocalVariable v) -> Statement.NULL_STATEMENT).apply(variable), Statement.concat(restoreDerivedVariables)));
   }
 }
