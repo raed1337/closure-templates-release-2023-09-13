@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -77,12 +78,9 @@ public final class GenIncrementalDomInteropVisitor extends GenJsCodeVisitor {
   }
 
   public List<String> gen(SoyFileSetNode node, ErrorReporter errorReporter) {
-    try {
-      jsFilesContents = new ArrayList<>();
-      visit(node);
-      return jsFilesContents;
-    } finally {
-    }
+    jsFilesContents = new ArrayList<>();
+    visit(node);
+    return jsFilesContents;
   }
 
   @Override
@@ -91,6 +89,7 @@ public final class GenIncrementalDomInteropVisitor extends GenJsCodeVisitor {
       visit(soyFile);
     }
   }
+
   /**
    * Helper for visitSoyFileNode(SoyFileNode) to generate a module definition.
    *
@@ -106,67 +105,74 @@ public final class GenIncrementalDomInteropVisitor extends GenJsCodeVisitor {
     if (node.getVisibility() != Visibility.PUBLIC) {
       return;
     }
-    boolean hasPositionalSignature =
-        GenCallCodeUtils.hasPositionalSignature(TemplateMetadata.buildTemplateType(node));
-    if (!hasPositionalSignature && node.getContentKind() == SanitizedContentKind.HTML) {
-      codeBuilder.append(
-          Statements.ifStatement(
-                  shouldStub,
-                  Statements.assign(
-                      soyJsGoogRequire.dotAccess(
-                          node.getPartialTemplateName() + "_" + StandardNames.SOY_STUB),
-                      Expressions.arrowFunction(
-                          JsDoc.builder()
-                              .addParam(StandardNames.DOLLAR_DATA, "?")
-                              .addParam(StandardNames.DOLLAR_IJDATA, "?")
-                              .build(),
-                          IncrementalDomRuntime.SOY_IDOM_MAKE_HTML.call(
-                              Expressions.arrowFunction(
-                                  JsDoc.builder().build(),
-                                  idomGoogRequire
-                                      .reference()
-                                      .dotAccess(node.getPartialTemplateName())
-                                      .call(
-                                          IncrementalDomRuntime.SOY_IDOM
-                                              .reference()
-                                              .dotAccess("$$defaultIdomRenderer"),
-                                          Expressions.id(StandardNames.DOLLAR_DATA),
-                                          JsRuntime.IJ_DATA))))))
-              .build());
-      return;
-    }
-
     if (node.getContentKind() == SanitizedContentKind.HTML) {
-      JsDoc jsDoc =
-          generatePositionalFunctionJsDoc(
-              node, /* addVariantParam= */ isModifiableWithUseVariantType(node));
-      ArrayList<Expression> callParams =
-          jsDoc.params().stream()
-              .filter(p -> p.annotationType().equals("param"))
-              .map(p -> Expressions.id(p.paramTypeName()))
-              .collect(Collectors.toCollection(ArrayList::new));
-      callParams.add(
-          2, IncrementalDomRuntime.SOY_IDOM.reference().dotAccess("$$defaultIdomRenderer"));
-      codeBuilder.append(
-          Statements.ifStatement(
-                  shouldStub,
-                  Statements.assign(
-                      soyJsGoogRequire.dotAccess(
-                          node.getPartialTemplateName() + "_" + StandardNames.SOY_STUB),
-                      Expressions.arrowFunction(
-                          jsDoc,
-                          IncrementalDomRuntime.SOY_IDOM_MAKE_HTML.call(
-                              Expressions.arrowFunction(
-                                  JsDoc.builder().build(),
-                                  idomGoogRequire
-                                      .reference()
-                                      .dotAccess(node.getPartialTemplateName() + "$")
-                                      .call(
-                                          new ImmutableList.Builder<Expression>()
-                                              .addAll(callParams)
-                                              .build()))))))
-              .build());
+      handleHtmlContent(node);
     }
+  }
+
+  private void handleHtmlContent(TemplateNode node) {
+    if (!GenCallCodeUtils.hasPositionalSignature(TemplateMetadata.buildTemplateType(node))) {
+      appendStubForNonPositionalTemplate(node);
+    } else {
+      appendStubForPositionalTemplate(node);
+    }
+  }
+
+  private void appendStubForNonPositionalTemplate(TemplateNode node) {
+    codeBuilder.append(
+        Statements.ifStatement(
+                shouldStub,
+                Statements.assign(
+                    soyJsGoogRequire.dotAccess(
+                        node.getPartialTemplateName() + "_" + StandardNames.SOY_STUB),
+                    Expressions.arrowFunction(
+                        JsDoc.builder()
+                            .addParam(StandardNames.DOLLAR_DATA, "?")
+                            .addParam(StandardNames.DOLLAR_IJDATA, "?")
+                            .build(),
+                        IncrementalDomRuntime.SOY_IDOM_MAKE_HTML.call(
+                            Expressions.arrowFunction(
+                                JsDoc.builder().build(),
+                                idomGoogRequire
+                                    .reference()
+                                    .dotAccess(node.getPartialTemplateName())
+                                    .call(
+                                        IncrementalDomRuntime.SOY_IDOM
+                                            .reference()
+                                            .dotAccess("$$defaultIdomRenderer"),
+                                        Expressions.id(StandardNames.DOLLAR_DATA),
+                                        JsRuntime.IJ_DATA))))))
+            .build());
+  }
+
+  private void appendStubForPositionalTemplate(TemplateNode node) {
+    JsDoc jsDoc = generatePositionalFunctionJsDoc(
+        node, /* addVariantParam= */ isModifiableWithUseVariantType(node));
+    List<Expression> callParams = jsDoc.params().stream()
+        .filter(p -> p.annotationType().equals("param"))
+        .map(p -> Expressions.id(p.paramTypeName()))
+        .collect(Collectors.toList());
+
+    callParams.add(2, IncrementalDomRuntime.SOY_IDOM.reference().dotAccess("$$defaultIdomRenderer"));
+    
+    codeBuilder.append(
+        Statements.ifStatement(
+                shouldStub,
+                Statements.assign(
+                    soyJsGoogRequire.dotAccess(
+                        node.getPartialTemplateName() + "_" + StandardNames.SOY_STUB),
+                    Expressions.arrowFunction(
+                        jsDoc,
+                        IncrementalDomRuntime.SOY_IDOM_MAKE_HTML.call(
+                            Expressions.arrowFunction(
+                                JsDoc.builder().build(),
+                                idomGoogRequire
+                                    .reference()
+                                    .dotAccess(node.getPartialTemplateName() + "$")
+                                    .call(new ImmutableList.Builder<Expression>()
+                                        .addAll(callParams)
+                                        .build()))))))
+            .build());
   }
 
   @Override
