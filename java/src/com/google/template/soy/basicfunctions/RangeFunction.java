@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -71,28 +72,35 @@ public final class RangeFunction
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    JavaValue start;
-    JavaValue end;
-    JavaValue step;
-    switch (args.size()) {
-      case 1:
-        start = factory.constant(0);
-        end = args.get(0).asSoyInt();
-        step = factory.constant(1);
-        break;
-      case 2:
-        start = args.get(0).asSoyInt();
-        end = args.get(1).asSoyInt();
-        step = factory.constant(1);
-        break;
-      case 3:
-        start = args.get(0).asSoyInt();
-        end = args.get(1).asSoyInt();
-        step = args.get(2).asSoyInt();
-        break;
-      default:
-        throw new AssertionError();
+    if (args.size() == 1) {
+      return handleSingleArgument(factory, args);
+    } else if (args.size() == 2) {
+      return handleTwoArguments(factory, args);
+    } else if (args.size() == 3) {
+      return handleThreeArguments(factory, args);
+    } else {
+      throw new AssertionError();
     }
+  }
+
+  private JavaValue handleSingleArgument(JavaValueFactory factory, List<JavaValue> args) {
+    JavaValue start = factory.constant(0);
+    JavaValue end = args.get(0).asSoyInt();
+    JavaValue step = factory.constant(1);
+    return factory.callStaticMethod(Methods.RANGE, start, end, step);
+  }
+
+  private JavaValue handleTwoArguments(JavaValueFactory factory, List<JavaValue> args) {
+    JavaValue start = args.get(0).asSoyInt();
+    JavaValue end = args.get(1).asSoyInt();
+    JavaValue step = factory.constant(1);
+    return factory.callStaticMethod(Methods.RANGE, start, end, step);
+  }
+
+  private JavaValue handleThreeArguments(JavaValueFactory factory, List<JavaValue> args) {
+    JavaValue start = args.get(0).asSoyInt();
+    JavaValue end = args.get(1).asSoyInt();
+    JavaValue step = args.get(2).asSoyInt();
     return factory.callStaticMethod(Methods.RANGE, start, end, step);
   }
 
