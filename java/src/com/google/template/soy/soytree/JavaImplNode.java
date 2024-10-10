@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -39,9 +40,9 @@ public final class JavaImplNode extends ExternImplNode {
 
   public static final String TYPE_STATIC = "static"; // static method in a class
   public static final String TYPE_INSTANCE = "instance"; // instance method in a class
-  public static final String TYPE_INTERFACE = "interface"; // instance method in a interface
+  public static final String TYPE_INTERFACE = "interface"; // instance method in an interface
   public static final String TYPE_STATIC_INTERFACE =
-      "static_interface"; // static method in a interface
+      "static_interface"; // static method in an interface
   private static final ImmutableSet<String> ALLOWED_TYPES =
       ImmutableSet.of(TYPE_STATIC, TYPE_INSTANCE, TYPE_INTERFACE, TYPE_STATIC_INTERFACE);
   public static final String DEFAULT_TYPE = TYPE_STATIC;
@@ -82,7 +83,6 @@ public final class JavaImplNode extends ExternImplNode {
    */
   private JavaImplNode(JavaImplNode orig, CopyState copyState) {
     super(orig, copyState);
-
     this.attributes =
         orig.attributes.stream()
             .map(origAttr -> origAttr.copy(copyState))
@@ -96,24 +96,35 @@ public final class JavaImplNode extends ExternImplNode {
    */
   private void initAttributes(ErrorReporter errorReporter) {
     for (CommandTagAttribute attr : attributes) {
-      if (attr.hasName(CLASS)) {
-        this.className = attr;
-      } else if (attr.hasName(METHOD)) {
-        this.methodName = attr;
-      } else if (attr.hasName(PARAMS)) {
-        this.params = attr;
-      } else if (attr.hasName(RETURN)) {
-        this.returnType = attr;
-      } else if (attr.hasName(TYPE)) {
-        this.type = attr;
-        if (!ALLOWED_TYPES.contains(type.getValue())) {
-          errorReporter.report(attr.getSourceLocation(), BAD_TYPE);
-        }
-      } else {
-        errorReporter.report(attr.getSourceLocation(), INVALID_IMPL_ATTRIBUTE, attr.getName());
-      }
+      assignAttribute(attr, errorReporter);
     }
+    validateRequiredAttributes(errorReporter);
+  }
 
+  private void assignAttribute(CommandTagAttribute attr, ErrorReporter errorReporter) {
+    if (attr.hasName(CLASS)) {
+      this.className = attr;
+    } else if (attr.hasName(METHOD)) {
+      this.methodName = attr;
+    } else if (attr.hasName(PARAMS)) {
+      this.params = attr;
+    } else if (attr.hasName(RETURN)) {
+      this.returnType = attr;
+    } else if (attr.hasName(TYPE)) {
+      this.type = attr;
+      validateType(attr, errorReporter);
+    } else {
+      errorReporter.report(attr.getSourceLocation(), INVALID_IMPL_ATTRIBUTE, attr.getName());
+    }
+  }
+
+  private void validateType(CommandTagAttribute attr, ErrorReporter errorReporter) {
+    if (!ALLOWED_TYPES.contains(type.getValue())) {
+      errorReporter.report(attr.getSourceLocation(), BAD_TYPE);
+    }
+  }
+
+  private void validateRequiredAttributes(ErrorReporter errorReporter) {
     if (className == null) {
       errorReporter.report(getSourceLocation(), MISSING_ATTR, CLASS);
     }
@@ -162,10 +173,7 @@ public final class JavaImplNode extends ExternImplNode {
 
   public ImmutableList<String> params() {
     String val = params.getValue();
-    if (val.isEmpty()) {
-      return ImmutableList.of();
-    }
-    return ImmutableList.copyOf(Arrays.asList(val.split("\\s*,\\s*")));
+    return val.isEmpty() ? ImmutableList.of() : ImmutableList.copyOf(val.split("\\s*,\\s*"));
   }
 
   public String returnType() {
@@ -183,9 +191,11 @@ public final class JavaImplNode extends ExternImplNode {
   }
 
   public SourceLocation getAttributeValueLocation(String paramName) {
-    Optional<CommandTagAttribute> attr =
-        attributes.stream().filter(a -> paramName.equals(a.getName().identifier())).findFirst();
-    return attr.isPresent() ? attr.get().getValueLocation() : SourceLocation.UNKNOWN;
+    return attributes.stream()
+        .filter(a -> paramName.equals(a.getName().identifier()))
+        .map(CommandTagAttribute::getValueLocation)
+        .findFirst()
+        .orElse(SourceLocation.UNKNOWN);
   }
 
   @Override
