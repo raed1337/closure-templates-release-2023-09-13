@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -78,27 +79,30 @@ public final class SoySauceImpl implements SoySauce {
       PluginInstances pluginInstances) {
     this.templates = checkNotNull(templates);
     this.apiCallScope = checkNotNull(apiCallScope);
+    this.printDirectives = initializePrintDirectives(printDirectives);
+    this.pluginInstances = initializePluginInstances(functions, pluginInstances);
+  }
+
+  private ImmutableMap<String, SoyJavaPrintDirective> initializePrintDirectives(ImmutableList<? extends SoyPrintDirective> printDirectives) {
+    ImmutableMap.Builder<String, SoyJavaPrintDirective> soyJavaPrintDirectives = ImmutableMap.builder();
+    for (SoyPrintDirective printDirective : printDirectives) {
+      if (printDirective instanceof SoyJavaPrintDirective) {
+        soyJavaPrintDirectives.put(printDirective.getName(), (SoyJavaPrintDirective) printDirective);
+      }
+    }
+    return soyJavaPrintDirectives.build();
+  }
+
+  private PluginInstances initializePluginInstances(ImmutableList<? extends SoyFunction> functions, PluginInstances pluginInstances) {
     ImmutableMap.Builder<String, Supplier<Object>> pluginInstanceBuilder = ImmutableMap.builder();
 
     for (SoyFunction fn : functions) {
       if (fn instanceof SoyJavaFunction) {
-        pluginInstanceBuilder.put(
-            fn.getName(), Suppliers.ofInstance(new LegacyFunctionAdapter((SoyJavaFunction) fn)));
+        pluginInstanceBuilder.put(fn.getName(), Suppliers.ofInstance(new LegacyFunctionAdapter((SoyJavaFunction) fn)));
       }
     }
 
-    // SoySauce has no need for SoyPrintDirectives that are not SoyJavaPrintDirectives.
-    // Filter them out.
-    ImmutableMap.Builder<String, SoyJavaPrintDirective> soyJavaPrintDirectives =
-        ImmutableMap.builder();
-    for (SoyPrintDirective printDirective : printDirectives) {
-      if (printDirective instanceof SoyJavaPrintDirective) {
-        soyJavaPrintDirectives.put(
-            printDirective.getName(), (SoyJavaPrintDirective) printDirective);
-      }
-    }
-    this.printDirectives = soyJavaPrintDirectives.build();
-    this.pluginInstances = pluginInstances.combine(pluginInstanceBuilder.build());
+    return pluginInstances.combine(pluginInstanceBuilder.build());
   }
 
   @Override
@@ -116,11 +120,7 @@ public final class SoySauceImpl implements SoySauce {
       if (dataValue instanceof TemplateValue) {
         TemplateValue tmpl = (TemplateValue) dataValue;
         output.addAll(templates.getTransitiveIjParamsForTemplate(tmpl.getTemplateName()));
-        if (tmpl.getBoundParameters().isPresent()) {
-          addIjForTemplateParams(
-              output,
-              ((TemplateValue) dataValue).getBoundParameters().get().recordAsMap().values());
-        }
+        tmpl.getBoundParameters().ifPresent(boundParams -> addIjForTemplateParams(output, boundParams.recordAsMap().values()));
       }
     }
   }
@@ -128,8 +128,7 @@ public final class SoySauceImpl implements SoySauce {
   @Override
   public ImmutableList<String> getAllRequiredCssNamespaces(
       String templateName, Predicate<String> enabledMods, boolean collectCssFromDelvariants) {
-    return templates.getAllRequiredCssNamespaces(
-        templateName, enabledMods, collectCssFromDelvariants);
+    return templates.getAllRequiredCssNamespaces(templateName, enabledMods, collectCssFromDelvariants);
   }
 
   @Override
@@ -151,7 +150,7 @@ public final class SoySauceImpl implements SoySauce {
   @Override
   public RendererImpl renderTemplate(String template) {
     CompiledTemplates.TemplateData data = templates.getTemplateData(template);
-    return new RendererImpl(template, data.template(), data.kind(), /* data=*/ null);
+    return new RendererImpl(template, data.template(), data.kind(), null);
   }
 
   @Override
@@ -165,24 +164,18 @@ public final class SoySauceImpl implements SoySauce {
     private final String templateName;
     private final CompiledTemplate template;
     private final ContentKind contentKind;
-    private final RenderContext.Builder contextBuilder =
-        new RenderContext.Builder(templates, printDirectives, SoySauceImpl.this.pluginInstances);
-
+    private final RenderContext.Builder contextBuilder;
     private SoyRecord data;
     private SoyRecord ij;
     private boolean dataSetInConstructor;
 
-    RendererImpl(
-        String templateName,
-        CompiledTemplate template,
-        ContentKind contentKind,
-        @Nullable Map<String, ?> data) {
+    RendererImpl(String templateName, CompiledTemplate template, ContentKind contentKind, @Nullable Map<String, ?> data) {
       this.templateName = templateName;
       this.template = checkNotNull(template);
       this.contentKind = contentKind;
+      this.contextBuilder = new RenderContext.Builder(templates, printDirectives, SoySauceImpl.this.pluginInstances);
       if (data != null) {
         this.data = soyValueProviderMapAsParamStore(data);
-        // TODO(lukes): eliminate this and just use the nullness of data to enforce this.
         this.dataSetInConstructor = true;
       }
     }
@@ -199,16 +192,18 @@ public final class SoySauceImpl implements SoySauce {
       ParamStore dest = new ParamStore(source.size());
       for (Map.Entry<String, ?> entry : source.entrySet()) {
         String key = entry.getKey();
-        SoyValueProvider value;
-        try {
-          value = SoyValueConverter.INSTANCE.convert(entry.getValue());
-        } catch (Exception e) {
-          throw new IllegalArgumentException(
-              "Unable to convert param " + key + " to a SoyValue", e);
-        }
+        SoyValueProvider value = convertToSoyValue(key, entry.getValue());
         dest.setField(key, value);
       }
       return dest;
+    }
+
+    private SoyValueProvider convertToSoyValue(String key, Object value) {
+      try {
+        return SoyValueConverter.INSTANCE.convert(value);
+      } catch (Exception e) {
+        throw new IllegalArgumentException("Unable to convert param " + key + " to a SoyValue", e);
+      }
     }
 
     @CanIgnoreReturnValue
@@ -227,20 +222,15 @@ public final class SoySauceImpl implements SoySauce {
 
     @CanIgnoreReturnValue
     @Override
-    public RendererImpl setPluginInstances(
-        Map<String, ? extends Supplier<Object>> pluginInstances) {
-      contextBuilder.withPluginInstances(
-          SoySauceImpl.this.pluginInstances.combine(pluginInstances));
+    public RendererImpl setPluginInstances(Map<String, ? extends Supplier<Object>> pluginInstances) {
+      contextBuilder.withPluginInstances(SoySauceImpl.this.pluginInstances.combine(pluginInstances));
       return this;
     }
 
     @CanIgnoreReturnValue
     @Override
     public RendererImpl setData(Map<String, ?> record) {
-      checkState(
-          !dataSetInConstructor,
-          "May not call setData on a Renderer created from a TemplateParams");
-
+      checkState(!dataSetInConstructor, "May not call setData on a Renderer created from a TemplateParams");
       this.data = mapAsParamStore(record);
       return this;
     }
@@ -362,19 +352,16 @@ public final class SoySauceImpl implements SoySauce {
       return renderToValue(s -> UnsafeSanitizedContentOrdainer.ordainAsSafe(s, kind));
     }
 
-    private < T>
-        Continuation<T> renderToValue(Function<String, T> factory) {
+    private <T> Continuation<T> renderToValue(Function<String, T> factory) {
       StringBuilder sb = new StringBuilder();
       try {
-        return Continuations.valueContinuation(
-            startRender(asAdvisingAppendable(sb), contentKind), () -> factory.apply(sb.toString()));
+        return Continuations.valueContinuation(startRender(asAdvisingAppendable(sb), contentKind), () -> factory.apply(sb.toString()));
       } catch (IOException e) {
         throw new AssertionError("impossible", e);
       }
     }
 
-    private <T> WriteContinuation startRender(AdvisingAppendable out, ContentKind contentKind)
-        throws IOException {
+    private <T> WriteContinuation startRender(AdvisingAppendable out, ContentKind contentKind) throws IOException {
       enforceContentKind(contentKind);
 
       SoyRecord params = data == null ? ParamStore.EMPTY_INSTANCE : data;
@@ -388,18 +375,10 @@ public final class SoySauceImpl implements SoySauce {
 
     private void enforceContentKind(ContentKind expectedContentKind) {
       if (expectedContentKind == ContentKind.TEXT) {
-        // Allow any template to be called as text.
         return;
       }
       if (expectedContentKind != contentKind) {
-        throw new IllegalStateException(
-            "Expected template '"
-                + templateName
-                + "' to be kind=\""
-                + Ascii.toLowerCase(expectedContentKind.name())
-                + "\" but was kind=\""
-                + Ascii.toLowerCase(contentKind.name())
-                + "\"");
+        throw new IllegalStateException("Expected template '" + templateName + "' to be kind=\"" + Ascii.toLowerCase(expectedContentKind.name()) + "\" but was kind=\"" + Ascii.toLowerCase(contentKind.name()) + "\"");
       }
     }
   }
@@ -409,8 +388,7 @@ public final class SoySauceImpl implements SoySauce {
     RenderResult render() throws IOException;
   }
 
-  private static WriteContinuation doRender(RendererClosure renderer, Scoper scoper)
-      throws IOException {
+  private static WriteContinuation doRender(RendererClosure renderer, Scoper scoper) throws IOException {
     RenderResult result;
     try (SoyScopedData.InScope scope = scoper.enter()) {
       result = renderer.render();
