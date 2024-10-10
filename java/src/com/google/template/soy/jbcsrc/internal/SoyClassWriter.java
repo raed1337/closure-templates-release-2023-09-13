@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -102,40 +103,23 @@ public final class SoyClassWriter extends ClassVisitor {
   private SoyClassWriter(Writer writer, Builder builder) {
     super(
         writer.api(),
-        // we can't set checkDataFlow since we rely on the writer to calcualte maxStackSize which
-        // is required for data flow analysis
         Flags.DEBUG ? new CheckClassAdapter(writer, /* checkDataFlow=*/ false) : writer);
     this.writer = writer;
     this.typeInfo = builder.type;
+    initVisit(builder);
+  }
+
+  private void initVisit(Builder builder) {
     super.visit(
         Opcodes.V11,
         builder.access,
         builder.type.internalName(),
         null /* not generic */,
         builder.baseClass.internalName(),
-        builder.interfaces.toArray(new String[builder.interfaces.size()]));
+        builder.interfaces.toArray(new String[0]));
     if (builder.fileName != null) {
-      super.visitSource(
-          builder.fileName,
-          // No JSR-45 style source maps, instead we write the line numbers in the normal locations.
-          null);
+      super.visitSource(builder.fileName, null);
     }
-  }
-
-
-  /** @deprecated Don't call visitSource(), SoyClassWriter calls it for you during construction. */
-  @Deprecated
-  @Override
-  public void visitSource(String source, String debug) {
-    throw new UnsupportedOperationException(
-        "Don't call visitSource(), SoyClassWriter calls it for you");
-  }
-
-  /** @deprecated Don't call visit(), SoyClassWriter calls it for you during construction. */
-  @Deprecated
-  @Override
-  public void visit(int v, int a, String n, String s, String b, String[] i) {
-    throw new UnsupportedOperationException("Don't call visit(), SoyClassWriter calls it for you");
   }
 
   @Override
@@ -145,31 +129,35 @@ public final class SoyClassWriter extends ClassVisitor {
     return super.visitField(access, name, desc, signature, value);
   }
 
-  /** Returns the bytecode of the class that was build with this class writer. */
+  /** Returns the bytecode of the class that was built with this class writer. */
   public ClassData toClassData() {
     try {
       return ClassData.create(typeInfo, writer.toByteArray(), numFields);
-    } catch (ClassTooLargeException classTooLargeException) {
-      // This error is unrecoverable and either implies that we need to improve compiler
-      // optimizations or that the user needs to refactor their template.
-      throw new RuntimeException(
-          "Attempted to generate a method of class with too many constants: "
-              + classTooLargeException.getConstantPoolCount()
-              + " constants (max is 65536, delta is "
-              + (classTooLargeException.getConstantPoolCount() - 65536)
-              + "), numFields: "
-              + numFields,
-          classTooLargeException);
-    } catch (MethodTooLargeException methodTooLargeException) {
-      // This error is unrecoverable and either implies that we need to improve compiler
-      // optimizations or that the user needs to refactor their template.
-      throw new RuntimeException(
-          "Attempted to generate a method of size: "
-              + methodTooLargeException.getCodeSize()
-              + " bytes (max is 65536), numFields: "
-              + numFields,
-          methodTooLargeException);
+    } catch (ClassTooLargeException e) {
+      throw handleClassTooLargeException(e);
+    } catch (MethodTooLargeException e) {
+      throw handleMethodTooLargeException(e);
     }
+  }
+
+  private RuntimeException handleClassTooLargeException(ClassTooLargeException e) {
+    return new RuntimeException(
+        "Attempted to generate a method of class with too many constants: "
+            + e.getConstantPoolCount()
+            + " constants (max is 65536, delta is "
+            + (e.getConstantPoolCount() - 65536)
+            + "), numFields: "
+            + numFields,
+        e);
+  }
+
+  private RuntimeException handleMethodTooLargeException(MethodTooLargeException e) {
+    return new RuntimeException(
+        "Attempted to generate a method of size: "
+            + e.getCodeSize()
+            + " bytes (max is 65536), numFields: "
+            + numFields,
+        e);
   }
 
   private static final class Writer extends ClassWriter {
@@ -186,40 +174,28 @@ public final class SoyClassWriter extends ClassVisitor {
 
     @Override
     protected String getCommonSuperClass(String left, String right) {
-      if ("java/lang/Object".equals(left)) {
-        return left;
+      if ("java/lang/Object".equals(left) || "java/lang/Object".equals(right)) {
+        return "java/lang/Object";
       }
-      if ("java/lang/Object".equals(right)) {
-        return right;
-      }
-      // TODO(lukes): we know the names and superclasses of all the classes we generate prior to
-      // this method being called, so we could build a smarter system just by building up that
-      // graph as we generate classes.
-      // similarly for soy.data classes we could consider adding special cases. The fact that this
-      // class falls back to doing classpath lookups makes it hard to test in a unit test :(
       boolean leftIsGenerated = left.startsWith(Names.INTERNAL_CLASS_PREFIX);
       boolean rightIsGenerated = right.startsWith(Names.INTERNAL_CLASS_PREFIX);
       if (!leftIsGenerated && !rightIsGenerated) {
-        // Test for proto extendable builders.  We need to calculate common baseclasses for these
-        // since we generate calls to methods on ExtendableBuilder
-        if ((left.equals(PROTO_EXTENDABLE_BUILDER) && right.endsWith("$Builder"))
-            || (right.equals(PROTO_EXTENDABLE_BUILDER) && left.endsWith("$Builder"))) {
-          return PROTO_EXTENDABLE_BUILDER;
-        }
-        // The only cases that should occur here should be about our runtime types (like StringData)
-        try {
-          return super.getCommonSuperClass(left, right);
-        } catch (RuntimeException re) {
-          throw new RuntimeException(
-              "unable to calculate common base class of: " + left + " and " + right, re);
-        }
+        return handleCommonSuperClass(left, right);
       }
-      // The only reason a generated type will get compared to a non-generated type is if they
-      // happen to share a local variable slot.  This is because ASM doesn't know that the old
-      // variable has gone 'out of scope' and a new one entered it.  The best advice from the asm
-      // community so far has been 'just return object', so that is what we are doing
-      // See http://mail.ow2.org/wws/arc/asm/2015-06/msg00008.html
       return OBJECT.internalName();
+    }
+
+    private String handleCommonSuperClass(String left, String right) {
+      if ((left.equals(PROTO_EXTENDABLE_BUILDER) && right.endsWith("$Builder"))
+          || (right.equals(PROTO_EXTENDABLE_BUILDER) && left.endsWith("$Builder"))) {
+        return PROTO_EXTENDABLE_BUILDER;
+      }
+      try {
+        return super.getCommonSuperClass(left, right);
+      } catch (RuntimeException re) {
+        throw new RuntimeException(
+            "unable to calculate common base class of: " + left + " and " + right, re);
+      }
     }
   }
 }
