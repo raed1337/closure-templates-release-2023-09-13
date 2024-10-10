@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -48,6 +50,12 @@ import java.util.List;
 public class ListReverseMethod
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method LIST_REVERSE_FN = createListReverseMethod();
+
+  private static Method createListReverseMethod() {
+    return JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "listReverse", SoyList.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
@@ -60,15 +68,9 @@ public class ListReverseMethod
     return factory.global("runtime.list_reverse").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method LIST_REVERSE_FN =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "listReverse", SoyList.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.LIST_REVERSE_FN, args.get(0));
+    return factory.callStaticMethod(LIST_REVERSE_FN, args.get(0));
   }
 }
