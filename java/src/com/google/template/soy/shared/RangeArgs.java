@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -7,7 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
+ * Unless required to comply with the License, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
@@ -30,32 +31,46 @@ import java.util.Optional;
  */
 @AutoValue
 public abstract class RangeArgs {
+
   private static RangeArgs create(List<ExprNode> args) {
     switch (args.size()) {
       case 1:
-        return new AutoValue_RangeArgs(Optional.empty(), args.get(0), Optional.empty());
+        return createWithOneArg(args);
       case 2:
-        return new AutoValue_RangeArgs(Optional.of(args.get(0)), args.get(1), Optional.empty());
+        return createWithTwoArgs(args);
       case 3:
-        return new AutoValue_RangeArgs(
-            Optional.of(args.get(0)), args.get(1), Optional.of(args.get(2)));
+        return createWithThreeArgs(args);
       default:
         throw new AssertionError();
     }
   }
 
+  private static RangeArgs createWithOneArg(List<ExprNode> args) {
+    return new AutoValue_RangeArgs(Optional.empty(), args.get(0), Optional.empty());
+  }
+
+  private static RangeArgs createWithTwoArgs(List<ExprNode> args) {
+    return new AutoValue_RangeArgs(Optional.of(args.get(0)), args.get(1), Optional.empty());
+  }
+
+  private static RangeArgs createWithThreeArgs(List<ExprNode> args) {
+    return new AutoValue_RangeArgs(Optional.of(args.get(0)), args.get(1), Optional.of(args.get(2)));
+  }
+
   /**
-   * Returns a optional {@link RangeArgs} object if the for loop expression is a {@code range(...)}
+   * Returns an optional {@link RangeArgs} object if the for loop expression is a {@code range(...)}
    * expression.
    */
   public static Optional<RangeArgs> createFromNode(ForNode node) {
-    if (node.getExpr().getRoot() instanceof FunctionNode) {
-      FunctionNode fn = (FunctionNode) node.getExpr().getRoot();
-      if (fn.getSoyFunction() instanceof RangeFunction) {
-        return Optional.of(create(fn.getChildren()));
-      }
+    if (isRangeFunction(node)) {
+      return Optional.of(create(((FunctionNode) node.getExpr().getRoot()).getChildren()));
     }
     return Optional.empty();
+  }
+
+  private static boolean isRangeFunction(ForNode node) {
+    return node.getExpr().getRoot() instanceof FunctionNode &&
+           ((FunctionNode) node.getExpr().getRoot()).getSoyFunction() instanceof RangeFunction;
   }
 
   /** The expression for the iteration start point. Default is {@code 0}. */
