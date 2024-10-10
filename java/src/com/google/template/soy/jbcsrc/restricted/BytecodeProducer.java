@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -29,18 +30,6 @@ import org.objectweb.asm.util.TraceMethodVisitor;
 
 /** An object that can produce bytecode. */
 public abstract class BytecodeProducer {
-  /**
-   * This bit tracks whether or not the current thread is generating code.
-   *
-   * <p>This is used to enforce an invariant that creation of {@link BytecodeProducer} instances
-   * should not occur during code generation. This is because BytecodeProducer instances tend to
-   * trigger verification checks and mutate mutable data structures as part of their initialization.
-   * Accidentally delaying this work until code generation time is an easy mistake to make and it
-   * may cause undefined behavior.
-   *
-   * <p>TODO(lukes): this thread local is a little magical, consider introducing an explicit
-   * 'compilation state' or 'compiler' object in which this phase information could be stored.
-   */
   private static final ThreadLocal<Boolean> isGenerating =
       Flags.DEBUG ? ThreadLocal.withInitial(() -> false) : null;
 
@@ -51,6 +40,11 @@ public abstract class BytecodeProducer {
   }
 
   protected BytecodeProducer(SourceLocation location) {
+    checkStateBeforeConstruction();
+    this.location = checkNotNull(location);
+  }
+
+  private void checkStateBeforeConstruction() {
     if (Flags.DEBUG && isGenerating.get()) {
       throw new IllegalStateException(
           "All bytecode producers should be constructed prior to code generation (.gen()) being "
@@ -58,7 +52,6 @@ public abstract class BytecodeProducer {
               + "Statement/Expression construction routines interact with mutable compiler data "
               + "structures");
     }
-    this.location = checkNotNull(location);
   }
 
   public final SourceLocation location() {
@@ -74,22 +67,13 @@ public abstract class BytecodeProducer {
     }
     try {
       if (location.isKnown()) {
-        // These add entries to the line number tables that are associated with the current method.
-        // The line number table is just a mapping of bytecode offset (aka 'pc') to line number,
-        // http://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.12
-        // It is used by the JVM to add source data to stack traces and by debuggers to highlight
-        // source files.
-        Label start = new Label();
-        adapter.mark(start);
-        adapter.visitLineNumber(location.getBeginLine(), start);
+        writeLineNumberInfo(adapter);
       }
 
       doGen(adapter);
 
       if (location.isKnown()) {
-        Label end = new Label();
-        adapter.mark(end);
-        adapter.visitLineNumber(location.getEndLine(), end);
+        markEndLineNumber(adapter);
       }
     } finally {
       if (shouldClearIsGeneratingBit) {
@@ -98,27 +82,40 @@ public abstract class BytecodeProducer {
     }
   }
 
+  private void writeLineNumberInfo(CodeBuilder adapter) {
+    Label start = new Label();
+    adapter.mark(start);
+    adapter.visitLineNumber(location.getBeginLine(), start);
+  }
+
+  private void markEndLineNumber(CodeBuilder adapter) {
+    Label end = new Label();
+    adapter.mark(end);
+    adapter.visitLineNumber(location.getEndLine(), end);
+  }
+
   @ForOverride
   protected abstract void doGen(CodeBuilder adapter);
 
   /** Returns a human readable string for the code that this {@link BytecodeProducer} generates. */
   public final String trace() {
-    // TODO(lukes): textifier has support for custom label names by overriding appendLabel.
-    // Consider trying to make use of (using the Label.info field? adding a custom NamedLabel
-    // sub type?)
-    Textifier textifier =
-        new Textifier(Opcodes.ASM9) {
-          {
-            // reset tab sizes.  Since we don't care about formatting class names or method
-            // signatures (only code). We only need to set the tab2,tab3 and ltab settings (tab is
-            // for class members).
-            this.tab = null; // trigger an error if used.
-            this.tab2 = "  "; // tab setting for instructions
-            this.tab3 = ""; // tab setting for switch cases
-            this.ltab = ""; // tab setting for labels
-          }
-        };
+    Textifier textifier = createTextifier();
     gen(new CodeBuilder(new TraceMethodVisitor(textifier), 0, "trace", "()V"));
+    return getTraceOutput(textifier);
+  }
+
+  private Textifier createTextifier() {
+    return new Textifier(Opcodes.ASM9) {
+      {
+        this.tab = null; // trigger an error if used.
+        this.tab2 = "  "; // tab setting for instructions
+        this.tab3 = ""; // tab setting for switch cases
+        this.ltab = ""; // tab setting for labels
+      }
+    };
+  }
+
+  private String getTraceOutput(Textifier textifier) {
     StringWriter writer = new StringWriter();
     textifier.print(new PrintWriter(writer));
     return writer.toString(); // Note textifier always adds a trailing newline
