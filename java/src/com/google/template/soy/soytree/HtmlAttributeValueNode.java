@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -69,11 +70,19 @@ public final class HtmlAttributeValueNode extends AbstractParentSoyNode<Standalo
 
   @Override
   public String toSourceString() {
+    return buildSourceString();
+  }
+
+  private String buildSourceString() {
     StringBuilder sb = new StringBuilder();
-    sb.append(quotes.qMark);
+    appendQuotation(sb);
     appendSourceStringForChildren(sb);
-    sb.append(quotes.qMark);
+    appendQuotation(sb);
     return sb.toString();
+  }
+
+  private void appendQuotation(StringBuilder sb) {
+    sb.append(quotes.qMark);
   }
 
   @SuppressWarnings("unchecked")
