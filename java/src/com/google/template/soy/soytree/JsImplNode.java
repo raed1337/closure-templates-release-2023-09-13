@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -50,19 +51,7 @@ public final class JsImplNode extends ExternImplNode {
       ErrorReporter errorReporter) {
     super(id, sourceLocation, "jsimpl");
 
-    if (attributes.size() != 2) {
-      errorReporter.report(sourceLocation, UNEXPECTED_ARGS);
-    }
-    attributes.stream()
-        .filter(attr -> !(attr.hasName(NAMESPACE) || attr.hasName(FUNCTION)))
-        .findAny()
-        .ifPresent(
-            invalidAttr ->
-                errorReporter.report(
-                    invalidAttr.getSourceLocation(),
-                    INVALID_IMPL_ATTRIBUTE,
-                    invalidAttr.getName()));
-
+    validateAttributes(attributes, errorReporter, sourceLocation);
     this.attributes = ImmutableList.copyOf(attributes);
     initAttributes();
   }
@@ -79,6 +68,24 @@ public final class JsImplNode extends ExternImplNode {
             .map(origAttr -> origAttr.copy(copyState))
             .collect(toImmutableList());
     initAttributes();
+  }
+
+  /**
+   * Validates the attributes and reports errors if necessary.
+   */
+  private void validateAttributes(List<CommandTagAttribute> attributes, ErrorReporter errorReporter, SourceLocation sourceLocation) {
+    if (attributes.size() != 2) {
+      errorReporter.report(sourceLocation, UNEXPECTED_ARGS);
+    }
+    attributes.stream()
+        .filter(attr -> !(attr.hasName(NAMESPACE) || attr.hasName(FUNCTION)))
+        .findAny()
+        .ifPresent(
+            invalidAttr ->
+                errorReporter.report(
+                    invalidAttr.getSourceLocation(),
+                    INVALID_IMPL_ATTRIBUTE,
+                    invalidAttr.getName()));
   }
 
   /**
