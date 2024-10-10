@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014 Google Inc.
  *
@@ -56,16 +57,20 @@ final class ResolvePackageRelativeCssNamesPass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
-    // Compute the CSS package prefix for this template. The search order is:
-    // 1) cssbase on the template
-    // 2) cssbase or cssprefix on the namespace
-    // 3) first requirecss on the namespace
     String namespacePrefix = CssPrefixUtil.getNamespacePrefix(file);
+    processTemplates(file, namespacePrefix);
+    processConstants(file, namespacePrefix);
+  }
+
+  private void processTemplates(SoyFileNode file, String namespacePrefix) {
     for (TemplateNode template : file.getTemplates()) {
       String templatePrefix = CssPrefixUtil.getTemplatePrefix(template, namespacePrefix);
       SoyTreeUtils.allFunctionInvocations(template, BuiltinFunction.CSS)
           .forEach(fn -> resolveSelector(template, fn, templatePrefix));
     }
+  }
+
+  private void processConstants(SoyFileNode file, String namespacePrefix) {
     for (ConstNode constNode : file.getConstants()) {
       SoyTreeUtils.allFunctionInvocations(constNode, BuiltinFunction.CSS)
           .forEach(fn -> resolveSelector(constNode, fn, namespacePrefix));
@@ -76,7 +81,6 @@ final class ResolvePackageRelativeCssNamesPass implements CompilerFilePass {
       SoyNode templateOrConstant, FunctionNode node, @Nullable String packagePrefix) {
     ExprNode lastChild = Iterables.getLast(node.getChildren(), null);
     if (!(lastChild instanceof StringNode)) {
-      // this will generate an error in CheckFunctionCallsVisitor
       return;
     }
 
@@ -86,6 +90,13 @@ final class ResolvePackageRelativeCssNamesPass implements CompilerFilePass {
       return;
     }
 
+    validateSelectorUsage(selector, node, templateOrConstant, selectorText, packagePrefix);
+    replaceSelector(node, selector, packagePrefix, selectorText);
+  }
+
+  private void validateSelectorUsage(StringNode selector, FunctionNode node,
+                                      SoyNode templateOrConstant, String selectorText,
+                                      @Nullable String packagePrefix) {
     if (node.numChildren() > 1) {
       errorReporter.report(
           selector.getSourceLocation(),
@@ -103,8 +114,10 @@ final class ResolvePackageRelativeCssNamesPass implements CompilerFilePass {
               ? ""
               : " NOTE" + ": ''requirecss'' on a template is not used to infer the CSS package.");
     }
+  }
 
-    // Replace the selector text with resolved selector text
+  private void replaceSelector(FunctionNode node, StringNode selector,
+                               @Nullable String packagePrefix, String selectorText) {
     String prefixed = packagePrefix + selectorText.substring(RELATIVE_SELECTOR_PREFIX.length());
     StringNode newSelector =
         new StringNode(prefixed, QuoteStyle.SINGLE, selector.getSourceLocation());
