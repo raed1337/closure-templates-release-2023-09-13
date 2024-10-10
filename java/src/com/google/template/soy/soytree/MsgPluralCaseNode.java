@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -34,7 +35,7 @@ public final class MsgPluralCaseNode extends CaseOrDefaultNode implements MsgBlo
   public MsgPluralCaseNode(
       int id, SourceLocation location, SourceLocation openTagLocation, int caseNumber) {
     super(id, location, openTagLocation, "case");
-    Preconditions.checkArgument(caseNumber >= 0);
+    Preconditions.checkArgument(caseNumber >= 0, "Case number must be non-negative.");
     this.caseNumber = caseNumber;
   }
 
@@ -60,7 +61,7 @@ public final class MsgPluralCaseNode extends CaseOrDefaultNode implements MsgBlo
 
   @Override
   public String getCommandText() {
-    return Integer.toString(caseNumber);
+    return String.valueOf(caseNumber);
   }
 
   @Override
