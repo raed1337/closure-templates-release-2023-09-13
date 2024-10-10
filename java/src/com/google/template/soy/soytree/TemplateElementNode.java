@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -59,6 +60,10 @@ public final class TemplateElementNode extends TemplateNode implements ExprHolde
 
   /** Returns the state variables from template header. */
   public ImmutableList<TemplateStateVar> getStateVars() {
+    return collectStateVars();
+  }
+
+  private ImmutableList<TemplateStateVar> collectStateVars() {
     ImmutableList.Builder<TemplateStateVar> builder = ImmutableList.builder();
     for (TemplateHeaderVarDefn header : this.getHeaderParams()) {
       if (header instanceof TemplateStateVar) {
@@ -67,7 +72,7 @@ public final class TemplateElementNode extends TemplateNode implements ExprHolde
     }
     return builder.build();
   }
-  
+
   @Override
   public String getTemplateNameForUserMsgs() {
     return getTemplateName();
@@ -75,8 +80,12 @@ public final class TemplateElementNode extends TemplateNode implements ExprHolde
 
   @Override
   public ImmutableList<ExprRootNode> getExprList() {
+    return addDefaultValues(super.getExprList());
+  }
+
+  private ImmutableList<ExprRootNode> addDefaultValues(ImmutableList<ExprRootNode> existingExprs) {
     ImmutableList.Builder<ExprRootNode> builder = ImmutableList.builder();
-    builder.addAll(super.getExprList());
+    builder.addAll(existingExprs);
     for (TemplateStateVar state : getStateVars()) {
       if (state.defaultValue() != null) {
         builder.add(state.defaultValue());
