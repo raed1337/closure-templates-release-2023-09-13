@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -84,12 +85,20 @@ public final class SoyMsgExtractor extends AbstractSoyCompiler {
   @Override
   protected void compile(SoyFileSet.Builder sfsBuilder) {
     SoyFileSet sfs = sfsBuilder.build();
+    OutputFileOptions options = createOutputFileOptions();
+    extractAndWriteMessages(sfs, options);
+  }
 
+  private OutputFileOptions createOutputFileOptions() {
     OutputFileOptions options = new OutputFileOptions();
     options.setSourceLocaleString(sourceLocaleString);
-    if (targetLocaleString.length() > 0) {
+    if (!targetLocaleString.isEmpty()) {
       options.setTargetLocaleString(targetLocaleString);
     }
+    return options;
+  }
+
+  private void extractAndWriteMessages(SoyFileSet sfs, OutputFileOptions options) {
     sfs.extractAndWriteMsgs(
         new SoyMsgBundleHandler(messagePlugin), options, Files.asByteSink(outputFile));
   }
