@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -49,8 +50,8 @@ public class FinalizeTemplateRegistryPass implements CompilerFileSetPass {
 
   @Override
   public Result run(ImmutableList<SoyFileNode> sourceFiles, IdGenerator idGenerator) {
-    fullRegSetter.accept(
-        Metadata.metadataForAst(registryFromDeps.get(), sourceFiles, errorReporter, null));
+    FileSetMetadata metadata = Metadata.metadataForAst(registryFromDeps.get(), sourceFiles, errorReporter, null);
+    fullRegSetter.accept(metadata);
     return Result.CONTINUE;
   }
 }
