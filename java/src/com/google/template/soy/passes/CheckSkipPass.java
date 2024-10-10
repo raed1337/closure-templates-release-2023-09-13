@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -57,17 +58,21 @@ final class CheckSkipPass implements CompilerFilePass {
     @Override
     public void visitSkipNode(SkipNode skipNode) {
       if (skipNode.getParent() instanceof HtmlOpenTagNode) {
-        HtmlOpenTagNode openTag = (HtmlOpenTagNode) skipNode.getParent();
-        if (skipNode.skipOnlyChildren()) {
-          openTag.setSkipChildren();
-        } else {
-          openTag.setSkipRoot();
-        }
-        if (!openTag.isSelfClosing() && openTag.getTaggedPairs().size() > 1) {
-          errorReporter.report(openTag.getSourceLocation(), SOY_SKIP_OPEN_TAG_CLOSE_AMBIGUOUS);
-        }
+        handleSkipNodeInHtmlTag(skipNode, (HtmlOpenTagNode) skipNode.getParent());
       } else {
         errorReporter.report(skipNode.getSourceLocation(), SOY_SKIP_MUST_BE_DIRECT_CHILD_OF_TAG);
+      }
+    }
+
+    private void handleSkipNodeInHtmlTag(SkipNode skipNode, HtmlOpenTagNode openTag) {
+      if (skipNode.skipOnlyChildren()) {
+        openTag.setSkipChildren();
+      } else {
+        openTag.setSkipRoot();
+      }
+
+      if (!openTag.isSelfClosing() && openTag.getTaggedPairs().size() > 1) {
+        errorReporter.report(openTag.getSourceLocation(), SOY_SKIP_OPEN_TAG_CLOSE_AMBIGUOUS);
       }
     }
 
