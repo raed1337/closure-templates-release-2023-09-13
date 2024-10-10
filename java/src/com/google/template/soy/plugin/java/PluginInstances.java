@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -50,6 +51,10 @@ public final class PluginInstances {
     if (morePlugins.isEmpty()) {
       return this;
     }
+    return createCombinedInstances(morePlugins);
+  }
+
+  private PluginInstances createCombinedInstances(Map<String, ? extends Supplier<Object>> morePlugins) {
     return new PluginInstances(
         ImmutableMap.<String, Supplier<Object>>builder()
             .putAll(pluginInstances)
