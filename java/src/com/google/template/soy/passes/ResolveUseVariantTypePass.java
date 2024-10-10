@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2022 Google Inc.
  *
@@ -34,11 +35,18 @@ final class ResolveUseVariantTypePass implements CompilerFilePass {
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
+    processTemplates(file);
+  }
+
+  private void processTemplates(SoyFileNode file) {
     for (TemplateNode templateNode : file.getTemplates()) {
       if (templateNode instanceof TemplateBasicNode) {
-        ((TemplateBasicNode) templateNode)
-            .resolveUseVariantType(file.getImportsContext().getTypeRegistry(), errorReporter);
+        resolveTemplate((TemplateBasicNode) templateNode, file);
       }
     }
+  }
+
+  private void resolveTemplate(TemplateBasicNode templateNode, SoyFileNode file) {
+    templateNode.resolveUseVariantType(file.getImportsContext().getTypeRegistry(), errorReporter);
   }
 }
