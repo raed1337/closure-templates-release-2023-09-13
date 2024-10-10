@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -45,14 +46,15 @@ final class CheckEscapingSanityFilePass implements CompilerFilePass {
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
     for (PrintDirectiveNode node : SoyTreeUtils.getAllNodesOfType(file, PrintDirectiveNode.class)) {
-      EscapingMode escapingMode = EscapingMode.fromDirective(node.getName());
-      if ((escapingMode != null && escapingMode.isInternalOnly)
-          // This directive should only be inserted by the ContentSecurityPolicyNonceInjectionPass
-          // pass, all other uses are an error.
-          || (node.getName().equals(ContentSecurityPolicyNonceInjectionPass.FILTER_NAME)
-              && !node.isSynthetic())) {
+      if (isIllegalPrintDirective(node)) {
         errorReporter.report(node.getSourceLocation(), ILLEGAL_PRINT_DIRECTIVE, node.getName());
       }
     }
+  }
+
+  private boolean isIllegalPrintDirective(PrintDirectiveNode node) {
+    EscapingMode escapingMode = EscapingMode.fromDirective(node.getName());
+    return (escapingMode != null && escapingMode.isInternalOnly)
+        || (node.getName().equals(ContentSecurityPolicyNonceInjectionPass.FILTER_NAME) && !node.isSynthetic());
   }
 }
