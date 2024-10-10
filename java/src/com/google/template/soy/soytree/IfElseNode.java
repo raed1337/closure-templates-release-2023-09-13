@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -28,6 +29,8 @@ import com.google.template.soy.soytree.SoyNode.ConditionalBlockNode;
 public final class IfElseNode extends AbstractBlockCommandNode implements ConditionalBlockNode {
 
   /**
+   * Constructs an IfElseNode with the specified id and source location.
+   *
    * @param id The id for this node.
    * @param sourceLocation The node's source location.
    */
@@ -36,19 +39,30 @@ public final class IfElseNode extends AbstractBlockCommandNode implements Condit
   }
 
   /**
-   * Copy constructor.
+   * Copy constructor for creating a duplicate of the original IfElseNode.
    *
    * @param orig The node to copy.
+   * @param copyState The state that tracks the copying process.
    */
   private IfElseNode(IfElseNode orig, CopyState copyState) {
     super(orig, copyState);
   }
 
+  /**
+   * Returns the kind of this node, which is IF_ELSE_NODE.
+   *
+   * @return The kind of the node.
+   */
   @Override
   public Kind getKind() {
     return Kind.IF_ELSE_NODE;
   }
 
+  /**
+   * Converts this node to its source string representation.
+   *
+   * @return A string representation of the node's source.
+   */
   @Override
   public String toSourceString() {
     StringBuilder sb = new StringBuilder();
@@ -58,6 +72,12 @@ public final class IfElseNode extends AbstractBlockCommandNode implements Condit
     return sb.toString();
   }
 
+  /**
+   * Creates a copy of this IfElseNode.
+   *
+   * @param copyState The state that tracks the copying process.
+   * @return A new IfElseNode that is a copy of this one.
+   */
   @Override
   public IfElseNode copy(CopyState copyState) {
     return new IfElseNode(this, copyState);
