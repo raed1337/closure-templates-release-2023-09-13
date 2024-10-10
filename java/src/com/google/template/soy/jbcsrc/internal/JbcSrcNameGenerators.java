@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -20,20 +21,20 @@ import com.google.template.soy.base.internal.UniqueNameGenerator;
 
 /** {@link UniqueNameGenerator} implementations for java bytecode. */
 public final class JbcSrcNameGenerators {
-  // Characters that are not generally safe to use as an identifier in class files.
-  // from https://blogs.oracle.com/jrose/entry/symbolic_freedom_in_the_vm
   private static final CharMatcher DANGEROUS_CHARACTERS =
       CharMatcher.anyOf("/.;<<>[]:\\").precomputed();
 
   private static final CharMatcher DANGEROUS_CHARACTERS_WITH_DOLLARSIGN =
       DANGEROUS_CHARACTERS.or(CharMatcher.is('$')).precomputed();
 
+  private JbcSrcNameGenerators() {}
+
   /**
    * Returns a {@link UniqueNameGenerator} that is suitable for managing names used for fields in a
    * class.
    */
   public static UniqueNameGenerator forFieldNames() {
-    return new UniqueNameGenerator(DANGEROUS_CHARACTERS, "%");
+    return createUniqueNameGenerator(DANGEROUS_CHARACTERS, "%");
   }
 
   /**
@@ -43,8 +44,10 @@ public final class JbcSrcNameGenerators {
    * <p>For example, all the inner classes of a class, or all the classes in a package.
    */
   public static UniqueNameGenerator forClassNames() {
-    return new UniqueNameGenerator(DANGEROUS_CHARACTERS_WITH_DOLLARSIGN, "#");
+    return createUniqueNameGenerator(DANGEROUS_CHARACTERS_WITH_DOLLARSIGN, "#");
   }
 
-  private JbcSrcNameGenerators() {}
+  private static UniqueNameGenerator createUniqueNameGenerator(CharMatcher dangerousCharacters, String suffix) {
+    return new UniqueNameGenerator(dangerousCharacters, suffix);
+  }
 }
