@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -49,16 +50,23 @@ public class SoyBidiUtils {
    * @return 1 if the language/locale is left-to-right or unknown, and -1 if it's right-to-left.
    */
   static BidiGlobalDir getBidiGlobalDir(String localeString) {
-    boolean isRtl;
-    try {
-      isRtl =
-          localeString != null
-              && (BidiUtils.isRtlLanguage(localeString)
-                  || FAKE_RTL_LOCALES_PATTERN.matcher(localeString).matches());
-    } catch (IllegalArgumentException localeException) {
-      isRtl = false;
-    }
+    boolean isRtl = isRtlLocale(localeString);
     return BidiGlobalDir.forStaticIsRtl(isRtl);
+  }
+
+  /**
+   * Validates if the given locale string corresponds to a right-to-left locale.
+   *
+   * @param localeString The locale string to check.
+   * @return true if the locale is RTL; false otherwise.
+   */
+  private static boolean isRtlLocale(String localeString) {
+    try {
+      return localeString != null &&
+          (BidiUtils.isRtlLanguage(localeString) || FAKE_RTL_LOCALES_PATTERN.matcher(localeString).matches());
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 
   /**
@@ -73,19 +81,38 @@ public class SoyBidiUtils {
   public static BidiGlobalDir decodeBidiGlobalDirFromJsOptions(
       int bidiGlobalDir, boolean useGoogIsRtlForBidiGlobalDir) {
     if (bidiGlobalDir == 0) {
-      if (!useGoogIsRtlForBidiGlobalDir) {
-        return null;
-      }
-      return BidiGlobalDir.forIsRtlCodeSnippet(
-          GOOG_IS_RTL_CODE_SNIPPET, GOOG_IS_RTL_CODE_SNIPPET_NAMESPACE, SoyBackendKind.JS_SRC);
+      return handleUnspecifiedBidiGlobalDir(useGoogIsRtlForBidiGlobalDir);
     }
-    Preconditions.checkState(
-        !useGoogIsRtlForBidiGlobalDir,
+    validateBidiGlobalDir(bidiGlobalDir, useGoogIsRtlForBidiGlobalDir);
+    return BidiGlobalDir.forStaticIsRtl(bidiGlobalDir < 0);
+  }
+
+  /**
+   * Handles the case when the bidi global direction is unspecified.
+   *
+   * @param useGoogIsRtlForBidiGlobalDir Whether to use the Goog IS_RTL code snippet.
+   * @return BidiGlobalDir object or null.
+   */
+  private static BidiGlobalDir handleUnspecifiedBidiGlobalDir(boolean useGoogIsRtlForBidiGlobalDir) {
+    if (!useGoogIsRtlForBidiGlobalDir) {
+      return null;
+    }
+    return BidiGlobalDir.forIsRtlCodeSnippet(
+        GOOG_IS_RTL_CODE_SNIPPET, GOOG_IS_RTL_CODE_SNIPPET_NAMESPACE, SoyBackendKind.JS_SRC);
+  }
+
+  /**
+   * Validates the bidi global direction and checks for conflicting options.
+   *
+   * @param bidiGlobalDir The provided bidi global direction.
+   * @param useGoogIsRtlForBidiGlobalDir Whether Goog IS_RTL snippet is used.
+   */
+  private static void validateBidiGlobalDir(int bidiGlobalDir, boolean useGoogIsRtlForBidiGlobalDir) {
+    Preconditions.checkState(!useGoogIsRtlForBidiGlobalDir,
         "Must not specify both bidiGlobalDir and bidiGlobalDirIsRtlCodeSnippet.");
     Preconditions.checkArgument(
         bidiGlobalDir == 1 || bidiGlobalDir == -1,
         "If specified, bidiGlobalDir must be 1 for LTR or -1 for RTL.");
-    return BidiGlobalDir.forStaticIsRtl(bidiGlobalDir < 0);
   }
 
   /**
@@ -98,14 +125,33 @@ public class SoyBidiUtils {
     if (bidiIsRtlFn == null || bidiIsRtlFn.isEmpty()) {
       return null;
     }
+    validateBidiIsRtlFn(bidiIsRtlFn);
+    String fnName = extractFunctionName(bidiIsRtlFn);
+    return BidiGlobalDir.forIsRtlCodeSnippet(
+        IS_RTL_MODULE_ALIAS + '.' + fnName, null, SoyBackendKind.PYTHON_SRC);
+  }
+
+  /**
+   * Validates the format of the bidiIsRtlFn string.
+   *
+   * @param bidiIsRtlFn The provided bidiIsRtlFn string to validate.
+   */
+  private static void validateBidiIsRtlFn(String bidiIsRtlFn) {
     int dotIndex = bidiIsRtlFn.lastIndexOf('.');
     Preconditions.checkArgument(
         dotIndex > 0 && dotIndex < bidiIsRtlFn.length() - 1,
         "If specified a bidiIsRtlFn must include the module path to allow for proper importing.");
-    // When importing the module, we'll using the constant name to avoid potential conflicts.
-    String fnName = bidiIsRtlFn.substring(dotIndex + 1) + "()";
-    return BidiGlobalDir.forIsRtlCodeSnippet(
-        IS_RTL_MODULE_ALIAS + '.' + fnName, null, SoyBackendKind.PYTHON_SRC);
+  }
+
+  /**
+   * Extracts the function name from the bidiIsRtlFn string.
+   *
+   * @param bidiIsRtlFn The provided bidiIsRtlFn string.
+   * @return The extracted function name.
+   */
+  private static String extractFunctionName(String bidiIsRtlFn) {
+    int dotIndex = bidiIsRtlFn.lastIndexOf('.');
+    return bidiIsRtlFn.substring(dotIndex + 1) + "()";
   }
 
   /**
