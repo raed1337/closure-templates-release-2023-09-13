@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -85,50 +86,70 @@ public class TemplateBasicNodeBuilder extends TemplateNodeBuilder<TemplateBasicN
       if (COMMON_ATTRIBUTE_NAMES.contains(name.identifier())) {
         continue;
       }
-      switch (name.identifier()) {
-        case "visibility":
-          visibility = attribute.valueAsVisibility(errorReporter);
-          break;
-        case "modifiable":
-          modifiable = attribute.valueAsEnabled(errorReporter);
-          break;
-        case "modifies":
-          hasModifies = attribute.valueAsExpr(errorReporter) != null;
-          break;
-        case "legacydeltemplatenamespace":
-          legacyDeltemplateNamespaceAttr = attribute;
-          break;
-        case "variant":
-          hasVariant = attribute.valueAsExpr(errorReporter) != null;
-          break;
-        case "usevarianttype":
-          useVariantTypeAttr = attribute;
-          break;
-        default:
-          errorReporter.report(
-              name.location(),
-              CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-              name.identifier(),
-              "template",
-              ImmutableList.builder()
-                  .add("visibility")
-                  .add("modifiable")
-                  .add("modifies")
-                  .add("legacydeltemplatenamespace")
-                  .add("variant")
-                  .add("usevarianttype")
-                  .addAll(COMMON_ATTRIBUTE_NAMES)
-                  .build());
-      }
+      processAttribute(name, attribute);
     }
 
     setTemplateNames(templateName, soyFileHeaderInfo.getNamespace());
     return this;
   }
 
+  private void processAttribute(Identifier name, CommandTagAttribute attribute) {
+    switch (name.identifier()) {
+      case "visibility":
+        visibility = attribute.valueAsVisibility(errorReporter);
+        break;
+      case "modifiable":
+        modifiable = attribute.valueAsEnabled(errorReporter);
+        break;
+      case "modifies":
+        hasModifies = attribute.valueAsExpr(errorReporter) != null;
+        break;
+      case "legacydeltemplatenamespace":
+        legacyDeltemplateNamespaceAttr = attribute;
+        break;
+      case "variant":
+        hasVariant = attribute.valueAsExpr(errorReporter) != null;
+        break;
+      case "usevarianttype":
+        useVariantTypeAttr = attribute;
+        break;
+      default:
+        reportUnsupportedAttribute(name);
+    }
+  }
+
+  private void reportUnsupportedAttribute(Identifier name) {
+    errorReporter.report(
+        name.location(),
+        CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
+        name.identifier(),
+        "template",
+        ImmutableList.builder()
+            .add("visibility")
+            .add("modifiable")
+            .add("modifies")
+            .add("legacydeltemplatenamespace")
+            .add("variant")
+            .add("usevarianttype")
+            .addAll(COMMON_ATTRIBUTE_NAMES)
+            .build());
+  }
+
   @Override
   public TemplateBasicNode build() {
     Preconditions.checkState(id != null && cmdText != null);
+    validateConditions();
+    return new TemplateBasicNode(
+        this,
+        soyFileHeaderInfo,
+        visibility,
+        modifiable,
+        legacyDeltemplateNamespaceAttr,
+        useVariantTypeAttr,
+        params);
+  }
+
+  private void validateConditions() {
     if (modifiable && hasModifies) {
       errorReporter.report(openTagLocation, MODIFIABLE_AND_MODIFIES_BOTH_SET);
     }
@@ -147,14 +168,6 @@ public class TemplateBasicNodeBuilder extends TemplateNodeBuilder<TemplateBasicN
     if (!hasModifies && hasVariant) {
       errorReporter.report(openTagLocation, VARIANT_REQUIRES_MODIFIES);
     }
-    return new TemplateBasicNode(
-        this,
-        soyFileHeaderInfo,
-        visibility,
-        modifiable,
-        legacyDeltemplateNamespaceAttr,
-        useVariantTypeAttr,
-        params);
   }
 
   @Override
