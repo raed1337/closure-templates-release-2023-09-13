@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -7,7 +8,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
+ * Unless required by applicable law or agreed to in writing, software,
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
@@ -48,6 +49,10 @@ public abstract class GenericTypeNode extends TypeNode {
 
   @Override
   public final String toString() {
+    return buildStringRepresentation();
+  }
+
+  private String buildStringRepresentation() {
     return name() + "<" + Joiner.on(", ").join(arguments()) + ">";
   }
 
@@ -58,12 +63,14 @@ public abstract class GenericTypeNode extends TypeNode {
 
   @Override
   public GenericTypeNode copy() {
+    return create(sourceLocation(), identifier(), copyArguments());
+  }
+
+  private ImmutableList<TypeNode> copyArguments() {
     ImmutableList.Builder<TypeNode> newArguments = ImmutableList.builder();
     for (TypeNode arg : arguments()) {
       newArguments.add(arg.copy());
     }
-    GenericTypeNode copy = create(sourceLocation(), identifier(), newArguments.build());
-    copy.copyResolvedTypeFrom(this);
-    return copy;
+    return newArguments.build();
   }
 }
