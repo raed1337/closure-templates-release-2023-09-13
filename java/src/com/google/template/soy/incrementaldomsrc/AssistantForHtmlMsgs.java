@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -41,6 +42,7 @@ import com.google.template.soy.soytree.HtmlContext;
 import com.google.template.soy.soytree.MsgFallbackGroupNode;
 import com.google.template.soy.soytree.MsgPlaceholderNode;
 import com.google.template.soy.soytree.VeLogNode;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,20 +58,8 @@ import java.util.Map;
  */
 final class AssistantForHtmlMsgs extends GenJsCodeVisitorAssistantForMsgs {
 
-  /**
-   * Maps dynamic nodes within the translated message to placeholder values to pass to goog.getMsg()
-   * and substitute for idom commands.
-   */
   private final Map<String, MsgPlaceholderNode> placeholderNames = new LinkedHashMap<>();
-
-  /**
-   * Wrapper character around placeholder placeholders. This is used to locate placeholder names in
-   * the translated result so we can instead run the idom instructions in their MsgPlaceholderNodes.
-   * The value is an arbitrary but short character that cannot appear in translated messages.
-   */
   private static final String PLACEHOLDER_WRAPPER = "\u0001";
-
-  /** A JS regex literal that matches our placeholder placeholders. */
   private static final String PLACEHOLDER_REGEX = "/\\x01\\d+\\x01/g";
 
   private final String staticDecl;
@@ -106,234 +96,113 @@ final class AssistantForHtmlMsgs extends GenJsCodeVisitorAssistantForMsgs {
         "This class should only be used for via the new idom entry-point.");
   }
 
-  /**
-   * Returns a code chunk of idom instructions that output the contents of a translated message as
-   * HTML. For example:
-   *
-   * <pre>
-   *   {msg desc="Says hello to a person."}Hello {$name}!{/msg}
-   * </pre>
-   *
-   * compiles to
-   *
-   * <pre>
-   *   /** @desc Says hello to a person. *{@literal /}
-   *   var MSG_EXTERNAL_6936162475751860807 = goog.getMsg(
-   *       'Hello {$name}!',
-   *       {'name': '\u00010\u0001'});
-   *   var lastIndex_1153 = 0, partRe_1153 = /\x01\d+\x01/g, match_1153;
-   *   do {
-   *     match_1153 = partRe_1153.exec(MSG_EXTERNAL_6936162475751860807) || undefined;
-   *     incrementalDom.text(goog.string.unescapeEntities(
-   *         MSG_EXTERNAL_6936162475751860807.substring(
-   *           lastIndex_1153, match_1153 && match_1153.index)));
-   *     lastIndex_1153 = partRe_1153.lastIndex;
-   *     switch (match_1153 && match_1153[0]) {
-   *       case '\u00010\u0001':
-   *         var dyn8 = opt_data.name;
-   *         if (typeof dyn8 == 'function') dyn8();
-   *         else if (dyn8 != null) incrementalDom.text(dyn8);
-   *         break;
-   *     }
-   *   } while (match_1153);
-   * </pre>
-   *
-   * Each interpolated MsgPlaceholderNode (either for HTML tags or for print statements) compiles to
-   * a separate {@code case} statement.
-   */
   Statement generateMsgGroupCode(MsgFallbackGroupNode node) {
     Preconditions.checkState(placeholderNames.isEmpty(), "This class is not reusable.");
-    // Non-HTML {msg}s should be extracted into LetContentNodes and handled by jssrc.
     Preconditions.checkArgument(
         node.getHtmlContext() == HtmlContext.HTML_PCDATA,
         "AssistantForHtmlMsgs is only for HTML {msg}s.");
 
-    // The raw translated text, with placeholder placeholders.
     Expression translationVar = super.generateMsgGroupVariable(node);
-
-    // If there are no placeholders, we don't need anything special (but we still need to unescape).
     if (placeholderNames.isEmpty()) {
-      Expression unescape = GOOG_STRING_UNESCAPE_ENTITIES.call(translationVar);
-      return INCREMENTAL_DOM_TEXT.call(unescape).asStatement();
+      return INCREMENTAL_DOM_TEXT.call(GOOG_STRING_UNESCAPE_ENTITIES.call(translationVar)).asStatement();
     }
 
-    // The translationVar may be non-trivial if escaping directives are applied to it, if so bounce
-    // it into a fresh variable.
     if (!translationVar.isCheap()) {
-      translationVar =
-          translationContext
-              .codeGenerator()
-              .declarationBuilder()
-              .setRhs(translationVar)
-              .build()
-              .ref();
+      translationVar = createFreshVariable(translationVar);
     }
 
-    // We assume at this point that the statics array has been populated with something like
-    // [['hi', '\\x01\foo'], ['ho', '\\x02\foo']]
-
-    // Consider this block the body of the for loop
     ImmutableList.Builder<Statement> body = ImmutableList.builder();
     String itemId = "i" + node.getId();
-    // Get a handle to the ith item of the static array
-    Expression item = Expressions.id("i" + node.getId());
+    Expression item = Expressions.id(itemId);
 
-    // The first element contains some text that we call using itext
-    body.add(
-        item.bracketAccess(Expressions.number(0))
-            .and(
-                INCREMENTAL_DOM_TEXT.call(item.bracketAccess(Expressions.number(0))),
-                translationContext.codeGenerator())
-            .asStatement());
+    body.add(createTextOutputStatement(item));
+    body.add(createSwitchStatement(node, item));
 
-    // The second element contains a placeholder string. We then execute a switch statement
-    // to decide which branch to execute.
-    SwitchBuilder switchBuilder = Statements.switchValue(item.bracketAccess(Expressions.number(1)));
-    for (Map.Entry<String, MsgPlaceholderNode> ph : placeholderNames.entrySet()) {
-      Statement value =
-          idomTemplateBodyVisitor.addStaticsContent(
-              () -> idomTemplateBodyVisitor.visit(ph.getValue()), true);
-      MsgPlaceholderNode phNode = ph.getValue();
-      if (phNode.getParent() instanceof VeLogNode) {
-        VeLogNode parent = (VeLogNode) phNode.getParent();
-        if (parent.getChild(0) == phNode) {
-          GenIncrementalDomTemplateBodyVisitor.VeLogStateHolder state =
-              idomTemplateBodyVisitor.openVeLogNode(parent);
-          // It is a compiler failure to have a logOnly in a message node.
-          Preconditions.checkState(state.logOnlyConditional == null);
-          value = Statements.of(state.enterStatement, value);
-        }
-        if (parent.getChild(parent.numChildren() - 1) == phNode) {
-          value = Statements.of(value, idomTemplateBodyVisitor.exitVeLogNode(parent, null));
-        }
-      }
-      switchBuilder.addCase(Expressions.stringLiteral(ph.getKey()), value);
-    }
-    body.add(switchBuilder.build());
-    // End of for loop
-
-    Statement loop =
-        forOf(
-            itemId,
-            Expressions.id(staticDecl).bracketAccess(translationVar),
-            Statements.of(body.build()));
-
+    Statement loop = forOf(itemId, Expressions.id(staticDecl).bracketAccess(translationVar), Statements.of(body.build()));
     return Statements.of(staticsInitializer(node, translationVar), loop);
   }
 
-  /**
-   * In all cases, messages that are broken up into placeholders typically contain the same parts.
-   * That is, a message that looks like <div>FooBar{$foo}</div> in all invocations will be broken up
-   * into {DIV_PLACEHOLDER}{CONSTANT_MESSAGE}{PRINT $FOO}{END_DIV_PLACEHOLDER}. In order to avoid
-   * parsing and splitting up this over and over again, we execute the splitting logic once and save
-   * the results so that future usages are fast.
-   *
-   * <p>Concretely speaking, this is basically an uninitialized array that lives in the module
-   * scope. See staticsDecl.
-   */
+  private Expression createFreshVariable(Expression translationVar) {
+    return translationContext
+        .codeGenerator()
+        .declarationBuilder()
+        .setRhs(translationVar)
+        .build()
+        .ref();
+  }
+
+  private Statement createTextOutputStatement(Expression item) {
+    return item.bracketAccess(Expressions.number(0))
+        .and(INCREMENTAL_DOM_TEXT.call(item.bracketAccess(Expressions.number(0))),
+            translationContext.codeGenerator())
+        .asStatement();
+  }
+
+  private Statement createSwitchStatement(MsgFallbackGroupNode node, Expression item) {
+    SwitchBuilder switchBuilder = Statements.switchValue(item.bracketAccess(Expressions.number(1)));
+    for (Map.Entry<String, MsgPlaceholderNode> ph : placeholderNames.entrySet()) {
+      switchBuilder.addCase(Expressions.stringLiteral(ph.getKey()), 
+          idomTemplateBodyVisitor.addStaticsContent(() -> idomTemplateBodyVisitor.visit(ph.getValue()), true));
+    }
+    return switchBuilder.build();
+  }
+
   private Statement staticsInitializer(MsgFallbackGroupNode node, Expression translationVar) {
+    VariableDeclaration regexVar = createVariable("partRe_", node.getId(), Expressions.regexLiteral(PLACEHOLDER_REGEX));
+    VariableDeclaration matchVar = createMutableVariable("match_", node.getId());
+    VariableDeclaration lastIndexVar = createMutableVariable("lastIndex_", node.getId(), Expressions.number(0));
+    VariableDeclaration counter = createMutableVariable("counter_", node.getId(), Expressions.number(0));
 
-    // All of these helper variables must have uniquely-suffixed names because {msg}s can be nested.
+    List<Statement> doBody = createDoBody(translationVar, regexVar, matchVar, lastIndexVar, counter);
 
-    // The mutable (tracking index of last match) regex to find the placeholder placeholders.
-    VariableDeclaration regexVar =
-        VariableDeclaration.builder("partRe_" + node.getId())
-            .setRhs(Expressions.regexLiteral(PLACEHOLDER_REGEX))
-            .build();
-    // The current placeholder from the regex.
-    VariableDeclaration matchVar =
-        VariableDeclaration.builder("match_" + node.getId()).setMutable().build();
-    // The index of the end of the previous placeholder, where the next raw text run starts.
-    VariableDeclaration lastIndexVar =
-        VariableDeclaration.builder("lastIndex_" + node.getId())
-            .setMutable()
-            .setRhs(Expressions.number(0))
-            .build();
-    // A counter to increment and update the statics array.
-    VariableDeclaration counter =
-        VariableDeclaration.builder("counter_" + node.getId())
-            .setMutable()
-            .setRhs(Expressions.number(0))
-            .build();
-
-    List<Statement> doBody = new ArrayList<>();
-    // Execute the regex on the string to get the next matching pair.
-    // match_XXX = partRe_XXX.exec(MSG_EXTERNAL_XXX) || undefined;
-    doBody.add(
-        matchVar
-            .ref()
-            .assign(
-                regexVar
-                    .ref()
-                    .dotAccess("exec")
-                    .call(translationVar)
-                    // Replace null with undefined.  This is necessary to make substring() treat
-                    // falsy as an omitted
-                    // parameter, so that it goes until the end of the string.  Otherwise, the
-                    // non-numeric parameter
-                    // would be coerced to zero.
-                    .or(Expressions.id("undefined"), translationContext.codeGenerator()))
-            .asStatement());
-
-    // Emit the (possibly-empty) run of raw text since the last placeholder, until this placeholder,
-    // or until the end of the source string.
-    Expression endIndex =
-        matchVar.ref().and(matchVar.ref().dotAccess("index"), translationContext.codeGenerator());
-    // Incremental DOM usually unescapes all strings at compile time. However, for messages
-    // we need to do so at runtime so that entities like `&lt`; becomes <
-    Expression unescape =
-        GOOG_STRING_UNESCAPE_ENTITIES.call(
-            // This unescapes the string up from the beginning of the text content to the next
-            // placeholder
-            translationVar.dotAccess("substring").call(lastIndexVar.ref(), endIndex));
-
-    // First start off by initializing the statics declaration array (it is undefined before)
-    doBody.add(
-        Expressions.id(staticDecl)
-            .bracketAccess(translationVar)
-            .bracketAccess(counter.ref())
-            .assign(
-                Expressions.arrayLiteral(
-                    ImmutableList.of(
-                        unescape,
-                        matchVar
-                            .ref()
-                            .and(
-                                matchVar.ref().bracketAccess(Expressions.number(0)),
-                                translationContext.codeGenerator()))))
-            .asStatement());
-
-    // counter++
-    doBody.add(counter.ref().assign(counter.ref().plus(Expressions.number(1))).asStatement());
-    // Update the beginning of the string to parse to the end of the current one.
-    doBody.add(lastIndexVar.ref().assign(regexVar.ref().dotAccess("lastIndex")).asStatement());
-
-    Statement statement =
-        Statements.of(
-            Expressions.id(staticDecl)
-                .bracketAccess(translationVar)
-                .assign(Expressions.arrayLiteral(ImmutableList.of()))
-                .asStatement(),
+    Statement statement = Statements.of(
+            Expressions.id(staticDecl).bracketAccess(translationVar).assign(Expressions.arrayLiteral(ImmutableList.of())).asStatement(),
             Statements.of(translationVar.allInitialStatementsInTopScope()),
             regexVar,
             lastIndexVar,
             counter,
             matchVar,
             DoWhile.builder().setCondition(matchVar.ref()).setBody(Statements.of(doBody)).build());
-    statement =
-        Statements.ifStatement(
-                Expressions.not(Expressions.id(staticDecl).bracketAccess(translationVar)),
-                statement)
-            .build();
-    return statement;
+
+    return Statements.ifStatement(
+            Expressions.not(Expressions.id(staticDecl).bracketAccess(translationVar)), statement).build();
+  }
+
+  private VariableDeclaration createVariable(String prefix, int id, Expression rhs) {
+    return VariableDeclaration.builder(prefix + id).setRhs(rhs).build();
+  }
+
+  private VariableDeclaration createMutableVariable(String prefix, int id) {
+    return VariableDeclaration.builder(prefix + id).setMutable().build();
+  }
+
+  private VariableDeclaration createMutableVariable(String prefix, int id, Expression rhs) {
+    return VariableDeclaration.builder(prefix + id).setMutable().setRhs(rhs).build();
+  }
+
+  private List<Statement> createDoBody(Expression translationVar, VariableDeclaration regexVar,
+                                        VariableDeclaration matchVar, VariableDeclaration lastIndexVar, 
+                                        VariableDeclaration counter) {
+    List<Statement> doBody = new ArrayList<>();
+
+    doBody.add(matchVar.ref().assign(regexVar.ref().dotAccess("exec").call(translationVar).or(Expressions.id("undefined"), translationContext.codeGenerator())).asStatement());
+
+    Expression endIndex = matchVar.ref().and(matchVar.ref().dotAccess("index"), translationContext.codeGenerator());
+    Expression unescape = GOOG_STRING_UNESCAPE_ENTITIES.call(translationVar.dotAccess("substring").call(lastIndexVar.ref(), endIndex));
+
+    doBody.add(Expressions.id(staticDecl).bracketAccess(translationVar).bracketAccess(counter.ref()).assign(
+            Expressions.arrayLiteral(ImmutableList.of(unescape, matchVar.ref().and(matchVar.ref().bracketAccess(Expressions.number(0)), translationContext.codeGenerator())))).asStatement());
+
+    doBody.add(counter.ref().assign(counter.ref().plus(Expressions.number(1))).asStatement());
+    doBody.add(lastIndexVar.ref().assign(regexVar.ref().dotAccess("lastIndex")).asStatement());
+
+    return doBody;
   }
 
   @Override
   protected Expression genGoogMsgPlaceholder(MsgPlaceholderNode msgPhNode) {
-    // Mark the node so we know what instructions to emit.
     String name = PLACEHOLDER_WRAPPER + placeholderNames.size() + PLACEHOLDER_WRAPPER;
     placeholderNames.put(name, msgPhNode);
-    // Return the marker string to insert into the translated text.
     return Expressions.stringLiteral(name);
   }
 }
