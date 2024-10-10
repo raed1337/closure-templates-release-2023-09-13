@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -41,12 +42,7 @@ import javax.annotation.Nullable;
  */
 public final class CallBasicNode extends CallNode {
 
-  /**
-   * The callee expression. Usually this will contain a single node corresponding to the template to
-   * be called.
-   */
   private ExprRootNode calleeExpr;
-
   private ExprEquivalence.Wrapper originalShortFormExprEquivalence = null;
 
   public CallBasicNode(
@@ -58,22 +54,21 @@ public final class CallBasicNode extends CallNode {
       boolean selfClosing,
       ErrorReporter errorReporter) {
     super(id, location, openTagLocation, "call", attributes, selfClosing, errorReporter);
-
     this.calleeExpr = new ExprRootNode(calleeExpr);
+    validateAttributes(attributes, errorReporter);
+  }
 
+  private void validateAttributes(List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
     for (CommandTagAttribute attr : attributes) {
       String ident = attr.getName().identifier();
-
       switch (ident) {
         case "data":
         case "key":
         case PHNAME_ATTR:
         case PHEX_ATTR:
         case CallNode.ERROR_FALLBACK:
-          // Parsed in CallNode.
           break;
         case "variant":
-          // Returned directly by getVariantExpr(). Just call valueAsExpr() to validate it here.
           attr.valueAsExpr(errorReporter);
           break;
         default:
@@ -82,17 +77,11 @@ public final class CallBasicNode extends CallNode {
               UNSUPPORTED_ATTRIBUTE_KEY,
               ident,
               "call",
-              ImmutableList.of(
-                  "data", CallNode.ERROR_FALLBACK, "key", PHNAME_ATTR, PHEX_ATTR, "variant"));
+              ImmutableList.of("data", CallNode.ERROR_FALLBACK, "key", PHNAME_ATTR, PHEX_ATTR, "variant"));
       }
     }
   }
 
-  /**
-   * Copy constructor.
-   *
-   * @param orig The node to copy.
-   */
   private CallBasicNode(CallBasicNode orig, CopyState copyState) {
     super(orig, copyState);
     this.calleeExpr = orig.calleeExpr.copy(copyState);
@@ -103,7 +92,6 @@ public final class CallBasicNode extends CallNode {
     return Kind.CALL_BASIC_NODE;
   }
 
-  /** Returns the callee name string as it appears in the source code. */
   public String getSourceCalleeName() {
     return calleeExpr.getRoot().toSourceString();
   }
@@ -113,7 +101,6 @@ public final class CallBasicNode extends CallNode {
     return calleeExpr.getSourceLocation();
   }
 
-  /** Returns the full name of the template being called, or null if not yet set. */
   public String getCalleeName() {
     checkState(isStaticCall(), "Expected static call, but found: %s", calleeExpr.getRoot());
     return ((TemplateLiteralNode) calleeExpr.getRoot()).getResolvedName();
@@ -136,9 +123,7 @@ public final class CallBasicNode extends CallNode {
     this.calleeExpr = calleeExpr;
   }
 
-  
-  public void setOriginalShortFormExprEquivalence(
-      ExprEquivalence.Wrapper originalShortFormExprEquivalence) {
+  public void setOriginalShortFormExprEquivalence(ExprEquivalence.Wrapper originalShortFormExprEquivalence) {
     this.originalShortFormExprEquivalence = originalShortFormExprEquivalence;
   }
 
@@ -149,28 +134,31 @@ public final class CallBasicNode extends CallNode {
 
   @Override
   public ImmutableList<ExprRootNode> getExprList() {
-    ImmutableList.Builder<ExprRootNode> allExprs = ImmutableList.builder();
-    allExprs.add(calleeExpr);
-    allExprs.addAll(super.getExprList());
-    return allExprs.build();
+    return ImmutableList.<ExprRootNode>builder()
+        .add(calleeExpr)
+        .addAll(super.getExprList())
+        .build();
   }
 
   @Override
   public String getCommandText() {
     StringBuilder commandText = new StringBuilder(getSourceCalleeName());
+    appendDataAttribute(commandText);
+    appendPlaceholderAttributes(commandText);
+    return commandText.toString();
+  }
 
+  private void appendDataAttribute(StringBuilder commandText) {
     if (isPassingAllData()) {
       commandText.append(" data=\"all\"");
     } else if (getDataExpr() != null) {
       commandText.append(" data=\"").append(getDataExpr().toSourceString()).append('"');
     }
-    getPlaceholder()
-        .userSuppliedName()
-        .ifPresent(phname -> commandText.append(" phname=\"").append(phname).append('"'));
-    getPlaceholder()
-        .example()
-        .ifPresent(phex -> commandText.append(" phex=\"").append(phex).append('"'));
-    return commandText.toString();
+  }
+
+  private void appendPlaceholderAttributes(StringBuilder commandText) {
+    getPlaceholder().userSuppliedName().ifPresent(phname -> commandText.append(" phname=\"").append(phname).append('"'));
+    getPlaceholder().example().ifPresent(phex -> commandText.append(" phex=\"").append(phex).append('"'));
   }
 
   @Nullable
