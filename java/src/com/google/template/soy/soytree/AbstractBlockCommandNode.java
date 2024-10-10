@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -33,6 +34,7 @@ abstract class AbstractBlockCommandNode extends AbstractParentCommandNode<Standa
    * @param id The id for this node.
    * @param sourceLocation The node's source location.
    * @param commandName The name of the Soy command.
+   * @param openTagLocation The location of the open tag.
    */
   public AbstractBlockCommandNode(
       int id, SourceLocation sourceLocation, SourceLocation openTagLocation, String commandName) {
