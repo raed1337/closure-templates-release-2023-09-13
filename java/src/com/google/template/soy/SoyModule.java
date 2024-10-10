@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -35,8 +36,12 @@ public final class SoyModule extends AbstractModule {
   @Override
   protected void configure() {
     // Create empty multibinders so we can inject user-supplied ones.
-    Multibinder.newSetBinder(binder(), SoyFunction.class);
-    Multibinder.newSetBinder(binder(), SoyPrintDirective.class);
+    createMultibinder(SoyFunction.class);
+    createMultibinder(SoyPrintDirective.class);
+  }
+
+  private <T> void createMultibinder(Class<T> clazz) {
+    Multibinder.newSetBinder(binder(), clazz);
   }
 
   // N.B. we provide the builder here instead of having an @Inject constructor to issue a slightly
