@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -50,116 +51,60 @@ public abstract class AbstractReturningSoyNodeVisitor<R>
 
   @Override
   protected R visit(SoyNode node) {
+    return visitNodeByKind(node);
+  }
 
+  private R visitNodeByKind(SoyNode node) {
     switch (node.getKind()) {
-      case SOY_FILE_SET_NODE:
-        return visitSoyFileSetNode((SoyFileSetNode) node);
-      case SOY_FILE_NODE:
-        return visitSoyFileNode((SoyFileNode) node);
-      case IMPORT_NODE:
-        return visitImportNode((ImportNode) node);
-      case TEMPLATE_ELEMENT_NODE:
-        return visitTemplateElementNode((TemplateElementNode) node);
-      case TEMPLATE_BASIC_NODE:
-        return visitTemplateBasicNode((TemplateBasicNode) node);
-      case TEMPLATE_DELEGATE_NODE:
-        return visitTemplateDelegateNode((TemplateDelegateNode) node);
-
-      case RAW_TEXT_NODE:
-        return visitRawTextNode((RawTextNode) node);
-
-      case MSG_FALLBACK_GROUP_NODE:
-        return visitMsgFallbackGroupNode((MsgFallbackGroupNode) node);
-      case MSG_NODE:
-        return visitMsgNode((MsgNode) node);
-      case MSG_PLURAL_NODE:
-        return visitMsgPluralNode((MsgPluralNode) node);
-      case MSG_PLURAL_CASE_NODE:
-        return visitMsgPluralCaseNode((MsgPluralCaseNode) node);
-      case MSG_PLURAL_DEFAULT_NODE:
-        return visitMsgPluralDefaultNode((MsgPluralDefaultNode) node);
-      case MSG_SELECT_NODE:
-        return visitMsgSelectNode((MsgSelectNode) node);
-      case MSG_SELECT_CASE_NODE:
-        return visitMsgSelectCaseNode((MsgSelectCaseNode) node);
-      case MSG_SELECT_DEFAULT_NODE:
-        return visitMsgSelectDefaultNode((MsgSelectDefaultNode) node);
-      case MSG_PLACEHOLDER_NODE:
-        return visitMsgPlaceholderNode((MsgPlaceholderNode) node);
-      case MSG_HTML_TAG_NODE:
-        return visitMsgHtmlTagNode((MsgHtmlTagNode) node);
-
-      case PRINT_NODE:
-        return visitPrintNode((PrintNode) node);
-      case PRINT_DIRECTIVE_NODE:
-        return visitPrintDirectiveNode((PrintDirectiveNode) node);
-
-      case CONST_NODE:
-        return visitConstNode((ConstNode) node);
-      case LET_VALUE_NODE:
-        return visitLetValueNode((LetValueNode) node);
-      case LET_CONTENT_NODE:
-        return visitLetContentNode((LetContentNode) node);
-
-      case IF_NODE:
-        return visitIfNode((IfNode) node);
-      case IF_COND_NODE:
-        return visitIfCondNode((IfCondNode) node);
-      case IF_ELSE_NODE:
-        return visitIfElseNode((IfElseNode) node);
-
-      case SWITCH_NODE:
-        return visitSwitchNode((SwitchNode) node);
-      case SWITCH_CASE_NODE:
-        return visitSwitchCaseNode((SwitchCaseNode) node);
-      case SWITCH_DEFAULT_NODE:
-        return visitSwitchDefaultNode((SwitchDefaultNode) node);
-
-      case FOR_NODE:
-        return visitForNode((ForNode) node);
-      case FOR_NONEMPTY_NODE:
-        return visitForNonemptyNode((ForNonemptyNode) node);
-
-      case CALL_BASIC_NODE:
-        return visitCallBasicNode((CallBasicNode) node);
-      case CALL_DELEGATE_NODE:
-        return visitCallDelegateNode((CallDelegateNode) node);
-      case CALL_PARAM_VALUE_NODE:
-        return visitCallParamValueNode((CallParamValueNode) node);
-      case CALL_PARAM_CONTENT_NODE:
-        return visitCallParamContentNode((CallParamContentNode) node);
-
-      case HTML_COMMENT_NODE:
-        return visitHtmlCommentNode((HtmlCommentNode) node);
-      case HTML_CLOSE_TAG_NODE:
-        return visitHtmlCloseTagNode((HtmlCloseTagNode) node);
-      case HTML_OPEN_TAG_NODE:
-        return visitHtmlOpenTagNode((HtmlOpenTagNode) node);
-      case HTML_ATTRIBUTE_NODE:
-        return visitHtmlAttributeNode((HtmlAttributeNode) node);
-      case HTML_ATTRIBUTE_VALUE_NODE:
-        return visitHtmlAttributeValueNode((HtmlAttributeValueNode) node);
-
-      case KEY_NODE:
-        return visitKeyNode((KeyNode) node);
-
-      case SKIP_NODE:
-        return visitSkipNode((SkipNode) node);
-
-      case VE_LOG_NODE:
-        return visitVeLogNode((VeLogNode) node);
-      case LOG_NODE:
-        return visitLogNode((LogNode) node);
-      case DEBUGGER_NODE:
-        return visitDebuggerNode((DebuggerNode) node);
-      case EXTERN_NODE:
-        return visitExternNode((ExternNode) node);
-      case JAVA_IMPL_NODE:
-        return visitJavaImplNode((JavaImplNode) node);
-      case JS_IMPL_NODE:
-        return visitJsImplNode((JsImplNode) node);
+      case SOY_FILE_SET_NODE: return visitSoyFileSetNode((SoyFileSetNode) node);
+      case SOY_FILE_NODE: return visitSoyFileNode((SoyFileNode) node);
+      case IMPORT_NODE: return visitImportNode((ImportNode) node);
+      case TEMPLATE_ELEMENT_NODE: return visitTemplateElementNode((TemplateElementNode) node);
+      case TEMPLATE_BASIC_NODE: return visitTemplateBasicNode((TemplateBasicNode) node);
+      case TEMPLATE_DELEGATE_NODE: return visitTemplateDelegateNode((TemplateDelegateNode) node);
+      case RAW_TEXT_NODE: return visitRawTextNode((RawTextNode) node);
+      case MSG_FALLBACK_GROUP_NODE: return visitMsgFallbackGroupNode((MsgFallbackGroupNode) node);
+      case MSG_NODE: return visitMsgNode((MsgNode) node);
+      case MSG_PLURAL_NODE: return visitMsgPluralNode((MsgPluralNode) node);
+      case MSG_PLURAL_CASE_NODE: return visitMsgPluralCaseNode((MsgPluralCaseNode) node);
+      case MSG_PLURAL_DEFAULT_NODE: return visitMsgPluralDefaultNode((MsgPluralDefaultNode) node);
+      case MSG_SELECT_NODE: return visitMsgSelectNode((MsgSelectNode) node);
+      case MSG_SELECT_CASE_NODE: return visitMsgSelectCaseNode((MsgSelectCaseNode) node);
+      case MSG_SELECT_DEFAULT_NODE: return visitMsgSelectDefaultNode((MsgSelectDefaultNode) node);
+      case MSG_PLACEHOLDER_NODE: return visitMsgPlaceholderNode((MsgPlaceholderNode) node);
+      case MSG_HTML_TAG_NODE: return visitMsgHtmlTagNode((MsgHtmlTagNode) node);
+      case PRINT_NODE: return visitPrintNode((PrintNode) node);
+      case PRINT_DIRECTIVE_NODE: return visitPrintDirectiveNode((PrintDirectiveNode) node);
+      case CONST_NODE: return visitConstNode((ConstNode) node);
+      case LET_VALUE_NODE: return visitLetValueNode((LetValueNode) node);
+      case LET_CONTENT_NODE: return visitLetContentNode((LetContentNode) node);
+      case IF_NODE: return visitIfNode((IfNode) node);
+      case IF_COND_NODE: return visitIfCondNode((IfCondNode) node);
+      case IF_ELSE_NODE: return visitIfElseNode((IfElseNode) node);
+      case SWITCH_NODE: return visitSwitchNode((SwitchNode) node);
+      case SWITCH_CASE_NODE: return visitSwitchCaseNode((SwitchCaseNode) node);
+      case SWITCH_DEFAULT_NODE: return visitSwitchDefaultNode((SwitchDefaultNode) node);
+      case FOR_NODE: return visitForNode((ForNode) node);
+      case FOR_NONEMPTY_NODE: return visitForNonemptyNode((ForNonemptyNode) node);
+      case CALL_BASIC_NODE: return visitCallBasicNode((CallBasicNode) node);
+      case CALL_DELEGATE_NODE: return visitCallDelegateNode((CallDelegateNode) node);
+      case CALL_PARAM_VALUE_NODE: return visitCallParamValueNode((CallParamValueNode) node);
+      case CALL_PARAM_CONTENT_NODE: return visitCallParamContentNode((CallParamContentNode) node);
+      case HTML_COMMENT_NODE: return visitHtmlCommentNode((HtmlCommentNode) node);
+      case HTML_CLOSE_TAG_NODE: return visitHtmlCloseTagNode((HtmlCloseTagNode) node);
+      case HTML_OPEN_TAG_NODE: return visitHtmlOpenTagNode((HtmlOpenTagNode) node);
+      case HTML_ATTRIBUTE_NODE: return visitHtmlAttributeNode((HtmlAttributeNode) node);
+      case HTML_ATTRIBUTE_VALUE_NODE: return visitHtmlAttributeValueNode((HtmlAttributeValueNode) node);
+      case KEY_NODE: return visitKeyNode((KeyNode) node);
+      case SKIP_NODE: return visitSkipNode((SkipNode) node);
+      case VE_LOG_NODE: return visitVeLogNode((VeLogNode) node);
+      case LOG_NODE: return visitLogNode((LogNode) node);
+      case DEBUGGER_NODE: return visitDebuggerNode((DebuggerNode) node);
+      case EXTERN_NODE: return visitExternNode((ExternNode) node);
+      case JAVA_IMPL_NODE: return visitJavaImplNode((JavaImplNode) node);
+      case JS_IMPL_NODE: return visitJsImplNode((JsImplNode) node);
+      default: return visitSoyNode(node);
     }
-    return visitSoyNode(node);
   }
 
   // -----------------------------------------------------------------------------------------------
