@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -37,6 +38,11 @@ final class CommandLineError extends Error {
   @Override
   public synchronized Throwable fillInStackTrace() {
     return this; // no stack trace
+  }
+
+  @Override
+  public String getMessage() {
+    return super.getMessage();
   }
 
   @SuppressWarnings("OverrideThrowableToString") // we want to override the default formatting.
