@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -69,21 +70,22 @@ final class InsertWordBreaksDirective
   @Override
   @Nonnull
   public SanitizedContent.ContentKind getContentKind() {
-    // This directive expects HTML as input and produces HTML as output.
     return SanitizedContent.ContentKind.HTML;
   }
 
   @Override
   public SoyValue applyForJava(SoyValue value, List<SoyValue> args) {
+    int maxCharsBetweenWordBreaks = parseMaxChars(args);
+    return BasicDirectivesRuntime.insertWordBreaks(value, maxCharsBetweenWordBreaks);
+  }
 
-    int maxCharsBetweenWordBreaks;
+  private int parseMaxChars(List<SoyValue> args) {
     try {
-      maxCharsBetweenWordBreaks = args.get(0).integerValue();
+      return args.get(0).integerValue();
     } catch (SoyDataException sde) {
       throw new IllegalArgumentException(
           "Could not parse 'insertWordBreaks' parameter as integer.", sde);
     }
-    return BasicDirectivesRuntime.insertWordBreaks(value, maxCharsBetweenWordBreaks);
   }
 
   private static final class JbcSrcMethods {
@@ -119,7 +121,6 @@ final class InsertWordBreaksDirective
 
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
-
     return new JsExpr(
         "soy.$$insertWordBreaks(" + value.getText() + ", " + args.get(0).getText() + ")",
         Integer.MAX_VALUE);
