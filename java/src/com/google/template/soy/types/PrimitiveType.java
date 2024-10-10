@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -26,16 +27,12 @@ public abstract class PrimitiveType extends SoyType {
 
   @Override
   public boolean equals(Object other) {
-    if (other == null) {
-      return false;
-    }
-    return other.getClass() == this.getClass();
+    return this == other || (other instanceof PrimitiveType);
   }
 
   @Override
   public int hashCode() {
-    // All instances of a given primitive type are considered equal.
-    return this.getClass().hashCode();
+    return getKind().hashCode(); // Use getKind() for hashCode to reduce collisions
   }
 
   @Override
