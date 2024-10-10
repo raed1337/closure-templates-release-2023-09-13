@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -46,12 +47,16 @@ final class EnforceExperimentalFeaturesPass implements CompilerFilePass {
   private final ErrorReporter reporter;
 
   EnforceExperimentalFeaturesPass(ImmutableSet<String> features, ErrorReporter reporter) {
-    this.features = checkNotNull(features);
-    this.reporter = checkNotNull(reporter);
+    this.features = checkNotNull(features, "Features cannot be null.");
+    this.reporter = checkNotNull(reporter, "Reporter cannot be null.");
   }
 
   @Override
   public void run(SoyFileNode file, IdGenerator nodeIdGen) {
+    validateExperimentalFeatures();
+  }
+
+  private void validateExperimentalFeatures() {
     if (!ALL_EXPERIMENTAL_FEATURES.containsAll(features)) {
       reporter.report(
           SourceLocation.UNKNOWN,
