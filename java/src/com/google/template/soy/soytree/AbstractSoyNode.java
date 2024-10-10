@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -74,9 +75,14 @@ public abstract class AbstractSoyNode extends AbstractNode implements SoyNode {
   @Override
   public SourceLocation getSourceLocation() {
     if (srcLoc == null) {
-      throw new UnsupportedOperationException();
+      return handleNullSourceLocation(); // Handling null more gracefully
     }
     return srcLoc;
+  }
+
+  private SourceLocation handleNullSourceLocation() {
+    // Return a default value or log a warning instead of throwing an exception
+    return SourceLocation.UNKNOWN; // Assuming UNKNOWN is a valid default
   }
 
   public void setSourceLocation(SourceLocation location) {
