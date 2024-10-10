@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -31,6 +32,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -63,7 +65,7 @@ public final class NumberListSortMethod
 
   // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
-    static final Method LIST_SORT_FN =
+    private static final Method LIST_SORT_FN =
         JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "numberListSort", List.class);
   }
 
