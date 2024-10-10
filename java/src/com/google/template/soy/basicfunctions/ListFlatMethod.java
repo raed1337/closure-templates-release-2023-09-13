@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2022 Google Inc.
  *
@@ -33,19 +34,19 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
 /**
- * Soy method for removing all duplicate elements from a list.
+ * Soy method for flattening a list.
  *
- * <p>Usage: {@code list.uniq()}
+ * <p>Usage: {@code list.flat()}
  */
 @SoyMethodSignature(
     name = "flat",
     baseType = "list<any>",
     value = {
-      // returnType is made intelligent in ResolveExpressionTypesPass
       @Signature(returnType = "list<?>"),
       @Signature(parameterTypes = "int", returnType = "list<?>")
     })
@@ -56,24 +57,19 @@ public class ListFlatMethod
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    if (args.size() == 1) {
-      return factory.callNamespaceFunction("soy", "soy.$$listFlat", args.get(0));
-    } else {
-      return factory.callNamespaceFunction("soy", "soy.$$listFlat", args.get(0), args.get(1));
-    }
+    return args.size() == 1
+        ? factory.callNamespaceFunction("soy", "soy.$$listFlat", args.get(0))
+        : factory.callNamespaceFunction("soy", "soy.$$listFlat", args.get(0), args.get(1));
   }
 
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
-    if (args.size() == 1) {
-      return factory.global("runtime.list_flat").call(args.get(0));
-    } else {
-      return factory.global("runtime.list_flat").call(args.get(0), args.get(1));
-    }
+    return args.size() == 1
+        ? factory.global("runtime.list_flat").call(args.get(0))
+        : factory.global("runtime.list_flat").call(args.get(0), args.get(1));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
     static final Method LIST_FLAT_FN =
         JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "listFlat", SoyList.class);
@@ -85,10 +81,8 @@ public class ListFlatMethod
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    if (args.size() == 1) {
-      return factory.callStaticMethod(Methods.LIST_FLAT_FN, args.get(0));
-    } else {
-      return factory.callStaticMethod(Methods.LIST_FLAT_ARG1_FN, args.get(0), args.get(1));
-    }
+    return args.size() == 1
+        ? factory.callStaticMethod(Methods.LIST_FLAT_FN, args.get(0))
+        : factory.callStaticMethod(Methods.LIST_FLAT_ARG1_FN, args.get(0), args.get(1));
   }
 }
