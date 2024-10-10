@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -32,6 +33,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyMethodSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -44,12 +46,12 @@ import java.util.List;
 public final class MapEntriesMethod
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
 
+  private static final Method MAP_ENTRIES_FN =
+      JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "mapEntries", SoyMap.class);
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    // TODO(lukes) this could be callModuleFunction but other parts of soy don't generate aliased
-    // requires so we can't generate one here without create a 'multiple require' error
-    // this could be handled via more clever require handling in the compiler.
     return factory.callNamespaceFunction("soy.map", "soy.map.$$getMapEntries", args.get(0));
   }
 
@@ -59,15 +61,9 @@ public final class MapEntriesMethod
     return factory.global("runtime.map_entries").call(args.get(0));
   }
 
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method MAP_ENTRIES_FN =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "mapEntries", SoyMap.class);
-  }
-
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
-    return factory.callStaticMethod(Methods.MAP_ENTRIES_FN, args.get(0));
+    return factory.callStaticMethod(MAP_ENTRIES_FN, args.get(0));
   }
 }
