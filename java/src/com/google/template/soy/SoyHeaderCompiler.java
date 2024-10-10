@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -85,56 +86,45 @@ final class SoyHeaderCompiler extends AbstractSoyCompiler {
     CompilationUnit unit =
         TemplateMetadataSerializer.compilationUnitFromFileSet(
             result.fileSet(), result.templateRegistry());
-    // some small tests revealed about a 5x compression ratio.  This is likely due to template names
-    // sharing common prefixes and repeated parameter names and types.
-    try (OutputStream os =
-        new GZIPOutputStream(new FileOutputStream(output), OUTPUT_STREAM_BUFFER_SIZE)) {
+    
+    writeOutput(unit, output);
+    
+    if (cssMetadataOutput != null) {
+      writeCssMetadata(result);
+    }
+    
+    if (templateCallMetadataOutput != null) {
+      writeTemplateCallMetadata(result);
+    }
+  }
+
+  private void writeOutput(CompilationUnit unit, File outputFile) throws IOException {
+    try (OutputStream os = new GZIPOutputStream(new FileOutputStream(outputFile), OUTPUT_STREAM_BUFFER_SIZE)) {
       unit.writeTo(os);
     }
-    if (cssMetadataOutput != null) {
-      try (OutputStream os =
-          new GZIPOutputStream(
-              new FileOutputStream(cssMetadataOutput), OUTPUT_STREAM_BUFFER_SIZE)) {
-        calculateCssMetadata(result.fileSet(), result.cssRegistry()).writeTo(os);
-      }
+  }
+
+  private void writeCssMetadata(SoyFileSet.HeaderResult result) throws IOException {
+    try (OutputStream os = new GZIPOutputStream(new FileOutputStream(cssMetadataOutput), OUTPUT_STREAM_BUFFER_SIZE)) {
+      calculateCssMetadata(result.fileSet(), result.cssRegistry()).writeTo(os);
     }
-    if (templateCallMetadataOutput != null) {
-      try (OutputStream os =
-          new GZIPOutputStream(
-              new FileOutputStream(templateCallMetadataOutput), OUTPUT_STREAM_BUFFER_SIZE)) {
-        calculateTemplateCallMetadata(result.fileSet()).writeTo(os);
-      }
+  }
+
+  private void writeTemplateCallMetadata(SoyFileSet.HeaderResult result) throws IOException {
+    try (OutputStream os = new GZIPOutputStream(new FileOutputStream(templateCallMetadataOutput), OUTPUT_STREAM_BUFFER_SIZE)) {
+      calculateTemplateCallMetadata(result.fileSet()).writeTo(os);
     }
   }
 
   private static CssMetadata calculateCssMetadata(SoyFileSetNode fileSet, CssRegistry cssRegistry) {
-    // We need to remove duplicates and preserve order, so collect into maps first
     Set<String> requiredCssNames = new LinkedHashSet<>();
     Set<String> requiredCssPaths = new LinkedHashSet<>();
     Set<String> cssNamesFromPath = new LinkedHashSet<>();
-    for (SoyFileNode file : fileSet.getChildren()) {
-      requiredCssNames.addAll(file.getRequiredCssNamespaces());
-      for (SoyFileNode.CssPath cssPath : file.getAllRequiredCssPaths()) {
-        // This should always be present due to the ValidateRequiredCssPass, but that pass isn't
-        // run in the open source release.
-        cssPath
-            .resolvedPath()
-            .ifPresent(
-                path -> {
-                  requiredCssPaths.add(path);
-                  if (cssPath.getNamespace() != null) {
-                    cssNamesFromPath.add(cssPath.getNamespace());
-                  }
-                });
-      }
-      for (TemplateNode template : file.getTemplates()) {
-        requiredCssNames.addAll(template.getRequiredCssNamespaces());
-      }
-    }
-    Set<String> cssClassNames = new LinkedHashSet<>();
-    SoyTreeUtils.allFunctionInvocations(fileSet, BuiltinFunction.CSS)
-        .forEach(
-            fn -> cssClassNames.add(((StringNode) Iterables.getLast(fn.getChildren())).getValue()));
+    
+    collectCssNamesAndPaths(fileSet, requiredCssNames, requiredCssPaths, cssNamesFromPath);
+
+    Set<String> cssClassNames = collectCssClassNames(fileSet);
+    
     return CssMetadata.newBuilder()
         .addAllRequireCssNames(requiredCssNames)
         .addAllRequireCssNames(cssNamesFromPath)
@@ -142,16 +132,37 @@ final class SoyHeaderCompiler extends AbstractSoyCompiler {
         .addAllRequireCssPathsFromNamespaces(
             requiredCssNames.stream()
                 .map(namespace -> cssRegistry.symbolToFilePath().get(namespace))
-                // This shouldn't really happen due to the ValidateRequiredCssPass but that pass
-                // doesn't run in the open source build
                 .filter(Objects::nonNull)
                 .collect(toList()))
         .addAllCssClassNames(cssClassNames)
         .build();
   }
 
-  private static TemplateCallMetadata calculateTemplateCallMetadata(SoyFileSetNode fileSet) {
+  private static void collectCssNamesAndPaths(SoyFileSetNode fileSet, Set<String> requiredCssNames, Set<String> requiredCssPaths, Set<String> cssNamesFromPath) {
+    for (SoyFileNode file : fileSet.getChildren()) {
+      requiredCssNames.addAll(file.getRequiredCssNamespaces());
+      for (SoyFileNode.CssPath cssPath : file.getAllRequiredCssPaths()) {
+        cssPath.resolvedPath().ifPresent(path -> {
+          requiredCssPaths.add(path);
+          if (cssPath.getNamespace() != null) {
+            cssNamesFromPath.add(cssPath.getNamespace());
+          }
+        });
+      }
+      for (TemplateNode template : file.getTemplates()) {
+        requiredCssNames.addAll(template.getRequiredCssNamespaces());
+      }
+    }
+  }
 
+  private static Set<String> collectCssClassNames(SoyFileSetNode fileSet) {
+    Set<String> cssClassNames = new LinkedHashSet<>();
+    SoyTreeUtils.allFunctionInvocations(fileSet, BuiltinFunction.CSS)
+        .forEach(fn -> cssClassNames.add(((StringNode) Iterables.getLast(fn.getChildren())).getValue()));
+    return cssClassNames;
+  }
+
+  private static TemplateCallMetadata calculateTemplateCallMetadata(SoyFileSetNode fileSet) {
     TemplateCallMetadata.Builder templateCallMetadata = TemplateCallMetadata.newBuilder();
 
     for (SoyFileNode file : fileSet.getChildren()) {
