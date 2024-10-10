@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2021 Google Inc.
  *
@@ -62,29 +63,36 @@ public class FileDependencyOrderPass implements CompilerFileSetPass {
       return Result.CONTINUE;
     }
 
-    Map<String, SoyFileNode> filesByPath =
-        files.stream().collect(toImmutableMap(fn -> fn.getFilePath().path(), fn -> fn));
-
+    Map<String, SoyFileNode> filesByPath = createFilesByPathMap(files);
     TopoSort<SoyFileNode> sorter = new TopoSort<>();
+    return sortFiles(files, filesByPath, sorter);
+  }
+
+  private Map<String, SoyFileNode> createFilesByPathMap(ImmutableList<SoyFileNode> files) {
+    return files.stream().collect(toImmutableMap(fn -> fn.getFilePath().path(), fn -> fn));
+  }
+
+  private Result sortFiles(ImmutableList<SoyFileNode> files, Map<String, SoyFileNode> filesByPath, TopoSort<SoyFileNode> sorter) {
     try {
-      ImmutableList<SoyFileNode> sorted =
-          sorter.sort(
-              files,
-              fn ->
-                  fn.getImports().stream()
-                      .map(ImportNode::getPath)
-                      .map(filesByPath::get)
-                      .filter(Objects::nonNull)
-                      .collect(Collectors.toSet()));
+      ImmutableList<SoyFileNode> sorted = sorter.sort(
+          files,
+          fn -> fn.getImports().stream()
+              .map(ImportNode::getPath)
+              .map(filesByPath::get)
+              .filter(Objects::nonNull)
+              .collect(Collectors.toSet()));
       stateSetter.accept(sorted);
       return Result.CONTINUE;
     } catch (NoSuchElementException e) {
-      String cycleText =
-          sorter.getCyclicKeys().stream()
-              .map(fn -> fn.getFilePath().path())
-              .collect(joining("\n--> "));
-      errorReporter.report(SourceLocation.UNKNOWN, CYCLE, cycleText);
+      handleCycles(sorter);
       return Result.STOP;
     }
+  }
+
+  private void handleCycles(TopoSort<SoyFileNode> sorter) {
+    String cycleText = sorter.getCyclicKeys().stream()
+        .map(fn -> fn.getFilePath().path())
+        .collect(joining("\n--> "));
+    errorReporter.report(SourceLocation.UNKNOWN, CYCLE, cycleText);
   }
 }
