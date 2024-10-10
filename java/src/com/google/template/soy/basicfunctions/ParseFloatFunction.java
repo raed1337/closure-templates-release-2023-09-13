@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -31,6 +32,7 @@ import com.google.template.soy.plugin.python.restricted.SoyPythonSourceFunction;
 import com.google.template.soy.shared.restricted.Signature;
 import com.google.template.soy.shared.restricted.SoyFunctionSignature;
 import com.google.template.soy.shared.restricted.SoyPureFunction;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -55,11 +57,15 @@ import java.util.List;
             returnType = "float"))
 final class ParseFloatFunction
     implements SoyJavaSourceFunction, SoyJavaScriptSourceFunction, SoyPythonSourceFunction {
+
+  private static final class Methods {
+    static final Method PARSE_FLOAT =
+        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "parseFloat", String.class);
+  }
+
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
-    // TODO(user): parseFloat('123abc') == 123; JS parseFloat tries to parse as much as it can.
-    // That means parseFloat('1.1.1') == 1.1
     return factory.callNamespaceFunction("soy", "soy.$$parseFloat", args.get(0));
   }
 
@@ -67,12 +73,6 @@ final class ParseFloatFunction
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
     return factory.global("runtime.parse_float").call(args.get(0));
-  }
-
-  // lazy singleton pattern, allows other backends to avoid the work.
-  private static final class Methods {
-    static final Method PARSE_FLOAT =
-        JavaValueFactory.createMethod(BasicFunctionsRuntime.class, "parseFloat", String.class);
   }
 
   @Override
