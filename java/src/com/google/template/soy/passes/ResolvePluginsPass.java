@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -53,71 +54,56 @@ final class ResolvePluginsPass implements CompilerFilePass {
 
   private class Visitor extends LocalVariablesNodeVisitor.NodeVisitor {
 
-    private final LocalVariablesNodeVisitor.ExprVisitor exprVisitor =
-        new LocalVariablesNodeVisitor.ExprVisitor() {
-          @Override
-          protected void visitFunctionNode(FunctionNode node) {
-            visitChildren(node);
+    private final LocalVariablesNodeVisitor.ExprVisitor exprVisitor = new LocalVariablesNodeVisitor.ExprVisitor() {
+      @Override
+      protected void visitFunctionNode(FunctionNode node) {
+        visitChildren(node);
+        if (node.isResolved()) {
+          return;
+        }
+        if (!node.hasStaticName()) {
+          setSoyFunctionForNameExpr(node);
+          return;
+        }
+        handleStaticFunctionName(node);
+      }
 
-            if (node.isResolved()) {
-              return;
-            }
+      private void handleStaticFunctionName(FunctionNode node) {
+        VarDefn varDefn = getLocalVariables().lookup(node.getStaticFunctionName());
+        boolean varDefnIsTemplate = varDefn != null && varDefn.kind() == VarDefn.Kind.TEMPLATE;
 
-            // If the function name is an expression then attempt to set the soy function field.
-            if (!node.hasStaticName()) {
-              setSoyFunctionForNameExpr(node);
-              return;
-            }
+        if (varDefnIsTemplate && trySetFunction(node)) {
+          return;
+        }
 
-            // If the name of the function is resolvable to a var def then replace the function
-            // identifier with a function name expression. This is the case if the function is:
-            //   1. element composition of a local or imported template
-            //   2. a local or imported extern
-            //   3. proto init (top-level message only)
-            VarDefn varDefn = getLocalVariables().lookup(node.getStaticFunctionName());
-            boolean varDefnIsTemplate = varDefn != null && varDefn.kind() == VarDefn.Kind.TEMPLATE;
+        if (varDefn != null) {
+          replaceWithFunctionNameExpression(node, varDefn);
+          return;
+        }
 
-            // Precedence 1: Global/plug-in function, special case only when name collides with a
-            //   local template name.
-            // Due to many existing collisions between global/plug-in functions and template
-            // names, we need to resolve such functions with higher precedence than template
-            // symbols.
-            if (varDefnIsTemplate && trySetFunction(node)) {
-              return;
-            }
+        trySetFunction(node);
+      }
 
-            // Precedence 2: In-scope symbols, e.g. extern, template composition, proto init.
-            if (varDefn != null) {
-              VarRefNode functionRef =
-                  new VarRefNode(
-                      node.getStaticFunctionName(), node.getIdentifier().location(), varDefn);
-              FunctionNode newFunct =
-                  CallableExprBuilder.builder(node)
-                      .setIdentifier(null)
-                      .setFunctionExpr(functionRef)
-                      .buildFunction();
-              // Set the soy function field to "resolve" the function.
-              setSoyFunctionForNameExpr(newFunct);
-              node.getParent().replaceChild(node, newFunct);
-              return;
-            }
+      private void replaceWithFunctionNameExpression(FunctionNode node, VarDefn varDefn) {
+        VarRefNode functionRef = new VarRefNode(node.getStaticFunctionName(), node.getIdentifier().location(), varDefn);
+        FunctionNode newFunct = CallableExprBuilder.builder(node)
+            .setIdentifier(null)
+            .setFunctionExpr(functionRef)
+            .buildFunction();
+        setSoyFunctionForNameExpr(newFunct);
+        node.getParent().replaceChild(node, newFunct);
+      }
 
-            // Precedence 3: Global/plug-in function.
-            trySetFunction(node);
-          }
-
-          @CanIgnoreReturnValue
-          private boolean trySetFunction(FunctionNode node) {
-            Object impl =
-                resolver.lookupSoyFunction(
-                    node.getStaticFunctionName(), node.numChildren(), node.getSourceLocation());
-            if (impl != null) {
-              node.setSoyFunction(impl);
-              return true;
-            }
-            return false;
-          }
-        };
+      @CanIgnoreReturnValue
+      private boolean trySetFunction(FunctionNode node) {
+        Object impl = resolver.lookupSoyFunction(node.getStaticFunctionName(), node.numChildren(), node.getSourceLocation());
+        if (impl != null) {
+          node.setSoyFunction(impl);
+          return true;
+        }
+        return false;
+      }
+    };
 
     @Override
     protected ExprVisitor getExprVisitor() {
@@ -128,27 +114,15 @@ final class ResolvePluginsPass implements CompilerFilePass {
     protected void visitPrintDirectiveNode(PrintDirectiveNode directiveNode) {
       super.visitPrintDirectiveNode(directiveNode);
       String name = directiveNode.getName();
-
-      // If a template uses a print directive that doesn't exist, check if a function with the same
-      // name does exist. This is likely a print directive being migrated with
-      // SoyFunctionSignature#callableAsDeprecatedPrintDirective.
-      Optional<SoySourceFunction> aliasedFunction =
-          resolver.getFunctionCallableAsPrintDirective(name, directiveNode.getSourceLocation());
+      Optional<SoySourceFunction> aliasedFunction = resolver.getFunctionCallableAsPrintDirective(name, directiveNode.getSourceLocation());
       if (aliasedFunction.isPresent()) {
         directiveNode.setPrintDirectiveFunction(aliasedFunction.get());
       } else {
-        directiveNode.setPrintDirective(
-            resolver.lookupPrintDirective(
-                name, directiveNode.getExprList().size(), directiveNode.getSourceLocation()));
+        directiveNode.setPrintDirective(resolver.lookupPrintDirective(name, directiveNode.getExprList().size(), directiveNode.getSourceLocation()));
       }
     }
   }
 
-  /**
-   * For a function without a static name, calls {@link FunctionNode#setSoyFunction} with an
-   * appropriate value based on the function's name expression. Setting the soy function makes
-   * various code constructs more convenient (switch statements, visitors, etc).
-   */
   static void setSoyFunctionForNameExpr(FunctionNode function) {
     Object fct = getSoyFunctionForExpr(function.getNameExpr());
     if (fct != null) {
@@ -157,9 +131,7 @@ final class ResolvePluginsPass implements CompilerFilePass {
   }
 
   private static Object getSoyFunctionForExpr(ExprNode expr) {
-    if (expr.getKind() == Kind.VAR_REF_NODE
-        && ((VarRefNode) expr).hasType()
-        && expr.getType().getKind() == SoyType.Kind.PROTO_TYPE) {
+    if (expr.getKind() == Kind.VAR_REF_NODE && ((VarRefNode) expr).hasType() && expr.getType().getKind() == SoyType.Kind.PROTO_TYPE) {
       return BuiltinFunction.PROTO_INIT;
     }
     return null;
