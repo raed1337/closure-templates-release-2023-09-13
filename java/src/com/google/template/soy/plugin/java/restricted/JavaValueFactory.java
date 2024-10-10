@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -50,8 +51,7 @@ public abstract class JavaValueFactory {
    * instance at runtime. In the SoySauce backend, instances are registered in the
    * SoySauce.Renderer, in the Tofu backend, instances are registered in the SoyTofu.Renderer.
    */
-  public abstract JavaValue callInstanceMethod(
-      MethodSignature methodSignature, JavaValue... params);
+  public abstract JavaValue callInstanceMethod(MethodSignature methodSignature, JavaValue... params);
 
   /**
    * Returns a JavaValue that corresponds to a list containing each of the values. The values will
@@ -83,22 +83,27 @@ public abstract class JavaValueFactory {
     try {
       return clazz.getMethod(methodName, params);
     } catch (NoSuchMethodException e) {
-      if (params.length == 0) {
-        throw new IllegalArgumentException(
-            String.format(
-                "No such public method: %s.%s (with no parameters)", clazz.getName(), methodName),
-            e);
-      } else {
-        throw new IllegalArgumentException(
-            String.format(
-                "No such public method: %s.%s(%s)",
-                clazz.getName(),
-                methodName,
-                Arrays.stream(params).map(Class::getName).collect(Collectors.joining(","))),
-            e);
-      }
+      handleNoSuchMethodException(clazz, methodName, params, e);
     } catch (SecurityException e) {
       throw new IllegalArgumentException(e);
+    }
+    return null; // Unreachable but required for compilation
+  }
+
+  private static void handleNoSuchMethodException(Class<?> clazz, String methodName, Class<?>[] params, NoSuchMethodException e) {
+    if (params.length == 0) {
+      throw new IllegalArgumentException(
+          String.format(
+              "No such public method: %s.%s (with no parameters)", clazz.getName(), methodName),
+          e);
+    } else {
+      throw new IllegalArgumentException(
+          String.format(
+              "No such public method: %s.%s(%s)",
+              clazz.getName(),
+              methodName,
+              Arrays.stream(params).map(Class::getName).collect(Collectors.joining(","))),
+          e);
     }
   }
 }
