@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -65,50 +66,15 @@ public abstract class SoyRuntimeType {
   @Nullable
   private static PrimitiveSoyType unboxedTypeImpl(SoyType soyType) {
     switch (soyType.getKind()) {
-      case BOOL:
-        return new PrimitiveSoyType(BoolType.getInstance(), Type.BOOLEAN_TYPE);
-      case STRING:
-        return new PrimitiveSoyType(StringType.getInstance(), BytecodeUtils.STRING_TYPE);
-      case INT:
-        return new PrimitiveSoyType(IntType.getInstance(), Type.LONG_TYPE);
-      case FLOAT:
-        return new PrimitiveSoyType(FloatType.getInstance(), Type.DOUBLE_TYPE);
-      case PROTO_ENUM:
-        return new PrimitiveSoyType(soyType, Type.LONG_TYPE);
-      case MESSAGE:
-        return new PrimitiveSoyType(soyType, BytecodeUtils.MESSAGE_TYPE);
-      case PROTO:
-        return new PrimitiveSoyType(soyType, protoType(((SoyProtoType) soyType).getDescriptor()));
-      case LIST:
-        // We have some minor support for unboxed lists
-        return new PrimitiveSoyType(soyType, BytecodeUtils.LIST_TYPE);
-      case UNION:
-        {
-          // unions generally don't have a unique unboxed runtime type except in 2 special cases
-          // 1. nullable reference types can be unboxed.
-          // 2. if all members of the union have the same runtimeType then we can use that
-          SoyType nonNullType = SoyTypes.removeNull(soyType);
-          if (!nonNullType.equals(soyType)) {
-            return null;
-          }
-          PrimitiveSoyType memberType = null;
-          for (SoyType member : ((UnionType) soyType).getMembers()) {
-            PrimitiveSoyType primitive = (PrimitiveSoyType) getUnboxedType(member).orElse(null);
-            if (primitive == null) {
-              return null;
-            }
-            if (memberType == null) {
-              memberType = primitive;
-            } else if (!memberType.runtimeType().equals(primitive.runtimeType())
-                || !memberType.box().runtimeType().equals(primitive.box().runtimeType())) {
-              return null;
-            }
-          }
-          if (memberType != null) {
-            return new PrimitiveSoyType(soyType, memberType.runtimeType());
-          }
-        }
-        // fall-through
+      case BOOL: return createPrimitiveSoyType(BoolType.getInstance(), Type.BOOLEAN_TYPE);
+      case STRING: return createPrimitiveSoyType(StringType.getInstance(), BytecodeUtils.STRING_TYPE);
+      case INT: return createPrimitiveSoyType(IntType.getInstance(), Type.LONG_TYPE);
+      case FLOAT: return createPrimitiveSoyType(FloatType.getInstance(), Type.DOUBLE_TYPE);
+      case PROTO_ENUM: return createPrimitiveSoyType(soyType, Type.LONG_TYPE);
+      case MESSAGE: return createPrimitiveSoyType(soyType, BytecodeUtils.MESSAGE_TYPE);
+      case PROTO: return createPrimitiveSoyType(soyType, protoType(((SoyProtoType) soyType).getDescriptor()));
+      case LIST: return createPrimitiveSoyType(soyType, BytecodeUtils.LIST_TYPE);
+      case UNION: return handleUnionType(soyType);
       case NULL:
       case UNDEFINED:
       case ATTRIBUTES:
@@ -126,7 +92,6 @@ public abstract class SoyRuntimeType {
       case VE_DATA:
       case UNKNOWN:
       case ANY:
-        // no unique unboxed representation
         return null;
       case CSS_TYPE:
       case CSS_MODULE:
@@ -137,11 +102,45 @@ public abstract class SoyRuntimeType {
       case TEMPLATE_TYPE:
       case TEMPLATE_MODULE:
       case FUNCTION:
+        throw new AssertionError("can't map " + soyType + " to an unboxed soy runtime type");
     }
-    throw new AssertionError("can't map " + soyType + " to an unboxed soy runtime type");
+    return null; // Fallback for safety
   }
 
-  /** Returns the runtime type for the message correspdoning to the given descriptor.. */
+  private static PrimitiveSoyType createPrimitiveSoyType(SoyType soyType, Type runtimeType) {
+    return new PrimitiveSoyType(soyType, runtimeType);
+  }
+
+  @Nullable
+  private static PrimitiveSoyType handleUnionType(SoyType soyType) {
+    SoyType nonNullType = SoyTypes.removeNull(soyType);
+    if (!nonNullType.equals(soyType)) {
+      return null;
+    }
+    PrimitiveSoyType memberType = null;
+    for (SoyType member : ((UnionType) soyType).getMembers()) {
+      PrimitiveSoyType primitive = (PrimitiveSoyType) getUnboxedType(member).orElse(null);
+      if (primitive == null) {
+        return null;
+      }
+      memberType = updateMemberType(memberType, primitive);
+    }
+    return memberType != null ? new PrimitiveSoyType(soyType, memberType.runtimeType()) : null;
+  }
+
+  @Nullable
+  private static PrimitiveSoyType updateMemberType(PrimitiveSoyType memberType, PrimitiveSoyType primitive) {
+    if (memberType == null) {
+      return primitive;
+    }
+    if (!memberType.runtimeType().equals(primitive.runtimeType())
+        || !memberType.box().runtimeType().equals(primitive.box().runtimeType())) {
+      return null;
+    }
+    return memberType;
+  }
+
+  /** Returns the runtime type for the message corresponding to the given descriptor. */
   public static Type protoType(Descriptor descriptor) {
     return BytecodeUtils.getTypeForClassName(JavaQualifiedNames.getClassName(descriptor));
   }
@@ -186,15 +185,6 @@ public abstract class SoyRuntimeType {
             && type.isAssignableFromStrict(SoyTypes.removeNull(soyType)));
   }
 
-  /**
-   * Returns {@code true} if the expression is known to be a string at compile time.
-   *
-   * <p>Note: If this returns {@code false}, there is no guarantee that this expression is
-   * <em>not</em> a string, just that it is not <em>known</em> to be a string at compile time. For
-   * example, {@code $b ? 'hello' : 2} is a valid soy expression that will be typed as 'any' at
-   * compile time. So {@link #isKnownString()} on that soy expression will return false even though
-   * it may in fact be a string.
-   */
   public boolean isKnownString() {
     return soyType.getKind() == Kind.STRING;
   }
@@ -204,12 +194,8 @@ public abstract class SoyRuntimeType {
       return true;
     }
     if (soyType.getKind() == Kind.UNION) {
-      for (SoyType member : ((UnionType) soyType).getMembers()) {
-        if (!member.getKind().isKnownStringOrSanitizedContent()) {
-          return false;
-        }
-      }
-      return true;
+      return ((UnionType) soyType).getMembers().stream()
+          .allMatch(member -> member.getKind().isKnownStringOrSanitizedContent());
     }
     return false;
   }
@@ -218,22 +204,10 @@ public abstract class SoyRuntimeType {
     return soyType.getKind().isKnownSanitizedContent();
   }
 
-  /**
-   * Returns {@code true} if the expression is known to be an int at compile time.
-   *
-   * <p>Note: If this returns {@code false}, there is no guarantee that this expression is
-   * <em>not</em> a int, just that it is not <em>known</em> to be a int at compile time.
-   */
   public boolean isKnownInt() {
     return soyType.getKind() == Kind.INT || SoyTypes.isKindOrUnionOfKind(soyType, Kind.PROTO_ENUM);
   }
 
-  /**
-   * Returns {@code true} if the expression is known to be a float at compile time.
-   *
-   * <p>Note: If this returns {@code false}, there is no guarantee that this expression is
-   * <em>not</em> a float, just that it is not <em>known</em> to be a float at compile time.
-   */
   public final boolean isKnownFloat() {
     return soyType.getKind() == Kind.FLOAT;
   }
@@ -273,41 +247,21 @@ public abstract class SoyRuntimeType {
     return SoyTypes.isKindOrUnionOfKind(soyType, Kind.PROTO);
   }
 
-  /**
-   * Returns {@code true} if the expression is known to be an {@linkplain #isKnownInt() int} or a
-   * {@linkplain #isKnownFloat() float} at compile time.
-   *
-   * <p>Note: If this returns {@code false}, there is no guarantee that this expression is
-   * <em>not</em> a number, just that it is not <em>known</em> to be a number at compile time.
-   */
   public final boolean isKnownNumber() {
     return SoyTypes.NUMBER_TYPE.isAssignableFromStrict(soyType);
   }
 
   public final SoyRuntimeType asNonSoyNullish() {
-    // Use tryRemoveNull instead of removeNull because there are times where the jbcsrc backend
-    // infers stronger types than Soy proper (e.g. for `@state` params initialized to `null` but
-    // declared with a different type)
     return withNewSoyType(SoyTypes.tryRemoveNull(soyType));
   }
 
   public final SoyRuntimeType asSoyNullish() {
-    // Use tryRemoveNull instead of removeNull because there are times where the jbcsrc backend
-    // infers stronger types than Soy proper (e.g. for `@state` params initialized to `null` but
-    // declared with a different type)
     return withNewSoyType(SoyTypes.makeNullable(soyType));
   }
 
   private SoyRuntimeType withNewSoyType(SoyType newSoyType) {
     if (newSoyType != soyType) {
-      if (isBoxed()) {
-        return getBoxedType(newSoyType);
-      } else {
-        // no need to check the return value. This is only used for adding/removing null.
-        // If we are a primitive type then there must be another primitive type that is the same
-        // but non-nullable (or nullable).
-        return getUnboxedType(newSoyType).get();
-      }
+      return isBoxed() ? getBoxedType(newSoyType) : getUnboxedType(newSoyType).orElse(this);
     }
     return this;
   }
@@ -315,21 +269,13 @@ public abstract class SoyRuntimeType {
   public abstract boolean isBoxed();
 
   public SoyRuntimeType box() {
-    if (isBoxed()) {
-      return this;
-    } else {
-      return getBoxedType(soyType());
-    }
+    return isBoxed() ? this : getBoxedType(soyType());
   }
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (!(o instanceof SoyRuntimeType)) {
-      return false;
-    }
+    if (this == o) return true;
+    if (!(o instanceof SoyRuntimeType)) return false;
     SoyRuntimeType that = (SoyRuntimeType) o;
     return Objects.equal(soyType, that.soyType)
         && Objects.equal(runtimeType, that.runtimeType)
@@ -359,6 +305,7 @@ public abstract class SoyRuntimeType {
   }
 
   private static final class BoxedSoyType extends SoyRuntimeType {
+
     BoxedSoyType(SoyType soyType, Type runtimeType) {
       super(soyType, runtimeType);
     }
