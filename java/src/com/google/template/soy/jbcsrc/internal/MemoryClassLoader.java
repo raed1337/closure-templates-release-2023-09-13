@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -22,18 +23,9 @@ import com.google.common.collect.ImmutableMap;
 /** A {@link ClassLoader} that can load classes from a configured set of {@code byte[]}s. */
 public final class MemoryClassLoader extends AbstractMemoryClassLoader {
   static {
-    // Since we only override findClass(), we can call this method to get fine grained locking
-    // support with no additional work. Our superclass will lock all calls to findClass with a per
-    // class to load lock, so we will never see concurrent loads of a single class.
-    // See http://docs.oracle.com/javase/7/docs/technotes/guides/lang/cl-mt.html
     ClassLoader.registerAsParallelCapable();
   }
 
-  /**
-   * We store all the classes in this map and rely on normal classloading resolution.
-   *
-   * <p>The classloader will request classes via {@link #findClass(String)} as loading proceeds.
-   */
   private final ImmutableMap<String, ClassData> classesByName;
 
   public MemoryClassLoader(Iterable<ClassData> classes) {
@@ -47,14 +39,22 @@ public final class MemoryClassLoader extends AbstractMemoryClassLoader {
 
   @Override
   protected ClassData getClassData(String name) {
+    return findClassData(name);
+  }
+
+  private ClassData findClassData(String name) {
     return classesByName.get(name);
   }
 
   private static ImmutableMap<String, ClassData> indexByClassname(Iterable<ClassData> classes) {
     ImmutableMap.Builder<String, ClassData> builder = ImmutableMap.builder();
     for (ClassData classData : classes) {
-      builder.put(classData.type().className(), classData);
+      addClassDataToBuilder(builder, classData);
     }
     return builder.build();
+  }
+
+  private static void addClassDataToBuilder(ImmutableMap.Builder<String, ClassData> builder, ClassData classData) {
+    builder.put(classData.type().className(), classData);
   }
 }
