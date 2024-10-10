@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -117,35 +118,9 @@ public final class MsgPluralNode extends AbstractParentCommandNode<CaseOrDefault
       ExprNode expr,
       List<CommandTagAttribute> attributes,
       ErrorReporter errorReporter) {
-    int offset = 0;
-    SourceLocation phNameLocation = null;
-    String phName = null;
-    for (CommandTagAttribute attribute : attributes) {
-      switch (attribute.getName().identifier()) {
-        case "offset":
-          OptionalInt optionalOffset = attribute.valueAsOptionalInt(errorReporter);
-          if (optionalOffset.isPresent()) {
-            offset = optionalOffset.getAsInt();
-            if (offset <= 0) {
-              errorReporter.report(attribute.getValueLocation(), PLURAL_OFFSET_OUT_OF_BOUNDS);
-              offset = 0;
-            }
-          }
-          break;
-        case PHNAME_ATTR:
-          phNameLocation = attribute.getValueLocation();
-          phName = validatePlaceholderName(attribute.getValue(), phNameLocation, errorReporter);
-          break;
-        default:
-          errorReporter.report(
-              attribute.getName().location(),
-              CommandTagAttribute.UNSUPPORTED_ATTRIBUTE_KEY,
-              attribute.getName().identifier(),
-              "plural",
-              ImmutableSet.of("offset", PHNAME_ATTR));
-      }
-    }
-
+    int offset = processAttributes(attributes, errorReporter);
+    MessagePlaceholder placeholder = createPlaceholder(expr, attributes, errorReporter);
+    
     return new MsgPluralNode(
         id,
         location,
@@ -153,10 +128,38 @@ public final class MsgPluralNode extends AbstractParentCommandNode<CaseOrDefault
         new ExprRootNode(expr),
         attributes,
         offset,
-        (phName == null)
-            ? MessagePlaceholder.create(
-                genNaiveBaseNameForExpr(expr, FALLBACK_BASE_PLURAL_VAR_NAME))
-            : MessagePlaceholder.createWithUserSuppliedName(phName, phNameLocation));
+        placeholder);
+  }
+
+  private static int processAttributes(List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
+    int offset = 0;
+    for (CommandTagAttribute attribute : attributes) {
+      if ("offset".equals(attribute.getName().identifier())) {
+        OptionalInt optionalOffset = attribute.valueAsOptionalInt(errorReporter);
+        if (optionalOffset.isPresent()) {
+          offset = optionalOffset.getAsInt();
+          if (offset <= 0) {
+            errorReporter.report(attribute.getValueLocation(), PLURAL_OFFSET_OUT_OF_BOUNDS);
+            offset = 0;
+          }
+        }
+      }
+    }
+    return offset;
+  }
+
+  private static MessagePlaceholder createPlaceholder(ExprNode expr, List<CommandTagAttribute> attributes, ErrorReporter errorReporter) {
+    SourceLocation phNameLocation = null;
+    String phName = null;
+    for (CommandTagAttribute attribute : attributes) {
+      if (PHNAME_ATTR.equals(attribute.getName().identifier())) {
+        phNameLocation = attribute.getValueLocation();
+        phName = validatePlaceholderName(attribute.getValue(), phNameLocation, errorReporter);
+      }
+    }
+    return (phName == null)
+        ? MessagePlaceholder.create(genNaiveBaseNameForExpr(expr, FALLBACK_BASE_PLURAL_VAR_NAME))
+        : MessagePlaceholder.createWithUserSuppliedName(phName, phNameLocation);
   }
 
   /** The location of the {plural ...} tag. */
@@ -205,6 +208,10 @@ public final class MsgPluralNode extends AbstractParentCommandNode<CaseOrDefault
 
   @Override
   public String getCommandText() {
+    return buildCommandText();
+  }
+
+  private String buildCommandText() {
     StringBuilder builder = new StringBuilder(pluralExpr.toSourceString());
     if (offset > 0) {
       builder.append(" offset=\"").append(offset).append("\"");
