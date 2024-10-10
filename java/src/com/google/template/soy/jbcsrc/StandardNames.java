@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -18,6 +19,7 @@ package com.google.template.soy.jbcsrc;
 
 /** Constants for standard names used by the compiler. */
 final class StandardNames {
+
   static final String PARAMS = "$params";
   static final String IJ = "$ij";
   static final String COMPILED_TEMPLATE = "$template";
@@ -29,5 +31,7 @@ final class StandardNames {
   static final String CURRENT_PARAMS = "$currentParams";
   static final String STACK_FRAME = "$stackFrame";
 
-  private StandardNames() {}
+  private StandardNames() {
+    // Prevent instantiation
+  }
 }
