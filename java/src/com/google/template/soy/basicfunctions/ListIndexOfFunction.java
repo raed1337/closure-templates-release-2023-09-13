@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -74,7 +75,7 @@ public class ListIndexOfFunction
 
   // lazy singleton pattern, allows other backends to avoid the work.
   private static final class Methods {
-    static final Method LIST_CONTAINS_FN =
+    static final Method LIST_INDEX_OF_FN =
         JavaValueFactory.createMethod(
             BasicFunctionsRuntime.class,
             "listIndexOf",
@@ -87,9 +88,9 @@ public class ListIndexOfFunction
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(
-        Methods.LIST_CONTAINS_FN,
+        Methods.LIST_INDEX_OF_FN,
         args.get(0),
         args.get(1),
-        args.size() == 3 ? args.get(2) : factory.constant(0));
+        args.size() > 2 ? args.get(2) : factory.constant(0));
   }
 }
