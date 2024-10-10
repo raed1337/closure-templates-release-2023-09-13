@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -68,11 +69,10 @@ public final class ClassData {
     return numberOfFields;
   }
 
-
   /**
    * Runs the {@link CheckClassAdapter} on this class in basic analysis mode.
    *
-   * <p>Basic anaylsis mode can flag verification errors that don't depend on knowing complete type
+   * <p>Basic analysis mode can flag verification errors that don't depend on knowing complete type
    * information for the classes and methods being called. This is useful for flagging simple
    * generation mistakes (e.g. stack underflows, method return type mismatches, accessing invalid
    * locals). Additionally, the error messages are more useful than what the java verifier normally
@@ -81,39 +81,45 @@ public final class ClassData {
   public void checkClass() {
     ClassNode cv = new ClassNode();
     new ClassReader(data).accept(new CheckClassAdapter(cv, true /* check data flow */), 0);
-    // double check our fields while we are here.
+    validateClass(cv);
+  }
+
+  private void validateClass(ClassNode cv) {
     checkState(type.internalName().equals(cv.name));
     checkState(numberOfFields == cv.fields.size());
   }
 
   URL asUrl() {
     try {
-      // Needs specifyStreamHandler permission.
-      return AccessController.doPrivileged(
-          (PrivilegedExceptionAction<URL>)
-              () ->
-                  new URL(
-                      "mem",
-                      "",
-                      -1,
-                      type.internalName() + ".class",
-                      new URLStreamHandler() {
-                        @Override
-                        protected URLConnection openConnection(URL u) {
-                          return new URLConnection(u) {
-                            @Override
-                            public void connect() {}
-
-                            @Override
-                            public InputStream getInputStream() {
-                              return new ByteArrayInputStream(data);
-                            }
-                          };
-                        }
-                      }));
+      return createUrl();
     } catch (Exception e) {
       throw new IllegalStateException("Failed to create stream handler for resource url", e);
     }
+  }
+
+  private URL createUrl() throws Exception {
+    return AccessController.doPrivileged(
+        (PrivilegedExceptionAction<URL>)
+            () ->
+                new URL(
+                    "mem",
+                    "",
+                    -1,
+                    type.internalName() + ".class",
+                    new URLStreamHandler() {
+                      @Override
+                      protected URLConnection openConnection(URL u) {
+                        return new URLConnection(u) {
+                          @Override
+                          public void connect() {}
+
+                          @Override
+                          public InputStream getInputStream() {
+                            return new ByteArrayInputStream(data);
+                          }
+                        };
+                      }
+                    }));
   }
 
   @Override
