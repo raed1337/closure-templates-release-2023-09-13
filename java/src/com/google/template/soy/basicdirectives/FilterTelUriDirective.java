@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -30,6 +31,7 @@ import com.google.template.soy.shared.internal.Sanitizers;
 import com.google.template.soy.shared.restricted.SoyJavaPrintDirective;
 import com.google.template.soy.shared.restricted.SoyPurePrintDirective;
 import com.google.template.soy.types.SanitizedType;
+
 import java.util.List;
 import java.util.Set;
 
