@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -66,9 +67,6 @@ final class CleanHtmlDirective
 
   private static final Joiner ARG_JOINER = Joiner.on(", ");
 
-  // The directive may be called with a variable number of arguments indicating additional tags to
-  // be considered safe, so we need to support each args size up to the number of possible
-  // additional tags.
   private static final Set<Integer> VALID_ARGS_SIZES =
       ContiguousSet.create(
           Range.closed(0, OptionalSafeTag.values().length), DiscreteDomain.integers());
@@ -85,13 +83,15 @@ final class CleanHtmlDirective
 
   @Override
   public SoyValue applyForJava(SoyValue value, List<SoyValue> args) {
-    ImmutableSet<OptionalSafeTag> optionalSafeTags =
-        args.stream()
-            .map(SoyValue::stringValue)
-            .map(OptionalSafeTag::fromTagName)
-            .collect(toImmutableSet());
-
+    ImmutableSet<OptionalSafeTag> optionalSafeTags = extractSafeTags(args);
     return Sanitizers.cleanHtml(value, optionalSafeTags);
+  }
+
+  private ImmutableSet<OptionalSafeTag> extractSafeTags(List<SoyValue> args) {
+    return args.stream()
+        .map(SoyValue::stringValue)
+        .map(OptionalSafeTag::fromTagName)
+        .collect(toImmutableSet());
   }
 
   private static final class JbcSrcMethods {
@@ -125,7 +125,6 @@ final class CleanHtmlDirective
   private Expression fromTagNameList(List<SoyExpression> args) {
     List<Expression> optionalSafeTags = new ArrayList<>();
     for (SoyExpression arg : args) {
-      // Ignore nullishness because we `fromTagName` doesn't support null parameters.
       optionalSafeTags.add(JbcSrcMethods.FROM_TAG_NAME.invoke(arg.unboxAsStringUnchecked()));
     }
     return BytecodeUtils.asList(optionalSafeTags);
@@ -150,41 +149,30 @@ final class CleanHtmlDirective
         "sanitize.clean_html(" + value.getText() + optionalSafeTagsArg + ")", Integer.MAX_VALUE);
   }
 
-  /**
-   * Converts a list of TargetExpr's into a list of safe tags as an argument for the supported
-   * backends. This will iterate over the expressions, ensure they're valid safe tags, and convert
-   * them into an array of Strings.
-   *
-   * <p>The generated output is valid for JS and Python. Any other languages should reevaluate if
-   * they require changes.
-   *
-   * @param args A list of possible safe tags.
-   * @return A string containing the safe tags argument.
-   */
   private String generateOptionalSafeTagsArg(List<? extends TargetExpr> args) {
-    String optionalSafeTagsArg = "";
-    if (!args.isEmpty()) {
-      // TODO(msamuel): Instead of parsing generated JS, we should have a CheckArgumentsPass that
-      // allows directives and functions to examine their input expressions prior to compilation and
-      // relay the input file and line number to the template author along with an error message.
-      Iterable<String> optionalSafeTagExprs = Iterables.transform(args, TargetExpr::getText);
-
-      // Verify that all exprs are single-quoted valid OptionalSafeTags.
-      for (String singleQuoted : optionalSafeTagExprs) {
-        if (singleQuoted.length() < 2
-            || singleQuoted.charAt(0) != '\''
-            || singleQuoted.charAt(singleQuoted.length() - 1) != '\'') {
-          throw new IllegalArgumentException(
-              String.format(
-                  "The cleanHtml directive expects arguments to be tag name string "
-                      + "literals, such as 'span'. Encountered: %s",
-                  singleQuoted));
-        }
-        String tagName = singleQuoted.substring(1, singleQuoted.length() - 1);
-        OptionalSafeTag.fromTagName(tagName); // throws if invalid
-      }
-      optionalSafeTagsArg = ", [" + ARG_JOINER.join(optionalSafeTagExprs) + "]";
+    if (args.isEmpty()) {
+      return "";
     }
-    return optionalSafeTagsArg;
+    Iterable<String> optionalSafeTagExprs = Iterables.transform(args, TargetExpr::getText);
+    validateSafeTags(optionalSafeTagExprs);
+    return ", [" + ARG_JOINER.join(optionalSafeTagExprs) + "]";
+  }
+
+  private void validateSafeTags(Iterable<String> optionalSafeTagExprs) {
+    for (String singleQuoted : optionalSafeTagExprs) {
+      if (!isValidSingleQuotedString(singleQuoted)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "The cleanHtml directive expects arguments to be tag name string "
+                    + "literals, such as 'span'. Encountered: %s",
+                singleQuoted));
+      }
+      String tagName = singleQuoted.substring(1, singleQuoted.length() - 1);
+      OptionalSafeTag.fromTagName(tagName); // throws if invalid
+    }
+  }
+
+  private boolean isValidSingleQuotedString(String str) {
+    return str.length() >= 2 && str.charAt(0) == '\'' && str.charAt(str.length() - 1) == '\'';
   }
 }
