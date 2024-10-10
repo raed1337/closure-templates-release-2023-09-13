@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -67,5 +68,10 @@ public final class RandomIntFunction
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
     return factory.callStaticMethod(Methods.RANDOM_INT_FN, args.get(0).asSoyInt());
+  }
+  
+  // Utility method to validate input argument for better readability
+  private void validateArgument(JavaValue arg) {
+    // Add validation logic if necessary
   }
 }
