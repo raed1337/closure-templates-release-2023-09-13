@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -49,12 +50,20 @@ final class IsFiniteFunction
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    return invokeIsFiniteJavaScript(factory, args);
+  }
+
+  private JavaScriptValue invokeIsFiniteJavaScript(JavaScriptValueFactory factory, List<JavaScriptValue> args) {
     return factory.global("Number").invokeMethod("isFinite", args.get(0));
   }
 
   @Override
   public PythonValue applyForPythonSource(
       PythonValueFactory factory, List<PythonValue> args, PythonPluginContext context) {
+    return invokeIsFinitePython(factory, args);
+  }
+
+  private PythonValue invokeIsFinitePython(PythonValueFactory factory, List<PythonValue> args) {
     return factory
         .global("isinstance")
         .call(args.get(0), factory.global("numbers.Number"))
@@ -70,6 +79,10 @@ final class IsFiniteFunction
   @Override
   public JavaValue applyForJavaSource(
       JavaValueFactory factory, List<JavaValue> args, JavaPluginContext context) {
+    return invokeIsFiniteJava(factory, args);
+  }
+
+  private JavaValue invokeIsFiniteJava(JavaValueFactory factory, List<JavaValue> args) {
     return factory.callStaticMethod(Methods.IS_FINITE_FN, args.get(0));
   }
 }
