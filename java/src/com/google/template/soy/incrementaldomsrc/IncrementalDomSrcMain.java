@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -67,31 +68,35 @@ public class IncrementalDomSrcMain {
       ErrorReporter errorReporter) {
 
     SoyJsSrcOptions incrementalJSSrcOptions = options.toJsSrcOptions();
-
-    BidiGlobalDir bidiGlobalDir =
-        SoyBidiUtils.decodeBidiGlobalDirFromJsOptions(
-            incrementalJSSrcOptions.getBidiGlobalDir(),
-            incrementalJSSrcOptions.getUseGoogIsRtlForBidiGlobalDir());
+    BidiGlobalDir bidiGlobalDir = decodeBidiGlobalDir(incrementalJSSrcOptions);
+    
     try (SoyScopedData.InScope inScope = apiCallScope.enter(/* msgBundle= */ null, bidiGlobalDir)) {
-      // Do the code generation.
-
-      new HtmlContextVisitor().exec(soyTree);
-      // If any errors are reported in {@code HtmlContextVisitor}, we should not continue.
-      // Return an empty list here, {@code SoyFileSet} will throw an exception.
-      if (errorReporter.hasErrors()) {
+      if (!generateCode(soyTree, errorReporter, bidiGlobalDir)) {
         return Collections.emptyList();
       }
-
-      UnescapingVisitor.unescapeRawTextInHtml(soyTree);
-      TransformSkipNodeVisitor.reparentSkipNodes(soyTree);
-
-      new RemoveUnnecessaryEscapingDirectives(bidiGlobalDir).run(soyTree);
-      // some of the above passes may slice up raw text nodes, recombine them.
-      new CombineConsecutiveRawTextNodesPass().run(soyTree);
       return createVisitor(
               incrementalJSSrcOptions, typeRegistry, inScope.getBidiGlobalDir(), errorReporter)
           .gen(soyTree, registry, errorReporter);
     }
+  }
+
+  private BidiGlobalDir decodeBidiGlobalDir(SoyJsSrcOptions options) {
+    return SoyBidiUtils.decodeBidiGlobalDirFromJsOptions(
+        options.getBidiGlobalDir(),
+        options.getUseGoogIsRtlForBidiGlobalDir());
+  }
+
+  private boolean generateCode(SoyFileSetNode soyTree, ErrorReporter errorReporter, BidiGlobalDir bidiGlobalDir) {
+    new HtmlContextVisitor().exec(soyTree);
+    if (errorReporter.hasErrors()) {
+      return false;
+    }
+
+    UnescapingVisitor.unescapeRawTextInHtml(soyTree);
+    TransformSkipNodeVisitor.reparentSkipNodes(soyTree);
+    new RemoveUnnecessaryEscapingDirectives(bidiGlobalDir).run(soyTree);
+    new CombineConsecutiveRawTextNodesPass().run(soyTree);
+    return true;
   }
 
   static GenIncrementalDomCodeVisitor createVisitor(
@@ -106,16 +111,7 @@ public class IncrementalDomSrcMain {
         new JavaScriptValueFactoryImpl(dir, errorReporter);
     CanInitOutputVarVisitor canInitOutputVarVisitor =
         new CanInitOutputVarVisitor(isComputableAsJsExprsVisitor);
-    // TODO(lukes): eliminate this supplier.  See commend in JsSrcMain for more information.
-    class GenCallCodeUtilsSupplier implements Supplier<IncrementalDomGenCallCodeUtils> {
-      GenIncrementalDomExprsVisitorFactory factory;
-
-      @Override
-      public IncrementalDomGenCallCodeUtils get() {
-        return new IncrementalDomGenCallCodeUtils(
-            delTemplateNamer, isComputableAsJsExprsVisitor, factory);
-      }
-    }
+    
     GenCallCodeUtilsSupplier supplier = new GenCallCodeUtilsSupplier();
     GenIncrementalDomExprsVisitorFactory genJsExprsVisitorFactory =
         new GenIncrementalDomExprsVisitorFactory(
@@ -131,5 +127,17 @@ public class IncrementalDomSrcMain {
         canInitOutputVarVisitor,
         genJsExprsVisitorFactory,
         typeRegistry);
+  }
+
+  static class GenCallCodeUtilsSupplier implements Supplier<IncrementalDomGenCallCodeUtils> {
+    GenIncrementalDomExprsVisitorFactory factory;
+
+    @Override
+    public IncrementalDomGenCallCodeUtils get() {
+      return new IncrementalDomGenCallCodeUtils(
+          new IncrementalDomDelTemplateNamer(),
+          new IsComputableAsIncrementalDomExprsVisitor(),
+          factory);
+    }
   }
 }
