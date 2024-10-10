@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -49,13 +50,16 @@ final class EscapeHtmlDirective implements SoyLibraryAssistedJsSrcPrintDirective
 
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
-    return new JsExpr(
-        String.format(
-            "goog.module.get('%s').$$escapeHtml(%s, %s)",
-            "google3.javascript.template.soy.soyutils_directives",
-            value.getText(),
-            INCREMENTAL_DOM_PARAM_NAME),
-        Integer.MAX_VALUE);
+    return createJsExpr(value);
+  }
+
+  private JsExpr createJsExpr(JsExpr value) {
+    String jsCode = String.format(
+        "goog.module.get('%s').$$escapeHtml(%s, %s)",
+        "google3.javascript.template.soy.soyutils_directives",
+        value.getText(),
+        INCREMENTAL_DOM_PARAM_NAME);
+    return new JsExpr(jsCode, Integer.MAX_VALUE);
   }
 
   @Override
