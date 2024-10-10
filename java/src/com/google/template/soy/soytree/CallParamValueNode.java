@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -61,7 +62,11 @@ public final class CallParamValueNode extends CallParamNode implements ExprHolde
 
   @Override
   public String getCommandText() {
-    return getKey().identifier() + ": " + valueExpr.toSourceString();
+    return constructCommandText(getKey().identifier(), valueExpr.toSourceString());
+  }
+
+  private String constructCommandText(String key, String value) {
+    return key + ": " + value;
   }
 
   @Override
