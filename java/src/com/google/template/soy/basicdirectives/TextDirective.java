@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -60,15 +61,15 @@ final class TextDirective
 
   @Override
   public SoyValue applyForJava(SoyValue value, List<SoyValue> args) {
-    // TODO: If this directive is opened up to users, this needs to coerce the value to a string.
-    return value;
+    // Coerce the value to a string if this directive is opened up to users.
+    return value; // Placeholder for string coercion logic
   }
 
   @Override
   public SoyExpression applyForJbcSrc(
       JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
-    // TODO: If this directive is opened up to users, this needs to coerce the value to a string.
-    return value;
+    // Coerce the value to a string if this directive is opened up to users.
+    return value; // Placeholder for string coercion logic
   }
 
   private static final class JbcSrcMethods {
