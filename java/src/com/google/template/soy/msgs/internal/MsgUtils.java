@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -47,12 +48,6 @@ public class MsgUtils {
   // -----------------------------------------------------------------------------------------------
   // Utilities independent of msg id format.
 
-  /**
-   * Builds the list of SoyMsgParts for the given MsgNode.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @return The list of SoyMsgParts.
-   */
   public static ImmutableList<SoyMsgPart> buildMsgParts(MsgNode msgNode) {
     return buildMsgPartsForChildren(msgNode, msgNode);
   }
@@ -61,47 +56,26 @@ public class MsgUtils {
   // Utilities assuming a specific dual format: use unbraced placeholders for regular messages and
   // use braced placeholders for plural/select messages.
 
-  /**
-   * Builds the list of SoyMsgParts and computes the unique message id for the given MsgNode,
-   * assuming a specific dual format.
-   *
-   * <p>Note: The field {@code idUsingBracedPhs} in the return value is simply set to -1L.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @return A {@code MsgPartsAndIds} object, assuming a specific dual format, with field {@code
-   *     idUsingBracedPhs} set to -1L.
-   */
   public static MsgPartsAndIds buildMsgPartsAndComputeMsgIdForDualFormat(MsgNode msgNode) {
-
-    if (msgNode.isPlrselMsg()) {
-      MsgPartsAndIds mpai = buildMsgPartsAndComputeMsgIds(msgNode, true);
-      return new MsgPartsAndIds(mpai.parts, mpai.idUsingBracedPhs, -1L);
-    } else {
-      return buildMsgPartsAndComputeMsgIds(msgNode, false);
-    }
+    return msgNode.isPlrselMsg() 
+        ? createMsgPartsAndIdsForPlrSel(msgNode) 
+        : buildMsgPartsAndComputeMsgIds(msgNode, false);
   }
 
-  /**
-   * Computes the unique message id for the given MsgNode, assuming a specific dual format.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @return The message id, assuming a specific dual format.
-   */
+  private static MsgPartsAndIds createMsgPartsAndIdsForPlrSel(MsgNode msgNode) {
+    MsgPartsAndIds mpai = buildMsgPartsAndComputeMsgIds(msgNode, true);
+    return new MsgPartsAndIds(mpai.parts, mpai.idUsingBracedPhs, -1L);
+  }
+
   public static long computeMsgIdForDualFormat(MsgNode msgNode) {
-    return msgNode.isPlrselMsg() ? computeMsgIdUsingBracedPhs(msgNode) : computeMsgId(msgNode);
+    return msgNode.isPlrselMsg() 
+        ? computeMsgIdUsingBracedPhs(msgNode) 
+        : computeMsgId(msgNode);
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // Flexible utilities. Currently private to prevent accidental usage, but can be public if needed.
-
-  /** Value class for the return value of {@code buildMsgPartsAndComputeMsgId()}. */
   public static class MsgPartsAndIds {
-
-    /** The parts that make up the message content. */
     public final ImmutableList<SoyMsgPart> parts;
-    /** A unique id for this message (same across all translations). */
     public final long id;
-    /** An alternate unique id for this message. Only use this if you use braced placeholders. */
     public final long idUsingBracedPhs;
 
     private MsgPartsAndIds(ImmutableList<SoyMsgPart> parts, long id, long idUsingBracedPhs) {
@@ -111,154 +85,83 @@ public class MsgUtils {
     }
   }
 
-  /**
-   * Builds the list of SoyMsgParts and computes the unique message id(s) for the given MsgNode.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @param doComputeMsgIdUsingBracedPhs Whether to compute the alternate message id using braced
-   *     placeholders. If set to false, then the field {@code idUsingBracedPhs} in the return value
-   *     is simply set to -1L.
-   * @return A {@code MsgPartsAndIds} object.
-   */
-  private static MsgPartsAndIds buildMsgPartsAndComputeMsgIds(
-      MsgNode msgNode, boolean doComputeMsgIdUsingBracedPhs) {
-
+  private static MsgPartsAndIds buildMsgPartsAndComputeMsgIds(MsgNode msgNode, boolean doComputeMsgIdUsingBracedPhs) {
     ImmutableList<SoyMsgPart> msgParts = buildMsgParts(msgNode);
-    long msgId =
-        SoyMsgIdComputer.computeMsgId(msgParts, msgNode.getMeaning(), msgNode.getContentType());
-    long msgIdUsingBracedPhs =
-        doComputeMsgIdUsingBracedPhs
-            ? SoyMsgIdComputer.computeMsgIdUsingBracedPhs(
-                msgParts, msgNode.getMeaning(), msgNode.getContentType())
-            : -1L;
+    long msgId = SoyMsgIdComputer.computeMsgId(msgParts, msgNode.getMeaning(), msgNode.getContentType());
+    long msgIdUsingBracedPhs = doComputeMsgIdUsingBracedPhs 
+        ? SoyMsgIdComputer.computeMsgIdUsingBracedPhs(msgParts, msgNode.getMeaning(), msgNode.getContentType())
+        : -1L;
     return new MsgPartsAndIds(msgParts, msgId, msgIdUsingBracedPhs);
   }
 
-  /**
-   * Computes the unique message id for the given MsgNode.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @return The message id.
-   */
   private static long computeMsgId(MsgNode msgNode) {
-    return SoyMsgIdComputer.computeMsgId(
-        buildMsgParts(msgNode), msgNode.getMeaning(), msgNode.getContentType());
+    return SoyMsgIdComputer.computeMsgId(buildMsgParts(msgNode), msgNode.getMeaning(), msgNode.getContentType());
   }
 
-  /**
-   * Computes the alternate unique id for this message. Only use this if you use braced
-   * placeholders.
-   *
-   * @param msgNode The message parsed from the Soy source.
-   * @return The alternate message id using braced placeholders.
-   */
   private static long computeMsgIdUsingBracedPhs(MsgNode msgNode) {
-    return SoyMsgIdComputer.computeMsgIdUsingBracedPhs(
-        buildMsgParts(msgNode), msgNode.getMeaning(), msgNode.getContentType());
+    return SoyMsgIdComputer.computeMsgIdUsingBracedPhs(buildMsgParts(msgNode), msgNode.getMeaning(), msgNode.getContentType());
   }
 
   // -----------------------------------------------------------------------------------------------
   // Private helpers for building the list of message parts.
 
-  /**
-   * Builds the list of SoyMsgParts for all the children of a given parent node.
-   *
-   * @param parent Can be MsgNode, MsgPluralCaseNode, MsgPluralDefaultNode, MsgSelectCaseNode, or
-   *     MsgSelectDefaultNode.
-   * @param msgNode The MsgNode containing 'parent'.
-   */
-  private static ImmutableList<SoyMsgPart> buildMsgPartsForChildren(
-      MsgBlockNode parent, MsgNode msgNode) {
-
+  private static ImmutableList<SoyMsgPart> buildMsgPartsForChildren(MsgBlockNode parent, MsgNode msgNode) {
     ImmutableList.Builder<SoyMsgPart> msgParts = ImmutableList.builder();
     doBuildMsgPartsForChildren(parent, msgNode, msgParts);
     return msgParts.build();
   }
 
-  private static void doBuildMsgPartsForChildren(
-      MsgBlockNode parent, MsgNode msgNode, ImmutableList.Builder<SoyMsgPart> msgParts) {
+  private static void doBuildMsgPartsForChildren(MsgBlockNode parent, MsgNode msgNode, ImmutableList.Builder<SoyMsgPart> msgParts) {
     for (StandaloneNode child : parent.getChildren()) {
-      if (child instanceof RawTextNode) {
-        String rawText = ((RawTextNode) child).getRawText();
-        msgParts.add(SoyMsgRawTextPart.of(rawText));
-      } else if (child instanceof MsgPlaceholderNode) {
-        msgParts.add(new SoyMsgPlaceholderPart(msgNode.getPlaceholder((MsgPlaceholderNode) child)));
-      } else if (child instanceof MsgPluralNode) {
-        msgParts.add(buildMsgPartForPlural((MsgPluralNode) child, msgNode));
-      } else if (child instanceof MsgSelectNode) {
-        msgParts.add(buildMsgPartForSelect((MsgSelectNode) child, msgNode));
-      } else if (child instanceof VeLogNode) {
-        doBuildMsgPartsForChildren((VeLogNode) child, msgNode, msgParts);
-      } else {
-        throw new AssertionError("unexpected child: " + child);
-      }
+      addChildMsgPart(child, msgNode, msgParts);
     }
   }
 
-  /**
-   * Builds the list of SoyMsgParts for the given MsgPluralNode.
-   *
-   * @param msgPluralNode The plural node parsed from the Soy source.
-   * @param msgNode The MsgNode containing 'msgPluralNode'.
-   * @return A SoyMsgPluralPart.
-   */
-  private static SoyMsgPluralPart buildMsgPartForPlural(
-      MsgPluralNode msgPluralNode, MsgNode msgNode) {
+  private static void addChildMsgPart(StandaloneNode child, MsgNode msgNode, ImmutableList.Builder<SoyMsgPart> msgParts) {
+    if (child instanceof RawTextNode) {
+      msgParts.add(SoyMsgRawTextPart.of(((RawTextNode) child).getRawText()));
+    } else if (child instanceof MsgPlaceholderNode) {
+      msgParts.add(new SoyMsgPlaceholderPart(msgNode.getPlaceholder((MsgPlaceholderNode) child)));
+    } else if (child instanceof MsgPluralNode) {
+      msgParts.add(buildMsgPartForPlural((MsgPluralNode) child, msgNode));
+    } else if (child instanceof MsgSelectNode) {
+      msgParts.add(buildMsgPartForSelect((MsgSelectNode) child, msgNode));
+    } else if (child instanceof VeLogNode) {
+      doBuildMsgPartsForChildren((VeLogNode) child, msgNode, msgParts);
+    } else {
+      throw new AssertionError("unexpected child: " + child);
+    }
+  }
 
-    // This is the list of the cases.
-    ImmutableList.Builder<SoyMsgPart.Case<SoyMsgPluralCaseSpec>> pluralCases =
-        ImmutableList.builder();
-
+  private static SoyMsgPluralPart buildMsgPartForPlural(MsgPluralNode msgPluralNode, MsgNode msgNode) {
+    ImmutableList.Builder<SoyMsgPart.Case<SoyMsgPluralCaseSpec>> pluralCases = ImmutableList.builder();
     for (CaseOrDefaultNode child : msgPluralNode.getChildren()) {
-
-      ImmutableList<SoyMsgPart> caseMsgParts =
-          buildMsgPartsForChildren((MsgBlockNode) child, msgNode);
-      SoyMsgPluralCaseSpec caseSpec;
-
-      if (child instanceof MsgPluralCaseNode) {
-        caseSpec = new SoyMsgPluralCaseSpec(((MsgPluralCaseNode) child).getCaseNumber());
-
-      } else if (child instanceof MsgPluralDefaultNode) {
-        caseSpec = SoyMsgPluralCaseSpec.forType(SoyMsgPluralCaseSpec.Type.OTHER);
-
-      } else {
-        throw new AssertionError("Unidentified node under a plural node.");
-      }
-
-      pluralCases.add(SoyMsgPart.Case.create(caseSpec, caseMsgParts));
+      pluralCases.add(createPluralCase(child, msgNode));
     }
-
-    return new SoyMsgPluralPart(
-        msgNode.getPluralVarName(msgPluralNode), msgPluralNode.getOffset(), pluralCases.build());
+    return new SoyMsgPluralPart(msgNode.getPluralVarName(msgPluralNode), msgPluralNode.getOffset(), pluralCases.build());
   }
 
-  /**
-   * Builds the list of SoyMsgParts for the given MsgSelectNode.
-   *
-   * @param msgSelectNode The select node parsed from the Soy source.
-   * @param msgNode The MsgNode containing 'msgSelectNode'.
-   * @return A SoyMsgSelectPart.
-   */
-  private static SoyMsgSelectPart buildMsgPartForSelect(
-      MsgSelectNode msgSelectNode, MsgNode msgNode) {
+  private static SoyMsgPart.Case<SoyMsgPluralCaseSpec> createPluralCase(CaseOrDefaultNode child, MsgNode msgNode) {
+    ImmutableList<SoyMsgPart> caseMsgParts = buildMsgPartsForChildren((MsgBlockNode) child, msgNode);
+    SoyMsgPluralCaseSpec caseSpec = (child instanceof MsgPluralCaseNode) 
+        ? new SoyMsgPluralCaseSpec(((MsgPluralCaseNode) child).getCaseNumber()) 
+        : SoyMsgPluralCaseSpec.forType(SoyMsgPluralCaseSpec.Type.OTHER);
+    return SoyMsgPart.Case.create(caseSpec, caseMsgParts);
+  }
 
-    // This is the list of the cases.
+  private static SoyMsgSelectPart buildMsgPartForSelect(MsgSelectNode msgSelectNode, MsgNode msgNode) {
     ImmutableList.Builder<SoyMsgPart.Case<String>> selectCases = ImmutableList.builder();
-
     for (CaseOrDefaultNode child : msgSelectNode.getChildren()) {
-      ImmutableList<SoyMsgPart> caseMsgParts =
-          buildMsgPartsForChildren((MsgBlockNode) child, msgNode);
-      String caseValue;
-      if (child instanceof MsgSelectCaseNode) {
-        caseValue = ((MsgSelectCaseNode) child).getCaseValue();
-      } else if (child instanceof MsgSelectDefaultNode) {
-        caseValue = null;
-      } else {
-        throw new AssertionError("Unidentified node under a select node.");
-      }
-      selectCases.add(SoyMsgPart.Case.create(caseValue, caseMsgParts));
+      selectCases.add(createSelectCase(child, msgNode));
     }
-
     return new SoyMsgSelectPart(msgNode.getSelectVarName(msgSelectNode), selectCases.build());
+  }
+
+  private static SoyMsgPart.Case<String> createSelectCase(CaseOrDefaultNode child, MsgNode msgNode) {
+    ImmutableList<SoyMsgPart> caseMsgParts = buildMsgPartsForChildren((MsgBlockNode) child, msgNode);
+    String caseValue = (child instanceof MsgSelectCaseNode) 
+        ? ((MsgSelectCaseNode) child).getCaseValue() 
+        : null;
+    return SoyMsgPart.Case.create(caseValue, caseMsgParts);
   }
 }
