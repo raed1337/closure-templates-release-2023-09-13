@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -40,6 +41,9 @@ public final class VeLogJsSrcLoggingFunction implements SoyJavaScriptSourceFunct
   @Override
   public JavaScriptValue applyForJavaScriptSource(
       JavaScriptValueFactory factory, List<JavaScriptValue> args, JavaScriptPluginContext context) {
+    if (args.size() < 3) {
+      throw new IllegalArgumentException("At least 3 arguments are required.");
+    }
     return factory.callModuleFunction(
         "soy.velog",
         "$$getLoggingFunctionAttribute",
