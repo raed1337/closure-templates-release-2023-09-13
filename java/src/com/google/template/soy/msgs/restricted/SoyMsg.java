@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -173,8 +174,12 @@ public abstract class SoyMsg {
     @CanIgnoreReturnValue
     public Builder setParts(Iterable<? extends SoyMsgPart> parts) {
       this.parts = ImmutableList.copyOf(parts);
-      checkArgument(!this.parts.isEmpty(), "Parts should never be empty");
+      validateParts();
       return this;
+    }
+
+    private void validateParts() {
+      checkArgument(!this.parts.isEmpty(), "Parts should never be empty");
     }
 
     /** Marks this message as being the primary message in a fallback group. */
@@ -185,12 +190,7 @@ public abstract class SoyMsg {
     }
 
     public SoyMsg build() {
-      // An alternate ID that points to itself is a no-op, so just omit it.
-      // A tricorder warning suggests eliminating such tags if they're added manually, but we need
-      // to allow it for generated code.
-      if (alternateId.isPresent() && (alternateId.getAsLong() == id)) {
-        alternateId = OptionalLong.empty();
-      }
+      alternateId = normalizeAlternateId();
       return new AutoValue_SoyMsg(
           localeString,
           id,
@@ -202,6 +202,10 @@ public abstract class SoyMsg {
           parts,
           sourceLocations.build(),
           hasFallback);
+    }
+
+    private OptionalLong normalizeAlternateId() {
+      return alternateId.isPresent() && (alternateId.getAsLong() == id) ? OptionalLong.empty() : alternateId;
     }
   }
 
