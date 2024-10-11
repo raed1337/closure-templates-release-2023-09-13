@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -34,7 +35,10 @@ public final class PyListExpr extends PyExpr {
 
   @Override
   public PyStringExpr toPyString() {
-    // Lists are converted by concatenating all of their values.
-    return new PyStringExpr("''.join(" + getText() + ")", Integer.MAX_VALUE);
+    String joinMethod = "''.join(";
+    String expressionText = getText();
+    String closingParenthesis = ")";
+    String fullExpression = joinMethod + expressionText + closingParenthesis;
+    return new PyStringExpr(fullExpression, Integer.MAX_VALUE);
   }
 }
