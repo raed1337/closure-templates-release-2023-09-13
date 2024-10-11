@@ -1,14 +1,16 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0
+ * (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -43,35 +45,53 @@ public class MainEntryPointUtils {
       String filePathFormat, @Nullable String locale, @Nullable String inputFilePath) {
 
     String path = filePathFormat;
+    StringBuilder pathBuilder = new StringBuilder(path);
 
     if (locale != null) {
-      path = path.replace("{LOCALE}", locale);
-      path = path.replace("{LOCALE_LOWER_CASE}", locale.toLowerCase().replace('-', '_'));
+      replaceLocalePlaceholders(pathBuilder, locale);
     }
 
     if (inputFilePath != null) {
+      String directory = extractDirectory(inputFilePath);
+      String fileName = extractFileName(inputFilePath);
+      String fileNameNoExt = extractFileNameWithoutExtension(fileName);
 
-      // Compute directory and file name.
-      int lastSlashIndex = inputFilePath.lastIndexOf(File.separatorChar);
-      String directory = inputFilePath.substring(0, lastSlashIndex + 1);
-      String fileName = inputFilePath.substring(lastSlashIndex + 1);
-
-      // Compute file name without extension.
-      int lastDotIndex = fileName.lastIndexOf('.');
-      if (lastDotIndex == -1) {
-        lastDotIndex = fileName.length();
-      }
-      String fileNameNoExt = fileName.substring(0, lastDotIndex);
-
-      // Substitute placeholders.
-      path = path.replace("{INPUT_DIRECTORY}", directory);
-      path = path.replace("{INPUT_FILE_NAME}", fileName);
-      path = path.replace("{INPUT_FILE_NAME_NO_EXT}", fileNameNoExt);
+      replaceInputPlaceholders(pathBuilder, directory, fileName, fileNameNoExt);
     }
 
-    // Remove redundant /'s if any placeholder representing a directory was empty.
-    path = path.replace("//", "/");
+    return cleanRedundantSlashes(pathBuilder.toString());
+  }
 
-    return path;
+  private static void replaceLocalePlaceholders(StringBuilder pathBuilder, String locale) {
+    pathBuilder.replace(pathBuilder.indexOf("{LOCALE}"), pathBuilder.indexOf("{LOCALE}") + "{LOCALE}".length(), locale);
+    pathBuilder.replace(pathBuilder.indexOf("{LOCALE_LOWER_CASE}"), pathBuilder.indexOf("{LOCALE_LOWER_CASE}") + "{LOCALE_LOWER_CASE}".length(), locale.toLowerCase().replace('-', '_'));
+  }
+
+  private static String extractDirectory(String inputFilePath) {
+    int lastSlashIndex = inputFilePath.lastIndexOf(File.separatorChar);
+    return inputFilePath.substring(0, lastSlashIndex + 1);
+  }
+
+  private static String extractFileName(String inputFilePath) {
+    int lastSlashIndex = inputFilePath.lastIndexOf(File.separatorChar);
+    return inputFilePath.substring(lastSlashIndex + 1);
+  }
+
+  private static String extractFileNameWithoutExtension(String fileName) {
+    int lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex == -1) {
+      lastDotIndex = fileName.length();
+    }
+    return fileName.substring(0, lastDotIndex);
+  }
+
+  private static void replaceInputPlaceholders(StringBuilder pathBuilder, String directory, String fileName, String fileNameNoExt) {
+    pathBuilder.replace(pathBuilder.indexOf("{INPUT_DIRECTORY}"), pathBuilder.indexOf("{INPUT_DIRECTORY}") + "{INPUT_DIRECTORY}".length(), directory);
+    pathBuilder.replace(pathBuilder.indexOf("{INPUT_FILE_NAME}"), pathBuilder.indexOf("{INPUT_FILE_NAME}") + "{INPUT_FILE_NAME}".length(), fileName);
+    pathBuilder.replace(pathBuilder.indexOf("{INPUT_FILE_NAME_NO_EXT}"), pathBuilder.indexOf("{INPUT_FILE_NAME_NO_EXT}") + "{INPUT_FILE_NAME_NO_EXT}".length(), fileNameNoExt);
+  }
+
+  private static String cleanRedundantSlashes(String path) {
+    return path.replace("//", "/");
   }
 }
