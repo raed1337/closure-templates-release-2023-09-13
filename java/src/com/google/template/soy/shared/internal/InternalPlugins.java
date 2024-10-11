@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -50,7 +51,6 @@ public final class InternalPlugins {
 
   /** Returns a map (whose key is the name of the function) of the functions shipped with Soy. */
   public static ImmutableList<SoySourceFunction> internalFunctions() {
-    // TODO(b/19252021): Include BuiltInFunctions
     return Streams.concat(
             BasicFunctions.functions().stream(),
             BidiFunctions.functions().stream(),
@@ -71,15 +71,10 @@ public final class InternalPlugins {
    */
   public static ImmutableMap<String, SoySourceFunction> internalAliasedDirectivesMap() {
     return internalFunctions().stream()
-        .filter(
-            e ->
-                e.getClass()
-                    .getAnnotation(SoyFunctionSignature.class)
-                    .callableAsDeprecatedPrintDirective())
-        .collect(
-            ImmutableMap.toImmutableMap(
-                e -> "|" + e.getClass().getAnnotation(SoyFunctionSignature.class).name(),
-                Function.identity()));
+        .filter(e -> e.getClass().getAnnotation(SoyFunctionSignature.class).callableAsDeprecatedPrintDirective())
+        .collect(ImmutableMap.toImmutableMap(
+            e -> "|" + e.getClass().getAnnotation(SoyFunctionSignature.class).name(),
+            Function.identity()));
   }
 
   public static ImmutableList<SoyPrintDirective> internalDirectives(SoyScopedData soyScopedData) {
@@ -126,14 +121,19 @@ public final class InternalPlugins {
       Iterable<? extends T> items, Function<T, String> nameFn) {
     Map<String, T> indexed = new HashMap<>();
     ImmutableList.Builder<T> output = ImmutableList.builder();
+    
     for (T item : items) {
-      T old = indexed.put(nameFn.apply(item), item);
-      // we filter a duplicate named function only if it has the same class name as the original
-      // function otherwise we preserve it and it will get flagged as an error later on.
-      if (old == null || !old.getClass().getName().equals(item.getClass().getName())) {
+      String name = nameFn.apply(item);
+      T old = indexed.put(name, item);
+      if (isUnique(item, old)) {
         output.add(item);
       }
     }
+    
     return output.build();
+  }
+
+  private static <T> boolean isUnique(T item, T old) {
+    return old == null || !old.getClass().getName().equals(item.getClass().getName());
   }
 }
