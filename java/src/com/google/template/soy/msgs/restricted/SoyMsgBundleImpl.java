@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -57,13 +58,11 @@ public class SoyMsgBundleImpl extends SoyMsgBundle {
    * @param msgs The list of messages. List order will become the iteration order.
    */
   public SoyMsgBundleImpl(@Nullable String localeString, List<SoyMsg> msgs) {
-    this(
-        localeString,
-        msgs,
-        (m1, m2) -> {
-          throw new IllegalStateException("Found 2 messages with id: " + m1.getId());
-        });
+    this(localeString, msgs, (m1, m2) -> {
+      throw new IllegalStateException("Found 2 messages with id: " + m1.getId());
+    });
   }
+
   /**
    * Note: If there exist duplicate message ids in the {@code msgs} list, the first one wins.
    * However, the source paths from subsequent duplicates will be added to the source paths for the
@@ -81,27 +80,24 @@ public class SoyMsgBundleImpl extends SoyMsgBundle {
       BiFunction<SoyMsg, SoyMsg, Optional<SoyMsg>> merger) {
 
     this.localeString = localeString;
-    this.locale = localeString == null ? null : new ULocale(localeString);
+    this.locale = Optional.ofNullable(localeString).map(ULocale::new).orElse(null);
     this.isRtl = BidiGlobalDir.forStaticLocale(localeString) == BidiGlobalDir.RTL;
 
-    // Preserve the ordering of the input.
+    msgMap = createMsgMap(msgs, merger);
+  }
+
+  private ImmutableMap<Long, SoyMsg> createMsgMap(List<SoyMsg> msgs,
+                                                   BiFunction<SoyMsg, SoyMsg, Optional<SoyMsg>> merger) {
     Map<Long, SoyMsg> tempMsgMap = new LinkedHashMap<>();
     for (SoyMsg msg : msgs) {
       checkArgument(Objects.equals(msg.getLocaleString(), localeString));
       long msgId = msg.getId();
 
-      SoyMsg existingMsg = tempMsgMap.get(msgId);
-      if (existingMsg == null) { // new message id
-        tempMsgMap.put(msgId, msg);
-
-      } else { // duplicate message id, delegate to merging algorithm
-        merger.apply(existingMsg, msg).ifPresent(merged -> tempMsgMap.put(msgId, merged));
-      }
+      tempMsgMap.merge(msgId, msg, (existingMsg, newMsg) -> 
+          merger.apply(existingMsg, newMsg).orElse(existingMsg));
     }
-
-    msgMap = ImmutableMap.copyOf(tempMsgMap);
+    return ImmutableMap.copyOf(tempMsgMap);
   }
-
 
   @Override
   public String getLocaleString() {
@@ -113,7 +109,7 @@ public class SoyMsgBundleImpl extends SoyMsgBundle {
   public ULocale getLocale() {
     return locale;
   }
-  
+
   @Override
   public boolean isRtl() {
     return isRtl;
