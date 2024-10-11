@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -22,12 +23,13 @@ import javax.annotation.Nullable;
 /** Wrapper for a generated file to write. Holds the file name and contents. */
 @AutoValue
 public abstract class GeneratedFile {
+  
   public static GeneratedFile create(String fileName, String contents) {
     return create("", fileName, contents, null);
   }
 
   public static GeneratedFile create(String resourcePath, String fileName, String contents) {
-    return new AutoValue_GeneratedFile(resourcePath, fileName, contents, null);
+    return create(resourcePath, fileName, contents, null);
   }
 
   public static GeneratedFile create(
