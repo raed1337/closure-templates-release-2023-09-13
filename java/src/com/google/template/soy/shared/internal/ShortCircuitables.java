@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -21,6 +22,7 @@ import com.google.template.soy.shared.restricted.SoyPrintDirective;
 
 /** Utilities for working with ShortCircuitable print directives. */
 public final class ShortCircuitables {
+  
   /**
    * Identifies some cases where the combination of directives and content kind mean we can skip
    * applying the escapers. This is an opportunistic optimization, it is possible that we will fail
@@ -29,11 +31,12 @@ public final class ShortCircuitables {
    */
   public static <T extends SoyPrintDirective> ImmutableList<T> filterDirectivesForKind(
       ContentKind kind, ImmutableList<T> directives) {
-    for (int i = 0; i < directives.size(); i++) {
+    
+    int size = directives.size();
+    for (int i = 0; i < size; i++) {
       T directive = directives.get(i);
-      if (!(directive instanceof ShortCircuitable)
-          || !((ShortCircuitable) directive).isNoopForKind(kind)) {
-        return directives.subList(i, directives.size());
+      if (!(directive instanceof ShortCircuitable) || !((ShortCircuitable) directive).isNoopForKind(kind)) {
+        return directives.subList(i, size);
       }
     }
     return ImmutableList.of();
