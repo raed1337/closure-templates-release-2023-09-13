@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -22,7 +23,7 @@ package com.google.template.soy.msgs;
 public class SoyMsgException extends RuntimeException {
 
   /** The name of the file or resource associated with this error. */
-  private String fileOrResourceName = null;
+  private String fileOrResourceName;
 
   /** @param message A detailed description of the error. */
   public SoyMsgException(String message) {
@@ -53,10 +54,8 @@ public class SoyMsgException extends RuntimeException {
 
   @Override
   public String getMessage() {
-    if (fileOrResourceName != null) {
-      return "While processing \"" + fileOrResourceName + "\": " + super.getMessage();
-    } else {
-      return super.getMessage();
-    }
+    return fileOrResourceName != null 
+        ? String.format("While processing \"%s\": %s", fileOrResourceName, super.getMessage()) 
+        : super.getMessage();
   }
 }
