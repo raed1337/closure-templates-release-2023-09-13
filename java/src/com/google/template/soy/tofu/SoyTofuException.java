@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -48,11 +49,16 @@ public class SoyTofuException extends RuntimeException {
    */
   public SoyTofuException(RenderException re) {
     super(re.getMessage(), re.getCause());
-    // At this point, the stack trace aggregation logic in RenderException can be considered done.
-    // Set the stack trace of both the current SoyTofuException class as well as the
-    // RenderException class.
     re.finalizeStackTrace(this);
-    // Maintain suppressed exceptions.
+    addSuppressedExceptions(re);
+  }
+
+  /**
+   * Adds suppressed exceptions from the given RenderException.
+   *
+   * @param re The RenderException from which to copy suppressed exceptions.
+   */
+  private void addSuppressedExceptions(RenderException re) {
     for (Throwable suppressed : re.getSuppressed()) {
       addSuppressed(suppressed);
     }
