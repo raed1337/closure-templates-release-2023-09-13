@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -57,9 +58,7 @@ public final class TranslationContext {
 
   /** Creates a new variable naming scope that will be active until the `ExitScope` is closed. */
   public ExitScope enterSoyScope() {
-    var prevMappings = soyToJsVariableMappings;
-    soyToJsVariableMappings = SoyToJsVariableMappings.startingWith(prevMappings);
-    return () -> soyToJsVariableMappings = prevMappings;
+    return createExitScopeWithMappings(soyToJsVariableMappings);
   }
 
   /**
@@ -69,12 +68,23 @@ public final class TranslationContext {
    */
   public ExitScope enterSoyAndJsScope() {
     var prevMappings = soyToJsVariableMappings;
-    soyToJsVariableMappings = SoyToJsVariableMappings.startingWith(prevMappings);
     var prevGenerator = nameGenerator;
     nameGenerator = nameGenerator.branch();
-    return () -> {
+    return createExitScopeWithMappings(prevMappings, () -> {
       soyToJsVariableMappings = prevMappings;
       nameGenerator = prevGenerator;
+    });
+  }
+
+  private ExitScope createExitScopeWithMappings(SoyToJsVariableMappings prevMappings) {
+    soyToJsVariableMappings = SoyToJsVariableMappings.startingWith(prevMappings);
+    return () -> soyToJsVariableMappings = prevMappings;
+  }
+
+  private ExitScope createExitScopeWithMappings(SoyToJsVariableMappings prevMappings, Runnable onClose) {
+    soyToJsVariableMappings = SoyToJsVariableMappings.startingWith(prevMappings);
+    return () -> {
+      onClose.run();
     };
   }
 }
