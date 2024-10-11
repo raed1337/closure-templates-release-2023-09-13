@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -120,7 +121,8 @@ class TofuValueFactory extends JavaValueFactory {
 
   TofuJavaValue callStaticMethod(Method method, @Nullable SoyType returnType, JavaValue... params) {
     try {
-      return wrapInTofuValue(method, method.invoke(null, adaptParams(method, params)), returnType);
+      Object adaptedParams = adaptParams(method, params);
+      return wrapInTofuValue(method, method.invoke(null, adaptedParams), returnType);
     } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
       throw RenderException.create("Unexpected exception", e);
     }
@@ -138,7 +140,7 @@ class TofuValueFactory extends JavaValueFactory {
 
   @Override
   public TofuJavaValue callInstanceMethod(MethodSignature methodSig, JavaValue... params) {
-    return callInstanceMethod(toMethod(methodSig), null, params);
+    return callInstanceMethod(methodSig, null, params);
   }
 
   TofuJavaValue callInstanceMethod(
@@ -152,8 +154,8 @@ class TofuValueFactory extends JavaValueFactory {
               + pluginInstances.keys());
     }
     try {
-      return wrapInTofuValue(
-          method, method.invoke(instanceSupplier.get(), adaptParams(method, params)), returnType);
+      Object adaptedParams = adaptParams(method, params);
+      return wrapInTofuValue(method, method.invoke(instanceSupplier.get(), adaptedParams), returnType);
     } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
       throw RenderException.create("Unexpected exception", e);
     }
@@ -213,9 +215,6 @@ class TofuValueFactory extends JavaValueFactory {
       return TofuJavaValue.forSoyValue((SoyValue) object, fnSourceLocation);
     }
     if (returnType != null && returnType.getKind() == SoyType.Kind.MAP && object instanceof Map) {
-      // When Soy sees a map, it defaults to thinking it's a legacy_object_map, which only allow
-      // string keys. We know that's not the case here (because the Soy return type of the extern
-      // is "map") so mark this as a "map" and not a "legacy_object_map".
       object = SoyValueConverter.markAsSoyMap((Map) object);
     }
     try {
@@ -247,11 +246,6 @@ class TofuValueFactory extends JavaValueFactory {
     }
   }
 
-  /**
-   * Adapts the values in {@code tofuValues} to fit the types of the method's parameters, returning
-   * an {@code Object[]} of the adapted types. This essentially unboxes SoyValues into their native
-   * counterparts if the method wants a non-SoyValue parameter.
-   */
   private Object[] adaptParams(Method method, JavaValue[] tofuValues) {
     Class<?>[] paramTypes = method.getParameterTypes();
     if (tofuValues.length != paramTypes.length) {
@@ -271,7 +265,6 @@ class TofuValueFactory extends JavaValueFactory {
   }
 
   private Object adaptParam(TofuJavaValue tofuVal, Class<?> type, Method method, int i) {
-    // Some conversions here are only supported in the newer extern API, not the older plugin API.
     boolean isExternApi = externSig != null;
 
     if (!tofuVal.hasSoyValue()) {
@@ -279,119 +272,133 @@ class TofuValueFactory extends JavaValueFactory {
     } else {
       SoyValue value = tofuVal.soyValue();
       if (value instanceof NullData || value instanceof UndefinedData) {
-        if (Primitives.allPrimitiveTypes().contains(type)) {
-          throw RenderException.create(
-              "cannot call method "
-                  + method.getDeclaringClass().getName()
-                  + "."
-                  + method.getName()
-                  + " because parameter["
-                  + i
-                  + "] expects a primitive type ["
-                  + type
-                  + "], but actual value is null [ "
-                  + tofuVal
-                  + "]");
-        }
-        return null;
+        return handleNullData(type, method, i, tofuVal);
       } else if (isExternApi && type == Object.class) {
         return SoyValueUnconverter.unconvert(value);
       } else if (isExternApi && type == Number.class) {
-        return value instanceof NumberData
-            ? ((NumberData) value).javaNumberValue()
-            : value.numberValue();
+        return value instanceof NumberData ? ((NumberData) value).javaNumberValue() : value.numberValue();
       } else if (type.isInstance(value)) {
         return value;
       }
 
-      Class<?> primitiveType = Primitives.unwrap(type);
-      if (primitiveType == boolean.class) {
-        return value.booleanValue();
-      } else if (primitiveType == int.class) {
-        return value.integerValue();
-      } else if (primitiveType == long.class) {
-        return value.longValue();
-      } else if (primitiveType == double.class) {
-        return value.numberValue();
-      } else if (primitiveType == float.class) {
-        return (float) value.numberValue();
-      } else if (type == String.class) {
-        return value.stringValue();
-      } else if (Iterable.class.isAssignableFrom(type)) {
-        if (isExternApi) {
-          return value.asJavaList().stream()
-              .map(
-                  item ->
-                      adaptParamItem(
-                          item,
-                          ((ListType) externSig.getParameters().get(i).getType()).getElementType()))
-              .collect(toImmutableList());
-        } else {
-          return value.asJavaList();
-        }
-      } else if (Map.class.isAssignableFrom(type) && isExternApi) {
-        SoyType paramType = externSig.getParameters().get(i).getType();
-        if (paramType.getKind() == Kind.RECORD) {
-          return ((SoyMap) value)
-              .entrySet().stream()
-                  .collect(
-                      toImmutableMap(
-                          e -> e.getKey().coerceToString(),
-                          e -> SoyValueUnconverter.unconvert(e.getValue())));
-        }
-        MapType mapType = (MapType) paramType;
-        return ((SoyMap) value)
-            .entrySet().stream()
-                .collect(
-                    toImmutableMap(
-                        e -> adaptParamItem(e.getKey(), mapType.getKeyType()),
-                        e -> adaptParamItem(e.getValue(), mapType.getValueType())));
-      } else if (type.isEnum() && ProtocolMessageEnum.class.isAssignableFrom(type)) {
-        try {
-          return type.getDeclaredMethod("forNumber", int.class).invoke(null, value.integerValue());
-        } catch (ReflectiveOperationException roe) {
-          throw RenderException.create("Invalid parameter: " + tofuVal, roe);
-        }
-      } else if (type == SafeHtml.class) {
-        return ((SanitizedContent) value).toSafeHtml();
-      } else if (type == SafeScript.class) {
-        return ((SanitizedContent) value).toSafeScript();
-      } else if (type == SafeStyle.class) {
-        return ((SanitizedContent) value).toSafeStyle();
-      } else if (type == SafeStyleSheet.class) {
-        return ((SanitizedContent) value).toSafeStyleSheet();
-      } else if (type == SafeUrl.class) {
-        return ((SanitizedContent) value).toSafeUrl();
-      } else if (type == TrustedResourceUrl.class) {
-        return ((SanitizedContent) value).toTrustedResourceUrl();
-      } else if (type == SafeHtmlProto.class) {
-        return ((SanitizedContent) value).toSafeHtmlProto();
-      } else if (type == SafeScriptProto.class) {
-        return ((SanitizedContent) value).toSafeScriptProto();
-      } else if (type == SafeStyleProto.class) {
-        return ((SanitizedContent) value).toSafeStyleProto();
-      } else if (type == SafeStyleSheetProto.class) {
-        return ((SanitizedContent) value).toSafeStyleSheetProto();
-      } else if (type == SafeUrlProto.class) {
-        return ((SanitizedContent) value).toSafeUrlProto();
-      } else if (type == TrustedResourceUrlProto.class) {
-        return ((SanitizedContent) value).toTrustedResourceUrlProto();
-      } else if (Message.class.isAssignableFrom(type)) {
-        return type.cast(value.getProto());
-      } else {
-        throw new UnsupportedOperationException(
-            "cannot call method "
-                + method.getDeclaringClass().getName()
-                + "."
-                + method.getName()
-                + " because parameter["
-                + i
-                + "] expects a "
-                + type
-                + ", but actual value is a `"
-                + value
-                + "`");
-      }
+      return adaptPrimitiveTypes(type, method, i, isExternApi, value);
+    }
+  }
+
+  private Object handleNullData(Class<?> type, Method method, int i, TofuJavaValue tofuVal) {
+    if (Primitives.allPrimitiveTypes().contains(type)) {
+      throw RenderException.create(
+          "cannot call method "
+              + method.getDeclaringClass().getName()
+              + "."
+              + method.getName()
+              + " because parameter["
+              + i
+              + "] expects a primitive type ["
+              + type
+              + "], but actual value is null [ "
+              + tofuVal
+              + "]");
+    }
+    return null;
+  }
+
+  private Object adaptPrimitiveTypes(Class<?> type, Method method, int i, boolean isExternApi, SoyValue value) {
+    Class<?> primitiveType = Primitives.unwrap(type);
+    if (primitiveType == boolean.class) {
+      return value.booleanValue();
+    } else if (primitiveType == int.class) {
+      return value.integerValue();
+    } else if (primitiveType == long.class) {
+      return value.longValue();
+    } else if (primitiveType == double.class) {
+      return value.numberValue();
+    } else if (primitiveType == float.class) {
+      return (float) value.numberValue();
+    } else if (type == String.class) {
+      return value.stringValue();
+    } else if (Iterable.class.isAssignableFrom(type)) {
+      return handleIterableType(isExternApi, value, i);
+    } else if (Map.class.isAssignableFrom(type) && isExternApi) {
+      return handleMapType(value, i);
+    } else if (type.isEnum() && ProtocolMessageEnum.class.isAssignableFrom(type)) {
+      return adaptEnumType(type, value);
+    } else if (type == SafeHtml.class) {
+      return ((SanitizedContent) value).toSafeHtml();
+    } else if (type == SafeScript.class) {
+      return ((SanitizedContent) value).toSafeScript();
+    } else if (type == SafeStyle.class) {
+      return ((SanitizedContent) value).toSafeStyle();
+    } else if (type == SafeStyleSheet.class) {
+      return ((SanitizedContent) value).toSafeStyleSheet();
+    } else if (type == SafeUrl.class) {
+      return ((SanitizedContent) value).toSafeUrl();
+    } else if (type == TrustedResourceUrl.class) {
+      return ((SanitizedContent) value).toTrustedResourceUrl();
+    } else if (type == SafeHtmlProto.class) {
+      return ((SanitizedContent) value).toSafeHtmlProto();
+    } else if (type == SafeScriptProto.class) {
+      return ((SanitizedContent) value).toSafeScriptProto();
+    } else if (type == SafeStyleProto.class) {
+      return ((SanitizedContent) value).toSafeStyleProto();
+    } else if (type == SafeStyleSheetProto.class) {
+      return ((SanitizedContent) value).toSafeStyleSheetProto();
+    } else if (type == SafeUrlProto.class) {
+      return ((SanitizedContent) value).toSafeUrlProto();
+    } else if (type == TrustedResourceUrlProto.class) {
+      return ((SanitizedContent) value).toTrustedResourceUrlProto();
+    } else if (Message.class.isAssignableFrom(type)) {
+      return type.cast(value.getProto());
+    } else {
+      throw new UnsupportedOperationException(
+          "cannot call method "
+              + method.getDeclaringClass().getName()
+              + "."
+              + method.getName()
+              + " because parameter["
+              + i
+              + "] expects a "
+              + type
+              + ", but actual value is a `"
+              + value
+              + "`");
+    }
+  }
+
+  private Object handleIterableType(boolean isExternApi, SoyValue value, int i) {
+    if (isExternApi) {
+      return value.asJavaList().stream()
+          .map(item -> adaptParamItem(item, ((ListType) externSig.getParameters().get(i).getType()).getElementType()))
+          .collect(toImmutableList());
+    } else {
+      return value.asJavaList();
+    }
+  }
+
+  private Object handleMapType(SoyValue value, int i) {
+    SoyType paramType = externSig.getParameters().get(i).getType();
+    if (paramType.getKind() == Kind.RECORD) {
+      return ((SoyMap) value)
+          .entrySet().stream()
+              .collect(
+                  toImmutableMap(
+                      e -> e.getKey().coerceToString(),
+                      e -> SoyValueUnconverter.unconvert(e.getValue())));
+    }
+    MapType mapType = (MapType) paramType;
+    return ((SoyMap) value)
+        .entrySet().stream()
+            .collect(
+                toImmutableMap(
+                    e -> adaptParamItem(e.getKey(), mapType.getKeyType()),
+                    e -> adaptParamItem(e.getValue(), mapType.getValueType())));
+  }
+
+  private Object adaptEnumType(Class<?> type, SoyValue value) {
+    try {
+      return type.getDeclaredMethod("forNumber", int.class).invoke(null, value.integerValue());
+    } catch (ReflectiveOperationException roe) {
+      throw RenderException.create("Invalid parameter: " + value, roe);
     }
   }
 
@@ -409,17 +416,20 @@ class TofuValueFactory extends JavaValueFactory {
       case PROTO:
         return ((SoyProtoValue) val).getProto();
       case PROTO_ENUM:
-        String javaClass =
-            JavaQualifiedNames.getClassName(((SoyProtoEnumType) elmType).getDescriptor());
-        try {
-          return Class.forName(javaClass)
-              .getDeclaredMethod("forNumber", int.class)
-              .invoke(null, val.integerValue());
-        } catch (ReflectiveOperationException roe) {
-          throw RenderException.create("Invalid parameter: " + item, roe);
-        }
+        return adaptProtoEnum(elmType, val);
       default:
         throw new AssertionError();
+    }
+  }
+
+  private Object adaptProtoEnum(SoyType elmType, SoyValue val) {
+    String javaClass = JavaQualifiedNames.getClassName(((SoyProtoEnumType) elmType).getDescriptor());
+    try {
+      return Class.forName(javaClass)
+          .getDeclaredMethod("forNumber", int.class)
+          .invoke(null, val.integerValue());
+    } catch (ReflectiveOperationException roe) {
+      throw RenderException.create("Invalid parameter: " + val, roe);
     }
   }
 }
