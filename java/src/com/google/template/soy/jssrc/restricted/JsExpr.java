@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -38,4 +39,6 @@ public final class JsExpr extends TargetExpr {
   public JsExpr(String text, int precedence) {
     super(text, precedence);
   }
+
+  // Additional functionality could be added here if needed in the future.
 }
