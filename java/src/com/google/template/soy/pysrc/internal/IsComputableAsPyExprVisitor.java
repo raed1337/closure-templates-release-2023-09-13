@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -63,13 +64,7 @@ class IsComputableAsPyExprVisitor extends AbstractReturningSoyNodeVisitor<Boolea
 
   @Override
   protected Boolean visit(SoyNode node) {
-    if (memoizedResults.containsKey(node)) {
-      return memoizedResults.get(node);
-    } else {
-      Boolean result = super.visit(node);
-      memoizedResults.put(node, result);
-      return result;
-    }
+    return memoizedResults.computeIfAbsent(node, k -> super.visit(k));
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -100,11 +95,8 @@ class IsComputableAsPyExprVisitor extends AbstractReturningSoyNodeVisitor<Boolea
     return false;
   }
 
-
   @Override
   protected Boolean visitIfNode(IfNode node) {
-    // If all children are computable as Python expressions, then this 'if' statement can be written
-    // as an expression as well, using the ternary conditional operator ("'a' if x else 'b'").
     return areChildrenComputableAsPyExprs(node);
   }
 
@@ -175,16 +167,8 @@ class IsComputableAsPyExprVisitor extends AbstractReturningSoyNodeVisitor<Boolea
    * @return True if all children satisfy IsComputableAsPyExprVisitor.
    */
   private boolean areChildrenComputableAsPyExprs(ParentSoyNode<?> node) {
-
-    for (SoyNode child : node.getChildren()) {
-      // Note: Save time by not visiting RawTextNode and PrintNode children.
-      if (!(child instanceof RawTextNode) && !(child instanceof PrintNode)) {
-        if (!visit(child)) {
-          return false;
-        }
-      }
-    }
-
-    return true;
+    return node.getChildren().stream()
+            .filter(child -> !(child instanceof RawTextNode) && !(child instanceof PrintNode))
+            .allMatch(this::visit);
   }
 }
