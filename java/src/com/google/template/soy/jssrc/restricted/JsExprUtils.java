@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -46,7 +47,7 @@ public class JsExprUtils {
    * <p>The resulting expression is not guaranteed to be a string if the operands do not produce
    * strings when combined with the plus operator; e.g. 2+2 might be 4 instead of '22'.
    *
-   * @param jsExprs The JS expressions to concatentate.
+   * @param jsExprs The JS expressions to concatenate.
    * @return One JS expression that computes the concatenation of the given JS expressions.
    */
   public static JsExpr concatJsExprs(List<? extends JsExpr> jsExprs) {
@@ -60,16 +61,15 @@ public class JsExprUtils {
 
     int plusOpPrec = Precedence.forSoyOperator(Operator.PLUS).toInt();
     StringBuilder resultSb = new StringBuilder();
+    appendJsExpressions(jsExprs, plusOpPrec, resultSb);
+    
+    return new JsExpr(resultSb.toString(), plusOpPrec);
+  }
 
+  private static void appendJsExpressions(List<? extends JsExpr> jsExprs, int plusOpPrec, StringBuilder resultSb) {
     boolean isFirst = true;
     for (JsExpr jsExpr : jsExprs) {
-
-      // The first operand needs protection only if it's strictly lower precedence. The non-first
-      // operands need protection when they're lower or equal precedence. (This is true for all
-      // left-associative operators.)
-      boolean needsProtection =
-          isFirst ? jsExpr.getPrecedence() < plusOpPrec : jsExpr.getPrecedence() <= plusOpPrec;
-
+      boolean needsProtection = determineProtection(isFirst, jsExpr.getPrecedence(), plusOpPrec);
       if (isFirst) {
         isFirst = false;
       } else {
@@ -82,8 +82,10 @@ public class JsExprUtils {
         resultSb.append(jsExpr.getText());
       }
     }
+  }
 
-    return new JsExpr(resultSb.toString(), plusOpPrec);
+  private static boolean determineProtection(boolean isFirst, int exprPrecedence, int plusOpPrec) {
+    return isFirst ? exprPrecedence < plusOpPrec : exprPrecedence <= plusOpPrec;
   }
 
   public static boolean isStringLiteral(JsExpr jsExpr) {
@@ -94,31 +96,26 @@ public class JsExprUtils {
         || jsExprText.charAt(jsExprTextLastIndex) != '\'') {
       return false;
     }
+    return isValidStringLiteral(jsExprText, jsExprTextLastIndex);
+  }
+
+  private static boolean isValidStringLiteral(String jsExprText, int jsExprTextLastIndex) {
     for (int i = 1; i < jsExprTextLastIndex; ++i) {
       char c = jsExprText.charAt(i);
       if (c == '\'') {
         return false;
       }
       if (c == '\\') {
-        // We do not bother skipping through the whole escape if it takes up more than one character
-        // beyond the backslash, e.g. \u1234 or \123 or \x12, since none of such escapes' characters
-        // can be an apostrophe, which is all we really care about. Nor do we check that the escape
-        // doesn't include the final apostrophe, since that would mean the JS expression is invalid.
-        ++i;
+        ++i; // skip the next character for escape sequences
       }
     }
     return true;
   }
 
   public static JsExpr toString(JsExpr expr) {
-    // If the expression is a string, nothing to do.
     if (isStringLiteral(expr)) {
       return expr;
     }
-    // Add empty string first, which ensures the plus operator always means string concatenation.
-    // Consider:
-    //    '' + 6 + 6 + 6 = '666'
-    //    6 + 6 + 6 + '' = '18'
     return concatJsExprs(ImmutableList.of(EMPTY_STRING, expr));
   }
 
