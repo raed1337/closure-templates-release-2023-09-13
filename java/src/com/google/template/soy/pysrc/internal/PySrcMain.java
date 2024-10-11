@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -109,26 +110,31 @@ public final class PySrcMain {
       ErrorReporter errorReporter)
       throws IOException {
 
-    // Generate the manifest and add it to the current manifest.
-    ImmutableMap<String, String> manifest =
-        generateManifest(
+    ImmutableMap<String, String> manifest = generateManifest(
             getSoyNamespaces(soyTree),
             pySrcOptions.getInputToOutputFilePaths(),
             pySrcOptions.getOutputDirectoryFlag(),
             errorReporter);
 
-    // Generate the Python source.
-    List<String> pyFileContents =
-        genPySrc(soyTree, pySrcOptions, manifest, fileSetMetadata, errorReporter);
+    List<String> pyFileContents = genPySrc(soyTree, pySrcOptions, manifest, fileSetMetadata, errorReporter);
 
-    if (soyTree.getChildren().size() != pyFileContents.size()) {
+    validateGeneratedFiles(soyTree, pyFileContents.size());
+
+    writeManifestFile(pySrcOptions, manifest);
+
+    return pyFileContents;
+  }
+
+  private void validateGeneratedFiles(SoyFileSetNode soyTree, int generatedSize) {
+    if (soyTree.getChildren().size() != generatedSize) {
       throw new AssertionError(
           String.format(
               "Expected to generate %d code chunk(s), got %d",
-              soyTree.getChildren().size(), pyFileContents.size()));
+              soyTree.getChildren().size(), generatedSize));
     }
+  }
 
-    // Write out the manifest file.
+  private void writeManifestFile(SoyPySrcOptions pySrcOptions, ImmutableMap<String, String> manifest) throws IOException {
     if (pySrcOptions.namespaceManifestFile() != null) {
       try (Writer out =
           Files.newWriter(new File(pySrcOptions.namespaceManifestFile()), StandardCharsets.UTF_8)) {
@@ -137,9 +143,6 @@ public final class PySrcMain {
         }
       }
     }
-
-    // Return the python outputs.
-    return pyFileContents;
   }
 
   /**
@@ -184,8 +187,6 @@ public final class PySrcMain {
       ImmutableMap<String, String> currentManifest,
       FileSetMetadata fileSetMetadata) {
     IsComputableAsPyExprVisitor isComputableAsPyExprs = new IsComputableAsPyExprVisitor();
-    // There is a circular dependency between the GenPyExprsVisitorFactory and GenPyCallExprVisitor
-    // here we resolve it with a mutable field in a custom provider
     PythonValueFactoryImpl pluginValueFactory =
         new PythonValueFactoryImpl(errorReporter, bidiGlobalDir);
     class PyCallExprVisitorSupplier implements Supplier<GenPyCallExprVisitor> {
