@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -38,6 +39,7 @@ import com.google.template.soy.plugin.javascript.restricted.JavaScriptPluginCont
 import com.google.template.soy.plugin.javascript.restricted.JavaScriptValue;
 import com.google.template.soy.plugin.javascript.restricted.JavaScriptValueFactory;
 import com.google.template.soy.plugin.javascript.restricted.SoyJavaScriptSourceFunction;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -75,15 +77,16 @@ public final class JavaScriptValueFactoryImpl extends JavaScriptValueFactory {
   private final BidiGlobalDir dir;
 
   private JavaScriptPluginContext createContext(CodeChunk.Generator codeGenerator) {
-    return () -> {
-      if (dir.isStaticValue()) {
-        return new JavaScriptValueImpl(Expressions.number(dir.getStaticValue()));
-      }
-      return new JavaScriptValueImpl(
-          Expressions.ifExpression(JsRuntime.SOY_IS_LOCALE_RTL, Expressions.number(-1))
-              .setElse(Expressions.number(1))
-              .build(codeGenerator));
-    };
+    return () -> dir.isStaticValue() 
+        ? new JavaScriptValueImpl(Expressions.number(dir.getStaticValue())) 
+        : createDynamicContext(codeGenerator);
+  }
+
+  private JavaScriptValueImpl createDynamicContext(CodeChunk.Generator codeGenerator) {
+    return new JavaScriptValueImpl(
+        Expressions.ifExpression(JsRuntime.SOY_IS_LOCALE_RTL, Expressions.number(-1))
+            .setElse(Expressions.number(1))
+            .build(codeGenerator));
   }
 
   public JavaScriptValueFactoryImpl(BidiGlobalDir dir, ErrorReporter reporter) {
@@ -97,21 +100,27 @@ public final class JavaScriptValueFactoryImpl extends JavaScriptValueFactory {
       SoyJavaScriptSourceFunction fn,
       List<Expression> args,
       CodeChunk.Generator codeGenerator) {
-    JavaScriptValueImpl result;
     try {
-      result =
-          (JavaScriptValueImpl)
-              fn.applyForJavaScriptSource(this, wrapParams(args), createContext(codeGenerator));
-      if (result == null) {
-        report(location, name, fn, NULL_RETURN, fn.getClass().getSimpleName());
-        result = ERROR_VALUE;
-      }
+      JavaScriptValueImpl result = invokeFunction(fn, args, codeGenerator);
+      return result == null ? handleNullResult(location, name, fn) : result.impl;
     } catch (Throwable t) {
-      BaseUtils.trimStackTraceTo(t, fn.getClass());
-      report(location, name, fn, UNEXPECTED_ERROR, Throwables.getStackTraceAsString(t));
-      result = ERROR_VALUE;
+      return handleError(location, name, fn, t);
     }
-    return result.impl;
+  }
+
+  private JavaScriptValueImpl invokeFunction(SoyJavaScriptSourceFunction fn, List<Expression> args, CodeChunk.Generator codeGenerator) {
+    return (JavaScriptValueImpl) fn.applyForJavaScriptSource(this, wrapParams(args), createContext(codeGenerator));
+  }
+
+  private Expression handleNullResult(SourceLocation location, String name, SoyJavaScriptSourceFunction fn) {
+    report(location, name, fn, NULL_RETURN, fn.getClass().getSimpleName());
+    return ERROR_VALUE.impl;
+  }
+
+  private Expression handleError(SourceLocation location, String name, SoyJavaScriptSourceFunction fn, Throwable t) {
+    BaseUtils.trimStackTraceTo(t, fn.getClass());
+    report(location, name, fn, UNEXPECTED_ERROR, Throwables.getStackTraceAsString(t));
+    return ERROR_VALUE.impl;
   }
 
   private void report(
@@ -135,9 +144,6 @@ public final class JavaScriptValueFactoryImpl extends JavaScriptValueFactory {
   }
 
   private Expression referenceModuleExport(String moduleName, String export) {
-    // Just use goog.module.get().  It isn't currently possible to create an alias without
-    // potentially creating name conflicts.
-    // TODO(b/35203585): come up with an aliasing strategy
     return chainedDotAccess(GoogRequire.create(moduleName).googModuleGet(), export);
   }
 
@@ -156,6 +162,13 @@ public final class JavaScriptValueFactoryImpl extends JavaScriptValueFactory {
   @Override
   public JavaScriptValue callNamespaceFunction(
       String googProvide, String fullFunctionName, JavaScriptValue... params) {
+    validateNamespace(fullFunctionName, googProvide);
+    GoogRequire require = GoogRequire.create(googProvide);
+    Expression function = getFunctionReference(fullFunctionName, googProvide, require);
+    return new JavaScriptValueImpl(function.call(unwrapParams(Arrays.asList(params))));
+  }
+
+  private void validateNamespace(String fullFunctionName, String googProvide) {
     checkArgument(
         fullFunctionName.startsWith(googProvide)
             && (fullFunctionName.length() == googProvide.length()
@@ -164,16 +177,12 @@ public final class JavaScriptValueFactoryImpl extends JavaScriptValueFactory {
         fullFunctionName,
         googProvide,
         fullFunctionName);
-    GoogRequire require = GoogRequire.create(googProvide);
-    Expression function;
-    if (fullFunctionName.length() == googProvide.length()) {
-      function = require.reference();
-    } else {
-      function =
-          chainedDotAccess(
-              require.reference(), fullFunctionName.substring(googProvide.length() + 1));
-    }
-    return new JavaScriptValueImpl(function.call(unwrapParams(Arrays.asList(params))));
+  }
+
+  private Expression getFunctionReference(String fullFunctionName, String googProvide, GoogRequire require) {
+    return fullFunctionName.length() == googProvide.length()
+        ? require.reference()
+        : chainedDotAccess(require.reference(), fullFunctionName.substring(googProvide.length() + 1));
   }
 
   @Override
