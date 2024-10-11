@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2012 Google Inc.
  *
@@ -82,6 +83,10 @@ public final class TagWhitelist {
     if (optionalSafeTags.isEmpty()) {
       return this;
     }
+    return createWithOptionalSafeTags(optionalSafeTags);
+  }
+
+  private TagWhitelist createWithOptionalSafeTags(Collection<? extends OptionalSafeTag> optionalSafeTags) {
     ImmutableSet<String> optionalSafeTagNames =
         optionalSafeTags.stream().map(OptionalSafeTag::getTagName).collect(toImmutableSet());
     return new TagWhitelist(Sets.union(safeTagNames, optionalSafeTagNames));
@@ -91,7 +96,7 @@ public final class TagWhitelist {
     return safeTagNames.contains(tagName);
   }
 
-  // No need to handle uper case characters, the assertion below already requires that they are
+  // No need to handle upper case characters, the assertion below already requires that they are
   // all lower case ascii
   private static final Pattern VALID_TAG_NAME =
       Pattern.compile("^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*\\z");
@@ -110,8 +115,12 @@ public final class TagWhitelist {
 
   private static void requireLowerCaseTagNames(Iterable<String> strs) {
     for (String str : strs) {
-      Preconditions.checkArgument(
-          str.equals(Ascii.toLowerCase(str)) && VALID_TAG_NAME.matcher(str).matches(), str);
+      validateLowerCaseTagName(str);
     }
+  }
+
+  private static void validateLowerCaseTagName(String str) {
+    Preconditions.checkArgument(
+        str.equals(Ascii.toLowerCase(str)) && VALID_TAG_NAME.matcher(str).matches(), str);
   }
 }
