@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -75,7 +76,6 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   /** The PreevalVisitor for this instance (can reuse). */
   private final PreevalVisitor preevalVisitor;
-
   private final ErrorReporter errorReporter;
 
   SimplifyExprVisitor(ErrorReporter errorReporter) {
@@ -96,19 +96,16 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitListLiteralNode(ListLiteralNode node) {
-    // Visit children only. We cannot simplify the list literal itself.
     visitChildren(node);
   }
 
   @Override
   protected void visitRecordLiteralNode(RecordLiteralNode node) {
-    // Visit children only. We cannot simplify the record literal itself.
     visitChildren(node);
   }
 
   @Override
   protected void visitMapLiteralNode(MapLiteralNode node) {
-    // Visit children only. We cannot simplify the map literal itself.
     visitChildren(node);
   }
 
@@ -117,10 +114,11 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitAndOpNode(AndOpNode node) {
-    // Recurse.
     visitChildren(node);
+    simplifyAndNode(node);
+  }
 
-    // Can simplify if either child is constant. We assume no side-effects.
+  private void simplifyAndNode(AndOpNode node) {
     SoyValue operand0 = getConstantOrNull(node.getChild(0));
     if (operand0 != null) {
       ExprNode replacementNode = operand0.coerceToBoolean() ? node.getChild(1) : node.getChild(0);
@@ -130,10 +128,11 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitOrOpNode(OrOpNode node) {
-    // Recurse.
     visitChildren(node);
+    simplifyOrNode(node);
+  }
 
-    // Can simplify if either child is constant. We assume no side-effects.
+  private void simplifyOrNode(OrOpNode node) {
     SoyValue operand0 = getConstantOrNull(node.getChild(0));
     if (operand0 != null) {
       ExprNode replacementNode = operand0.coerceToBoolean() ? node.getChild(0) : node.getChild(1);
@@ -143,56 +142,47 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitConditionalOpNode(ConditionalOpNode node) {
-    // Recurse.
     visitChildren(node);
+    simplifyConditionalOpNode(node);
+  }
 
-    // Can simplify if operand0 is constant. We assume no side-effects.
+  private void simplifyConditionalOpNode(ConditionalOpNode node) {
     SoyValue operand0 = getConstantOrNull(node.getChild(0));
-    if (operand0 == null) {
-      return; // cannot simplify
-    }
+    if (operand0 == null) return;
 
     ExprNode replacementNode = operand0.coerceToBoolean() ? node.getChild(1) : node.getChild(2);
     node.getParent().replaceChild(node, replacementNode);
   }
 
-  // these cases may seem weird, but they tend to get introduced with @state parameter defaults and
-  // let variable inlining
   @Override
   protected void visitNullCoalescingOpNode(NullCoalescingOpNode node) {
-    // Recurse.
     visitChildren(node);
+    simplifyNullCoalescingOpNode(node);
+  }
 
-    // Can simplify if operand0 is constant. We assume no side-effects.
+  private void simplifyNullCoalescingOpNode(NullCoalescingOpNode node) {
     SoyValue operand0 = getConstantOrNull(node.getChild(0));
     if (operand0 != null) {
-      if (operand0.isNullish()) {
-        node.getParent().replaceChild(node, node.getChild(1));
-      } else {
-        // all other constants are non=null, so use that
-        node.getParent().replaceChild(node, node.getChild(0));
-      }
+      node.getParent().replaceChild(node, operand0.isNullish() ? node.getChild(1) : node.getChild(0));
     } else {
-      // even if the first child isn't a constant, there are some values that we know are
-      // non-nullable.
-      switch (node.getChild(0).getKind()) {
-        case LIST_LITERAL_NODE:
-        case RECORD_LITERAL_NODE:
-          // these are always non-null
-          node.getParent().replaceChild(node, node.getChild(0));
-          break;
-        default:
-          // do nothing.
-      }
+      handleNonConstantFirstChild(node);
     }
   }
 
-  // Optimize accessing fields of record and proto literals: ['a': 'b'].a => 'b'
-  // This is unlikely to occur by chance, but things like the msgWithId() function may introduce
-  // this code since it desugars into a record literal.
+  private void handleNonConstantFirstChild(NullCoalescingOpNode node) {
+    switch (node.getChild(0).getKind()) {
+      case LIST_LITERAL_NODE:
+      case RECORD_LITERAL_NODE:
+        node.getParent().replaceChild(node, node.getChild(0));
+        break;
+      default:
+        break; // do nothing.
+    }
+  }
+
   @Override
   protected void visitFieldAccessNode(FieldAccessNode node) {
-    this.visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitFieldAccessNode);
+    visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitFieldAccessNode);
   }
 
   @Nullable
@@ -204,22 +194,15 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
           return recordLiteral.getChild(i);
         }
       }
-      // replace with null?  this should have been a compiler error.
     }
     return null;
-    // NOTE: we don't constant fold field accesses of ProtoInitNodes because protos implement
-    // complex null semantics. e.g. if we assign `null` to a field and then access it we may get a
-    // default value instead of `null`.
   }
 
   private <T extends DataAccessNode> void visitDataAccessNodeInternal(
       T node, BiFunction<T, ExprNode, ExprNode> delegate) {
-    // simplify children first
     visitExprNode(node);
-    if (node.getParent() == null) {
-      // must have already been optimized by visitExprNode and replaced in the AST
-      return;
-    }
+    if (node.getParent() == null) return;
+
     ExprNode baseExpr = node.getChild(0);
     ExprNode replacement = delegate.apply(node, baseExpr);
     if (replacement != null) {
@@ -227,58 +210,58 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
     }
   }
 
-  // Optimize accessing map and list literals.  This covers expressions like [1,2,3][1] and
-  // map('a':1)['a']
-  // This is fairly unlikely to happen in practice, but is being done for consistency with the other
-  // aggregate literals above.  This might happen for things like pure functions that return
-  // collections
   @Override
   protected void visitItemAccessNode(ItemAccessNode node) {
-    this.visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitItemAccessNode);
+    visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitItemAccessNode);
   }
 
+  @Nullable
   private static ExprNode visitItemAccessNode(ItemAccessNode node, ExprNode baseExpr) {
     ExprNode keyExpr = node.getChild(1);
     if (baseExpr instanceof ListLiteralNode && keyExpr instanceof IntegerNode) {
-      ListLiteralNode listLiteral = (ListLiteralNode) baseExpr;
-      long index = ((IntegerNode) keyExpr).getValue();
-      if (index >= 0 && index < listLiteral.numChildren()) {
-        return listLiteral.getChild((int) index);
-      } else {
-        // out of range
-        return new NullNode(node.getSourceLocation());
-      }
+      return simplifyItemAccessNode((ListLiteralNode) baseExpr, (IntegerNode) keyExpr, node);
     }
     return null;
   }
 
+  private static ExprNode simplifyItemAccessNode(ListLiteralNode listLiteral, IntegerNode keyExpr, ItemAccessNode node) {
+    long index = keyExpr.getValue();
+    if (index >= 0 && index < listLiteral.numChildren()) {
+      return listLiteral.getChild((int) index);
+    } else {
+      return new NullNode(node.getSourceLocation());
+    }
+  }
+
   @Override
   protected void visitMethodCallNode(MethodCallNode node) {
-    this.visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitMethodCallNode);
+    visitDataAccessNodeInternal(node, SimplifyExprVisitor::visitMethodCallNode);
   }
 
   @Nullable
   private static ExprNode visitMethodCallNode(MethodCallNode node, ExprNode baseExpr) {
-    if (baseExpr instanceof MapLiteralNode
-        && node.isMethodResolved()
-        && node.getSoyMethod() == BuiltinMethod.MAP_GET) {
-      MapLiteralNode mapLiteral = (MapLiteralNode) baseExpr;
-      ExprNode keyExpr = node.getParams().get(0);
-      boolean areAllKeysConstants = true;
-      ExprEquivalence exprEquivalence = new ExprEquivalence();
-      for (int i = 0; i < mapLiteral.numChildren(); i += 2) {
-        ExprNode key = mapLiteral.getChild(i);
-        ExprNode value = mapLiteral.getChild(i + 1);
-        if (exprEquivalence.equivalent(keyExpr, key)) {
-          return value;
-        }
-        areAllKeysConstants = areAllKeysConstants && isConstant(key);
+    if (baseExpr instanceof MapLiteralNode && node.isMethodResolved() && node.getSoyMethod() == BuiltinMethod.MAP_GET) {
+      return simplifyMethodCallNode(node, (MapLiteralNode) baseExpr);
+    }
+    return null;
+  }
+
+  private static ExprNode simplifyMethodCallNode(MethodCallNode node, MapLiteralNode mapLiteral) {
+    ExprNode keyExpr = node.getParams().get(0);
+    boolean areAllKeysConstants = true;
+    ExprEquivalence exprEquivalence = new ExprEquivalence();
+
+    for (int i = 0; i < mapLiteral.numChildren(); i += 2) {
+      ExprNode key = mapLiteral.getChild(i);
+      ExprNode value = mapLiteral.getChild(i + 1);
+      if (exprEquivalence.equivalent(keyExpr, key)) {
+        return value;
       }
-      if (isConstant(keyExpr) && areAllKeysConstants) {
-        // no matching key, and since everything was a bunch of constants, it should have matched.
-        // in this case we can evaluate at compile time.
-        return new NullNode(node.getSourceLocation());
-      }
+      areAllKeysConstants = areAllKeysConstants && isConstant(key);
+    }
+
+    if (isConstant(keyExpr) && areAllKeysConstants) {
+      return new NullNode(node.getSourceLocation());
     }
     return null;
   }
@@ -287,82 +270,72 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
   protected void visitNullSafeAccessNode(NullSafeAccessNode node) {
     while (true) {
       visit(node.getBase());
-      ExprNode base = node.getBase();
-      if (isNullishLiteral(base)) {
-        // This is a null safe access on null, which evaluates to null. So replace the whole
-        // expression with null and exit.
-        node.getParent().replaceChild(node, base);
-        return;
-      }
-      ExprNode dataAccessChild = node.getDataAccess();
-      switch (dataAccessChild.getKind()) {
-        case ASSERT_NON_NULL_OP_NODE:
-          // This can happen for an access chain like {@code $foo?.bar!}. In this case, don't
-          // attempt to optimize chains past non-null assertion operators. This is possible, but
-          // unclear how valuable it is, especially since this is already so complex.
-          return;
-        case NULL_SAFE_ACCESS_NODE:
-          {
-            // This null safe access is followed by another null safe access, which means the access
-            // details are stored in the base of the next null safe access node.
-            NullSafeAccessNode nullSafeAccessChild = (NullSafeAccessNode) dataAccessChild;
-            DataAccessNode dataAccessChain = (DataAccessNode) nullSafeAccessChild.getBase();
-            DataAccessNode dataAccessChainBase = findBaseDataAccess(dataAccessChain);
-            ExprNode replacement = findReplacement(dataAccessChainBase, base);
-            if (replacement == null) {
-              // There are no optimizations, so nothing else later in the chain can be optimized
-              // either. Exit.
-              return;
-            } else {
-              // We found a replacement for the null safe access at the beginning of this chain,
-              // that means we can get rid of this null safe access node and stick the replacement
-              // expression in the base of the next null safe access.
-              node.getParent().replaceChild(node, nullSafeAccessChild);
-              if (dataAccessChainBase == dataAccessChain) {
-                // The null safe access base is just this one access, so replace it with the
-                // simplified replacement value.
-                nullSafeAccessChild.replaceChild(nullSafeAccessChild.getBase(), replacement);
-              } else {
-                // There are some normal data accesses before the next null safe data access, so
-                // replace just this data access in the chain with the simplified replacement value.
-                dataAccessChainBase.getParent().replaceChild(dataAccessChainBase, replacement);
-              }
-              node = nullSafeAccessChild;
-            }
-            break;
-          }
-        case FIELD_ACCESS_NODE:
-        case ITEM_ACCESS_NODE:
-        case METHOD_CALL_NODE:
-          {
-            // This is the last null safe access in the chain, so the access details are stored
-            // directly in the data access child of this null safe access.
-            DataAccessNode dataAccessChainBase =
-                findBaseDataAccess((DataAccessNode) dataAccessChild);
-            ExprNode replacement = findReplacement(dataAccessChainBase, base);
-            if (replacement == null) {
-              // There are no optimizations, so nothing else later in the chain can be optimized
-              // either. Exit.
-              return;
-            } else if (dataAccessChild == dataAccessChainBase) {
-              // The null safe access base is just this one access, so replace it with the
-              // simplified replacement value.
-              node.getParent().replaceChild(node, replacement);
-              visit(replacement);
-            } else {
-              // There are some normal (non null safe) data accesses at the end off the access
-              // chain, so replace just this data access in the chain with the simplified
-              // replacement value.
-              dataAccessChainBase.getParent().replaceChild(dataAccessChainBase, replacement);
-              node.getParent().replaceChild(node, dataAccessChild);
-              visit(dataAccessChild);
-            }
-            return;
-          }
-        default:
-          throw new AssertionError(dataAccessChild.getKind());
-      }
+      if (optimizeNullSafeAccess(node)) return;
     }
+  }
+
+  private boolean optimizeNullSafeAccess(NullSafeAccessNode node) {
+    ExprNode base = node.getBase();
+    if (isNullishLiteral(base)) {
+      node.getParent().replaceChild(node, base);
+      return true;
+    }
+    return handleDataAccessChild(node);
+  }
+
+  private boolean handleDataAccessChild(NullSafeAccessNode node) {
+    ExprNode dataAccessChild = node.getDataAccess();
+    switch (dataAccessChild.getKind()) {
+      case ASSERT_NON_NULL_OP_NODE:
+        return true;
+      case NULL_SAFE_ACCESS_NODE:
+        return handleNestedNullSafeAccess(node, (NullSafeAccessNode) dataAccessChild);
+      case FIELD_ACCESS_NODE:
+      case ITEM_ACCESS_NODE:
+      case METHOD_CALL_NODE:
+        return handleFinalNullSafeAccess(node, (DataAccessNode) dataAccessChild);
+      default:
+        throw new AssertionError(dataAccessChild.getKind());
+    }
+  }
+
+  private boolean handleNestedNullSafeAccess(NullSafeAccessNode node, NullSafeAccessNode nullSafeAccessChild) {
+    DataAccessNode dataAccessChain = (DataAccessNode) nullSafeAccessChild.getBase();
+    DataAccessNode dataAccessChainBase = findBaseDataAccess(dataAccessChain);
+    ExprNode replacement = findReplacement(dataAccessChainBase, node.getBase());
+
+    if (replacement == null) {
+      return false;
+    } else {
+      node.getParent().replaceChild(node, nullSafeAccessChild);
+      replaceInChain(dataAccessChainBase, replacement, dataAccessChain);
+      return true;
+    }
+  }
+
+  private void replaceInChain(DataAccessNode dataAccessChainBase, ExprNode replacement, DataAccessNode dataAccessChain) {
+    if (dataAccessChainBase == dataAccessChain) {
+      dataAccessChain.replaceChild(dataAccessChain.getBaseExprChild(), replacement);
+    } else {
+      dataAccessChainBase.getParent().replaceChild(dataAccessChainBase, replacement);
+    }
+  }
+
+  private boolean handleFinalNullSafeAccess(NullSafeAccessNode node, DataAccessNode dataAccessChild) {
+    DataAccessNode dataAccessChainBase = findBaseDataAccess(dataAccessChild);
+    ExprNode replacement = findReplacement(dataAccessChainBase, node.getBase());
+
+    if (replacement == null) {
+      return false;
+    } else if (dataAccessChild == dataAccessChainBase) {
+      node.getParent().replaceChild(node, replacement);
+      visit(replacement);
+    } else {
+      dataAccessChainBase.getParent().replaceChild(dataAccessChainBase, replacement);
+      node.getParent().replaceChild(node, dataAccessChild);
+      visit(dataAccessChild);
+    }
+    return true;
   }
 
   @Nullable
@@ -391,17 +364,9 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitFunctionNode(FunctionNode node) {
-
-    // Cannot simplify nonplugin functions.
-    // TODO(user): we can actually simplify checkNotNull.
-    if (node.getSoyFunction() instanceof BuiltinFunction) {
-      return;
+    if (!(node.getSoyFunction() instanceof BuiltinFunction) && !(node.getSoyFunction() instanceof LoggingFunction)) {
+      visitExprNode(node);
     }
-    if (node.getSoyFunction() instanceof LoggingFunction) {
-      return;
-    }
-    // Default to fallback implementation.
-    visitExprNode(node);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -409,55 +374,32 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
 
   @Override
   protected void visitExprNode(ExprNode node) {
+    if (!(node instanceof ParentExprNode)) return;
 
-    if (!(node instanceof ParentExprNode)) {
-      return;
-    }
     ParentExprNode nodeAsParent = (ParentExprNode) node;
-
-    // Recurse.
     visitChildren(nodeAsParent);
 
-    // If all children are constants, we attempt to preevaluate this node and replace it with a
-    // constant.
-    if (!childrenAreConstant(nodeAsParent)) {
-      return;
+    if (childrenAreConstant(nodeAsParent)) {
+      attemptPreeval(nodeAsParent);
     }
-    attemptPreeval(nodeAsParent);
   }
 
   // -----------------------------------------------------------------------------------------------
   // Helpers.
 
-  /**
-   * Attempts to preevaluate a node. If successful, the node is replaced with a new constant node in
-   * the tree. If unsuccessful, the tree is not changed.
-   */
   private void attemptPreeval(ExprNode node) {
-
-    // Note that we need to catch RenderException because preevaluation may fail, e.g. when
-    // (a) the expression uses a bidi function that needs bidiGlobalDir to be in scope, but the
-    //     apiCallScope is not currently active,
-    // (b) the expression uses an external function (Soy V1 syntax),
-    // (c) other cases I haven't thought up.
-
     SoyValue preevalResult;
     try {
       preevalResult = preevalVisitor.exec(node);
-    } catch (RenderException e) {
-      return; // failed to preevaluate
-    } catch (SoyDataException e) {
-      errorReporter.report(node.getSourceLocation(), SOY_DATA_ERROR, e.getMessage());
+    } catch (RenderException | SoyDataException e) {
+      if (e instanceof SoyDataException) {
+        errorReporter.report(node.getSourceLocation(), SOY_DATA_ERROR, e.getMessage());
+      }
       return;
     }
 
-    // It is possible for this to be an arbitrary SoyValue if the exprNode calls a pure soy function
-    // TODO(lukes): consider adding compiler builtins for sanitized content literals and consider
-    // expanding support for collection literals (lists/maps) to expand scope here.
     if (preevalResult instanceof PrimitiveData) {
-      PrimitiveNode newNode =
-          InternalValueUtils.convertPrimitiveDataToExpr(
-              (PrimitiveData) preevalResult, node.getSourceLocation());
+      PrimitiveNode newNode = InternalValueUtils.convertPrimitiveDataToExpr((PrimitiveData) preevalResult, node.getSourceLocation());
       if (newNode != null) {
         node.getParent().replaceChild(node, newNode);
       }
@@ -467,8 +409,7 @@ final class SimplifyExprVisitor extends AbstractExprNodeVisitor<Void> {
   private static boolean childrenAreConstant(ParentExprNode parent) {
     if (parent.getKind() == Kind.NULL_SAFE_ACCESS_NODE) {
       NullSafeAccessNode nullSafe = (NullSafeAccessNode) parent;
-      return isConstant(nullSafe.getBase())
-          && childrenAreConstant((ParentExprNode) nullSafe.getDataAccess());
+      return isConstant(nullSafe.getBase()) && childrenAreConstant((ParentExprNode) nullSafe.getDataAccess());
     }
     for (ExprNode child : parent.getChildren()) {
       if (!isConstant(child)) {
