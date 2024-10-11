@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -51,14 +52,12 @@ final class LegacyObjectMapFinder implements TypeNodeVisitor<Void> {
   public Void visit(GenericTypeNode node) {
     switch (node.getResolvedType().getKind()) {
       case LEGACY_OBJECT_MAP:
-        errorReporter.report(node.sourceLocation(), LEGACY_OBJECT_MAP_NOT_SUPPORTED);
+        reportLegacyObjectMap(node);
         // fallthrough
       case LIST:
       case MAP:
       case VE:
-        for (TypeNode child : node.arguments()) {
-          child.accept(this);
-        }
+        visitChildNodes(node);
         break;
       case ELEMENT:
         break;
@@ -68,12 +67,26 @@ final class LegacyObjectMapFinder implements TypeNodeVisitor<Void> {
     return null;
   }
 
-  @Override
-  public Void visit(UnionTypeNode node) {
-    for (TypeNode child : node.candidates()) {
+  private void reportLegacyObjectMap(GenericTypeNode node) {
+    errorReporter.report(node.sourceLocation(), LEGACY_OBJECT_MAP_NOT_SUPPORTED);
+  }
+
+  private void visitChildNodes(GenericTypeNode node) {
+    for (TypeNode child : node.arguments()) {
       child.accept(this);
     }
+  }
+
+  @Override
+  public Void visit(UnionTypeNode node) {
+    visitChildNodes(node.candidates());
     return null;
+  }
+
+  private void visitChildNodes(Iterable<TypeNode> nodes) {
+    for (TypeNode child : nodes) {
+      child.accept(this);
+    }
   }
 
   @Override
