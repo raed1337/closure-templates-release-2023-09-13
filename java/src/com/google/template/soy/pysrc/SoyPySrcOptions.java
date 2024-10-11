@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -69,14 +70,8 @@ public final class SoyPySrcOptions implements Cloneable {
   }
 
   private SoyPySrcOptions(SoyPySrcOptions orig) {
-    this.runtimePath = orig.runtimePath;
-    this.environmentModulePath = orig.environmentModulePath;
-    this.bidiIsRtlFn = orig.bidiIsRtlFn;
-    this.translationClass = orig.translationClass;
-    this.namespaceManifest = orig.namespaceManifest;
-    this.inputToOutputFilePaths = orig.inputToOutputFilePaths;
-    this.outputDirectoryFlag = orig.outputDirectoryFlag;
-    this.namespaceManifestFile = orig.namespaceManifestFile;
+    this(orig.runtimePath, orig.environmentModulePath, orig.bidiIsRtlFn, orig.translationClass,
+         orig.namespaceManifest, orig.inputToOutputFilePaths, orig.outputDirectoryFlag, orig.namespaceManifestFile);
   }
 
   public String getBidiIsRtlFn() {
