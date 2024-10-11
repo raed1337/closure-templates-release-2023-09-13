@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -69,10 +70,7 @@ final class TofuJavaValue implements JavaValue {
 
   @Override
   public TofuJavaValue isNonNull() {
-    if (soyValue == null) {
-      throw RenderException.create(
-          "isNonNull is only supported on the 'args' parameters of JavaValueFactory methods");
-    }
+    validateSoyValue("isNonNull");
     return forSoyValue(
         BooleanData.forValue(!(soyValue instanceof UndefinedData || soyValue instanceof NullData)),
         sourceLocation);
@@ -80,10 +78,7 @@ final class TofuJavaValue implements JavaValue {
 
   @Override
   public TofuJavaValue isNull() {
-    if (soyValue == null) {
-      throw RenderException.create(
-          "isNull is only supported on the 'args' parameters of JavaValueFactory methods");
-    }
+    validateSoyValue("isNull");
     return forSoyValue(
         BooleanData.forValue(soyValue instanceof UndefinedData || soyValue instanceof NullData),
         sourceLocation);
@@ -132,21 +127,25 @@ final class TofuJavaValue implements JavaValue {
   private void checkType(SoyType type) {
     if (!TofuTypeChecks.isInstance(type, soyValue, sourceLocation)) {
       throw RenderException.create(
-          "SoyValue["
-              + soyValue
-              + "] of type: "
-              + soyValue.getClass()
-              + " is incompatible with soy type: "
-              + type);
+          constructErrorMessage(soyValue, type));
     }
+  }
+
+  private void validateSoyValue(String methodName) {
+    if (soyValue == null) {
+      throw RenderException.create(
+          methodName + " is only supported on the 'args' parameters of JavaValueFactory methods");
+    }
+  }
+
+  private String constructErrorMessage(SoyValue soyValue, SoyType type) {
+    return "SoyValue[" + soyValue + "] of type: " + soyValue.getClass() + 
+           " is incompatible with soy type: " + type;
   }
 
   @Override
   public String toString() {
-    if (soyValue != null) {
-      return "TofuJavaValue[soyValue=" + soyValue + "]";
-    } else {
-      return "TofuJavaValue[rawValue=" + rawValue + "]";
-    }
+    return soyValue != null ? "TofuJavaValue[soyValue=" + soyValue + "]" : 
+                               "TofuJavaValue[rawValue=" + rawValue + "]";
   }
 }
