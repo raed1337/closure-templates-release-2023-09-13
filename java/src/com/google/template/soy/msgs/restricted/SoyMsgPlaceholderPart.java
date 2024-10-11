@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -32,7 +33,7 @@ public final class SoyMsgPlaceholderPart extends SoyMsgPart {
   private final MessagePlaceholder.Summary placeholder;
 
   public SoyMsgPlaceholderPart(String placeholderName) {
-    this(placeholderName, /* placeholderExample */ Optional.empty());
+    this(placeholderName, Optional.empty());
   }
 
   /** @param placeholderExample An optional example. */
@@ -42,16 +43,14 @@ public final class SoyMsgPlaceholderPart extends SoyMsgPart {
 
   /** @param placeholder Placeholder data. */
   public SoyMsgPlaceholderPart(MessagePlaceholder.Summary placeholder) {
-    this.placeholder = placeholder;
+    this.placeholder = checkNotNull(placeholder);
   }
 
-  // TODO(user): Replace with getPlaceholder().name().
   /** Returns the placeholder name (as seen by translators). */
   public String getPlaceholderName() {
     return placeholder.name();
   }
 
-  // TODO(user): Replace with getPlaceholder().example().
   /** Returns the (optional) placeholder example (as seen by translators). */
   public Optional<String> getPlaceholderExample() {
     return placeholder.example();
@@ -59,23 +58,20 @@ public final class SoyMsgPlaceholderPart extends SoyMsgPart {
 
   @Override
   public boolean equals(Object other) {
-    if (!(other instanceof SoyMsgPlaceholderPart)) {
-      return false;
-    }
-    return placeholder.equals(((SoyMsgPlaceholderPart) other).placeholder);
+    return this == other || (other instanceof SoyMsgPlaceholderPart && placeholder.equals(((SoyMsgPlaceholderPart) other).placeholder));
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(SoyMsgPlaceholderPart.class, placeholder);
+    return Objects.hash(placeholder);
   }
 
   @Override
   public String toString() {
-    return MoreObjects.toStringHelper("Placeholder")
+    return MoreObjects.toStringHelper(this)
         .omitNullValues()
-        .addValue(placeholder.name())
-        .add("ex", placeholder.example().orElse(null))
+        .add("name", placeholder.name())
+        .add("example", placeholder.example().orElse(null))
         .toString();
   }
 }
