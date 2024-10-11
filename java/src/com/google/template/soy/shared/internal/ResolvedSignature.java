@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -36,8 +37,7 @@ public abstract class ResolvedSignature {
   /** Return type. */
   public abstract SoyType returnType();
 
-  public static ResolvedSignature create(
-      ImmutableList<SoyType> parameterTypes, SoyType returnType) {
+  public static ResolvedSignature create(ImmutableList<SoyType> parameterTypes, SoyType returnType) {
     return new AutoValue_ResolvedSignature(parameterTypes, returnType);
   }
 }
