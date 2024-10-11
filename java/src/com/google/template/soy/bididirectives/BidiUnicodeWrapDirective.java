@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -33,6 +34,7 @@ import com.google.template.soy.shared.restricted.SoyJavaPrintDirective;
 import com.google.template.soy.types.SanitizedType.HtmlType;
 import com.google.template.soy.types.StringType;
 import com.google.template.soy.types.UnionType;
+
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -74,37 +76,28 @@ final class BidiUnicodeWrapDirective
 
   private static final class JbcSrcMethods {
     static final MethodRef BIDI_UNICODE_WRAP =
-        MethodRef.create(
-            BidiDirectivesRuntime.class, "bidiUnicodeWrap", BidiGlobalDir.class, SoyValue.class);
+        MethodRef.create(BidiDirectivesRuntime.class, "bidiUnicodeWrap", BidiGlobalDir.class, SoyValue.class);
     static final MethodRef BIDI_UNICODE_WRAP_STREAMING =
-        MethodRef.create(
-            BidiDirectivesRuntime.class,
-            "bidiUnicodeWrapStreaming",
-            LoggingAdvisingAppendable.class,
-            BidiGlobalDir.class);
+        MethodRef.create(BidiDirectivesRuntime.class, "bidiUnicodeWrapStreaming", LoggingAdvisingAppendable.class, BidiGlobalDir.class);
   }
 
   @Override
-  public SoyExpression applyForJbcSrc(
-      JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
+  public SoyExpression applyForJbcSrc(JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
     return SoyExpression.forSoyValue(
         UnionType.of(StringType.getInstance(), HtmlType.getInstance()),
         JbcSrcMethods.BIDI_UNICODE_WRAP.invoke(context.getBidiGlobalDir(), value.box()));
   }
 
   @Override
-  public AppendableAndOptions applyForJbcSrcStreaming(
-      JbcSrcPluginContext context, Expression delegateAppendable, List<SoyExpression> args) {
+  public AppendableAndOptions applyForJbcSrcStreaming(JbcSrcPluginContext context, Expression delegateAppendable, List<SoyExpression> args) {
     return AppendableAndOptions.createCloseable(
-        JbcSrcMethods.BIDI_UNICODE_WRAP_STREAMING.invoke(
-            delegateAppendable, context.getBidiGlobalDir()));
+        JbcSrcMethods.BIDI_UNICODE_WRAP_STREAMING.invoke(delegateAppendable, context.getBidiGlobalDir()));
   }
 
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
     String codeSnippet = bidiGlobalDirProvider.get().getCodeSnippet();
-    return new JsExpr(
-        "soy.$$bidiUnicodeWrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
+    return new JsExpr("soy.$$bidiUnicodeWrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
   }
 
   @Override
@@ -115,7 +108,6 @@ final class BidiUnicodeWrapDirective
   @Override
   public PyExpr applyForPySrc(PyExpr value, List<PyExpr> args) {
     String codeSnippet = bidiGlobalDirProvider.get().getCodeSnippet();
-    return new PyExpr(
-        "bidi.unicode_wrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
+    return new PyExpr("bidi.unicode_wrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
   }
 }
