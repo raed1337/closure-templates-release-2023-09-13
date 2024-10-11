@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -44,6 +45,14 @@ public abstract class SoyMsgPart {
     public abstract T spec();
 
     public abstract ImmutableList<SoyMsgPart> parts();
+
+    @Override
+    public String toString() {
+      return "Case{" +
+          "spec=" + spec() +
+          ", parts=" + parts() +
+          '}';
+    }
   }
 
   // force subtypes to implement this.
