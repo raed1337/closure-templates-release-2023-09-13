@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -53,22 +54,28 @@ public final class SoyMsgSelectPart extends SoyMsgPart {
 
   @Nullable
   public ImmutableList<SoyMsgPart> lookupCase(String selectValue) {
-    // TODO(lukes): consider indexing the case in some way to speed lookups
-    ImmutableList<SoyMsgPart> caseParts = null;
-    ImmutableList<SoyMsgPart> defaultParts = null;
+    ImmutableList<SoyMsgPart> caseParts = findCaseParts(selectValue);
+    return caseParts != null ? caseParts : findDefaultParts();
+  }
+
+  @Nullable
+  private ImmutableList<SoyMsgPart> findCaseParts(String selectValue) {
     for (Case<String> case0 : getCases()) {
-      if (case0.spec() == null) {
-        defaultParts = case0.parts();
-      } else if (case0.spec().equals(selectValue)) {
-        caseParts = case0.parts();
-        break;
+      if (case0.spec() != null && case0.spec().equals(selectValue)) {
+        return case0.parts();
       }
     }
+    return null;
+  }
 
-    if (caseParts == null) {
-      return defaultParts;
+  @Nullable
+  private ImmutableList<SoyMsgPart> findDefaultParts() {
+    for (Case<String> case0 : getCases()) {
+      if (case0.spec() == null) {
+        return case0.parts();
+      }
     }
-    return caseParts;
+    return null;
   }
 
   @Override
