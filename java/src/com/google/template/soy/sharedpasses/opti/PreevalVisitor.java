@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -63,37 +64,40 @@ final class PreevalVisitor extends EvalVisitor {
 
   @Override
   protected SoyValue visitVarRefNode(VarRefNode node) {
+    handleInjectedData(node);
+    SoyValue value = super.visitVarRefNode(node);
+    validateUndefinedData(value);
+    return value;
+  }
 
+  private void handleInjectedData(VarRefNode node) {
     // Cannot preevaluate injected data.
     if (node.isInjected()) {
       throw RenderException.create("Cannot preevaluate reference to ijData.");
     }
+  }
 
-    // Otherwise, super method can handle it.
-    SoyValue value = super.visitVarRefNode(node);
-
+  private void validateUndefinedData(SoyValue value) {
     if (value instanceof UndefinedData) {
       throw RenderException.create("Encountered undefined reference during preevaluation.");
     }
-
-    return value;
   }
 
   @Override
   protected SoyValue computeFunctionHelper(
       SoyJavaFunction fn, List<SoyValue> args, FunctionNode fnNode) {
     checkArgument(fnNode.getSoyFunction() == fn);
-    checkPure(fn);
+    validatePureFunction(fn);
     return super.computeFunctionHelper(fn, args, fnNode);
   }
 
   @Override
   protected SoyValue computeFunctionHelper(List<SoyValue> args, JavaPluginExecContext fnNode) {
-    checkPure(fnNode.getSourceFunction());
+    validatePureFunction(fnNode.getSourceFunction());
     return super.computeFunctionHelper(args, fnNode);
   }
 
-  private static void checkPure(Object fn) {
+  private static void validatePureFunction(Object fn) {
     if (!SoyFunctions.isPure(fn)) {
       throw RenderException.create("Cannot preevaluate impure function.");
     }
