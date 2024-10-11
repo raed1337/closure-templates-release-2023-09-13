@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -19,6 +20,8 @@ package com.google.template.soy.bididirectives;
 import com.google.common.collect.ImmutableSet;
 import com.google.template.soy.internal.i18n.BidiGlobalDir;
 import com.google.template.soy.shared.restricted.SoyPrintDirective;
+
+import java.util.Arrays;
 import java.util.function.Supplier;
 
 /** Lists all bidi directives. */
@@ -26,7 +29,9 @@ public final class BidiDirectives {
   private BidiDirectives() {}
 
   public static ImmutableSet<SoyPrintDirective> directives(Supplier<BidiGlobalDir> bidiProvider) {
-    return ImmutableSet.of(
-        new BidiSpanWrapDirective(bidiProvider), new BidiUnicodeWrapDirective(bidiProvider));
+    return ImmutableSet.copyOf(Arrays.asList(
+        new BidiSpanWrapDirective(bidiProvider),
+        new BidiUnicodeWrapDirective(bidiProvider)
+    ));
   }
 }
