@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -40,30 +41,14 @@ import javax.annotation.Nonnull;
  * {@code Tofu} backends.
  */
 public final class SharedRuntime {
-  /**
-   * Custom equality operator that smooths out differences between different Soy runtimes.
-   *
-   * <p>This approximates Javascript's behavior, but is much easier to understand.
-   */
+
   public static boolean equal(SoyValue operand0, SoyValue operand1) {
-    // Treat the case where either is a string specially.
-    // TODO(gboyer): This should probably handle SanitizedContent == SanitizedContent, even though
-    // Javascript doesn't handle that case properly. http://b/21461181
-    if (operand0 instanceof StringData) {
-      return compareString(operand0.stringValue(), operand1);
-    }
-    if (operand1 instanceof StringData) {
-      return compareString(operand1.stringValue(), operand0);
-    }
-    if ((operand0 == null || operand0.isNullish()) && (operand1 == null || operand1.isNullish())) {
-      return true;
-    }
+    if (isStringComparison(operand0, operand1)) return compareString(getStringValue(operand0), operand1);
+    if (isStringComparison(operand1, operand0)) return compareString(getStringValue(operand1), operand0);
+    if (isBothNull(operand0, operand1)) return true;
     return Objects.equals(operand0, operand1);
   }
 
-  /**
-   * Custom strict equality operator that smooths out differences between different Soy runtimes.
-   */
   public static boolean tripleEqual(SoyValue operand0, SoyValue operand1) {
     if (operand0 instanceof BooleanData && operand1 instanceof BooleanData) {
       return operand0.booleanValue() == operand1.booleanValue();
@@ -77,68 +62,48 @@ public final class SharedRuntime {
     return operand0 == operand1;
   }
 
-  /**
-   * Same as {@link #tripleEqual} except it has special handling for sanitized types and strings.
-   */
   public static boolean switchCaseEqual(SoyValue operand0, SoyValue operand1) {
-    if (operand0 instanceof SanitizedContent) {
-      operand0 = StringData.forValue(operand0.toString());
-    }
-    if (operand1 instanceof SanitizedContent) {
-      operand1 = StringData.forValue(operand1.toString());
-    }
+    operand0 = sanitizeIfNecessary(operand0);
+    operand1 = sanitizeIfNecessary(operand1);
     return tripleEqual(operand0, operand1);
   }
 
-  /** Performs the {@code +} operator on the two values. */
   @Nonnull
   public static SoyValue plus(SoyValue operand0, SoyValue operand1) {
-    if (operand0 instanceof IntegerData && operand1 instanceof IntegerData) {
+    if (isIntegerPair(operand0, operand1)) {
       return IntegerData.forValue(operand0.longValue() + operand1.longValue());
-    } else if (operand0 instanceof NumberData && operand1 instanceof NumberData) {
+    } else if (isNumberPair(operand0, operand1)) {
       return FloatData.forValue(operand0.numberValue() + operand1.numberValue());
-    } else {
-      // String concatenation is the fallback for other types (like in JS). Use the implemented
-      // coerceToString() for the type.
-      return StringData.forValue(operand0.coerceToString() + operand1.coerceToString());
     }
+    return StringData.forValue(operand0.coerceToString() + operand1.coerceToString());
   }
 
-  /** Performs the {@code -} operator on the two values. */
   @Nonnull
   public static SoyValue minus(SoyValue operand0, SoyValue operand1) {
-    if (operand0 instanceof IntegerData && operand1 instanceof IntegerData) {
+    if (isIntegerPair(operand0, operand1)) {
       return IntegerData.forValue(operand0.longValue() - operand1.longValue());
-    } else {
-      return FloatData.forValue(operand0.numberValue() - operand1.numberValue());
     }
+    return FloatData.forValue(operand0.numberValue() - operand1.numberValue());
   }
 
-  /** Performs the {@code *} operator on the two values. */
   @Nonnull
   public static NumberData times(SoyValue operand0, SoyValue operand1) {
-    if (operand0 instanceof IntegerData && operand1 instanceof IntegerData) {
+    if (isIntegerPair(operand0, operand1)) {
       return IntegerData.forValue(operand0.longValue() * operand1.longValue());
-    } else {
-      return FloatData.forValue(operand0.numberValue() * operand1.numberValue());
     }
+    return FloatData.forValue(operand0.numberValue() * operand1.numberValue());
   }
 
-  /** Performs the {@code /} operator on the two values. */
   public static double dividedBy(SoyValue operand0, SoyValue operand1) {
-    // Note: Soy always performs floating-point division, even on two integers (like JavaScript).
-    // Note that this *will* lose precision for longs.
     return operand0.numberValue() / operand1.numberValue();
   }
 
-  /** Performs the {@code %} operator on the two values. */
   @Nonnull
   public static NumberData mod(SoyValue operand0, SoyValue operand1) {
-    if (operand0 instanceof IntegerData && operand1 instanceof IntegerData) {
+    if (isIntegerPair(operand0, operand1)) {
       return IntegerData.forValue(operand0.longValue() % operand1.longValue());
-    } else {
-      return FloatData.forValue(operand0.numberValue() % operand1.numberValue());
     }
+    return FloatData.forValue(operand0.numberValue() % operand1.numberValue());
   }
 
   @Nonnull
@@ -166,67 +131,41 @@ public final class SharedRuntime {
     return IntegerData.forValue(operand0.longValue() & operand1.longValue());
   }
 
-  /** Performs the {@code <} operator on the two values. */
   public static boolean lessThan(SoyValue left, SoyValue right) {
-    if (left instanceof StringData && right instanceof StringData) {
-      return left.stringValue().compareTo(right.stringValue()) < 0;
-    } else if (left instanceof IntegerData && right instanceof IntegerData) {
-      return left.longValue() < right.longValue();
-    } else {
-      return left.numberValue() < right.numberValue();
-    }
+    return compareValues(left, right, (l, r) -> l < r);
   }
 
-  /** Performs the {@code <=} operator on the two values. */
   public static boolean lessThanOrEqual(SoyValue left, SoyValue right) {
-    if (left instanceof StringData && right instanceof StringData) {
-      return left.stringValue().compareTo(right.stringValue()) <= 0;
-    } else if (left instanceof IntegerData && right instanceof IntegerData) {
-      return left.longValue() <= right.longValue();
-    } else {
-      return left.numberValue() <= right.numberValue();
-    }
+    return compareValues(left, right, (l, r) -> l <= r);
   }
 
-  /** Performs the unary negation {@code -} operator on the value. */
   @Nonnull
   public static NumberData negative(SoyValue node) {
-    if (node instanceof IntegerData) {
-      return IntegerData.forValue(-node.longValue());
-    } else {
-      return FloatData.forValue(-node.floatValue());
-    }
+    return (node instanceof IntegerData) ? 
+        IntegerData.forValue(-node.longValue()) : 
+        FloatData.forValue(-node.floatValue());
   }
 
-  /** Determines if the operand's string form can be equality-compared with a string. */
   public static boolean compareString(String string, SoyValue other) {
-    // This follows similarly to the Javascript specification, to ensure similar operation
-    // over Javascript and Java: http://www.ecma-international.org/ecma-262/5.1/#sec-11.9.3
     if (other instanceof StringData || other instanceof SanitizedContent) {
       return string.equals(other.toString());
     }
     if (other instanceof NumberData) {
       try {
-        // Parse the string as a number.
         return Double.parseDouble(string) == other.numberValue();
       } catch (NumberFormatException nfe) {
-        // Didn't parse as a number.
         return false;
       }
     }
     return false;
   }
 
-  /** calculates a $soyServerKey value. This should be compatible with the JS implementation in */
   @Nonnull
   public static String soyServerKey(SoyValue key) {
     if (key instanceof NumberData) {
       return serialize(key.coerceToString(), "#");
     }
-    if (key == null) {
-      return serialize("null", "_");
-    }
-    return serialize(key.coerceToString(), ":");
+    return serialize(key == null ? "null" : key.coerceToString(), key == null ? "_" : ":");
   }
 
   @Nonnull
@@ -234,46 +173,70 @@ public final class SharedRuntime {
     Map<SoyValue, SoyValueProvider> map = new HashMap<>();
     for (int i = 0; i < list.size(); i++) {
       SoyValue recordEntry = list.get(i).resolve();
-      checkMapFromListConstructorCondition(
-          recordEntry instanceof SoyRecord, recordEntry, OptionalInt.of(i));
-
+      checkMapFromListConstructorCondition(recordEntry instanceof SoyRecord, recordEntry, OptionalInt.of(i));
       checkMapFromListConstructorCondition(
           ((SoyRecord) recordEntry).hasField(MapLiteralFromListNode.KEY_STRING)
               && ((SoyRecord) recordEntry).hasField(MapLiteralFromListNode.VALUE_STRING),
           recordEntry,
           OptionalInt.of(i));
-
       SoyValue key = ((SoyRecord) recordEntry).getField(MapLiteralFromListNode.KEY_STRING);
       SoyValueProvider valueProvider =
           ((SoyRecord) recordEntry).getFieldProvider(MapLiteralFromListNode.VALUE_STRING);
-      checkMapFromListConstructorCondition(
-          SoyMap.isAllowedKeyType(key), recordEntry, OptionalInt.of(i));
-
+      checkMapFromListConstructorCondition(SoyMap.isAllowedKeyType(key), recordEntry, OptionalInt.of(i));
       map.put(key, valueProvider);
     }
-
     return SoyMapImpl.forProviderMap(map);
   }
 
   public static void checkMapFromListConstructorCondition(
       boolean condition, SoyValue list, OptionalInt index) {
     if (!condition) {
-      String exceptionString =
-          String.format(
-              "Error constructing map. Expected a list where each item is a record of 'key',"
-                  + " 'value' pairs, with the 'key' fields holding primitive values. Found: %s",
-              list);
+      String exceptionString = String.format(
+          "Error constructing map. Expected a list where each item is a record of 'key',"
+              + " 'value' pairs, with the 'key' fields holding primitive values. Found: %s", list);
       if (index.isPresent()) {
         exceptionString += String.format(" at index %d", index.getAsInt());
       }
-
-      // TODO: throw a RenderException here
       throw new IllegalArgumentException(exceptionString);
     }
   }
 
   private static String serialize(String key, String delimiter) {
     return key.length() + delimiter + key;
+  }
+
+  private static boolean isStringComparison(SoyValue operand, SoyValue other) {
+    return operand instanceof StringData;
+  }
+
+  private static String getStringValue(SoyValue operand) {
+    return operand instanceof StringData ? operand.stringValue() : operand.toString();
+  }
+
+  private static boolean isBothNull(SoyValue operand0, SoyValue operand1) {
+    return (operand0 == null || operand0.isNullish()) && (operand1 == null || operand1.isNullish());
+  }
+  
+  private static SoyValue sanitizeIfNecessary(SoyValue operand) {
+    return (operand instanceof SanitizedContent) ? StringData.forValue(operand.toString()) : operand;
+  }
+
+  private static boolean isIntegerPair(SoyValue operand0, SoyValue operand1) {
+    return operand0 instanceof IntegerData && operand1 instanceof IntegerData;
+  }
+
+  private static boolean isNumberPair(SoyValue operand0, SoyValue operand1) {
+    return operand0 instanceof NumberData && operand1 instanceof NumberData;
+  }
+
+  private static boolean compareValues(SoyValue left, SoyValue right, java.util.function.BiPredicate<Double, Double> comparator) {
+    if (left instanceof StringData && right instanceof StringData) {
+      return left.stringValue().compareTo(right.stringValue()) < 0;
+    } else if (left instanceof IntegerData && right instanceof IntegerData) {
+      return comparator.test((double) left.longValue(), (double) right.longValue());
+    } else {
+      return comparator.test(left.numberValue(), right.numberValue());
+    }
   }
 
   private SharedRuntime() {}
