@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -81,6 +82,10 @@ public class EscapeHtmlDirective
   @Override
   public SoyExpression applyForJbcSrc(
       JbcSrcPluginContext context, SoyExpression value, List<SoyExpression> args) {
+    return createSoyExpression(value);
+  }
+
+  private SoyExpression createSoyExpression(SoyExpression value) {
     return SoyExpression.forSoyValue(
         SanitizedType.HtmlType.getInstance(),
         value.isBoxed()
@@ -91,6 +96,10 @@ public class EscapeHtmlDirective
   @Override
   public AppendableAndOptions applyForJbcSrcStreaming(
       JbcSrcPluginContext context, Expression delegateAppendable, List<SoyExpression> args) {
+    return createAppendableAndOptions(delegateAppendable);
+  }
+
+  private AppendableAndOptions createAppendableAndOptions(Expression delegateAppendable) {
     return AppendableAndOptions.create(
         JbcSrcMethods.STREAMING_ESCAPE_HTML.invoke(delegateAppendable));
   }
