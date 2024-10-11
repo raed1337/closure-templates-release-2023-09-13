@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -43,78 +44,19 @@ public final class RenderOnlySoyMsgBundleImpl extends SoyMsgBundle {
 
   /** The language/locale string of this bundle's messages. */
   private final String localeString;
-
   private final ULocale locale;
   private final boolean isRtl;
 
-  // Using parallel collections saves memory versus using a Map, because it avoids:
-  // * having to wrap the longs in a new Long(), and
-  // * avoids wrapping the key/value pair in an Entry.
-  // Also, using a sorted collection utilizes memory better, since unlike a hash table, you
-  // need neither a linked list nor empty spaces in the hash table.
-
-  /** Sorted array of message ID's that can be binary searched. */
   @SuppressWarnings("Immutable")
-  private final long[] ids;
-
-  /**
-   * List containing the message parts. See {@link #partRanges} for an explanation for how they
-   * correspond to {@link #ids}.
-   */
+  private final long[] ids; // Sorted array of message ID's for binary search.
   private final ImmutableList<SoyMsgPart> values;
 
-  /**
-   * Contains index-ranges for parts belonging to messages.
-   *
-   * <p>For instance, for a message with ID {@code ids[n]}, the SoyMsgPart values belonging to that
-   * message are the sublist of {@code values} from {@code partRanges[n]} (inclusive} to {@code
-   * partRanges[n+1]} (exclusive).
-   */
   @SuppressWarnings("Immutable")
-  private final int[] partRanges;
+  private final int[] partRanges; // Index-ranges for parts belonging to messages.
 
-  /*
-   * This implements a very nearly free dense hashtable of SoyMsgs.
-   * - It bucket-sorts entries by the low bits of IDs.
-   * - The buckets themselves are sorted by ID and are binary searchable.
-   * - The number of buckets varies by the number of SoyMsgs in the bundle.
-   * - The cost of the hash table is 32bits/(2**BUCKET_SHIFT) == 0.5bits per entry. This is *much*
-   *   smaller than a typical HashMap.
-   *
-   * If the messages hash evenly by masking their low bits (empircally, they do), then this
-   * approaches the performance of a HashMap. If they all hash to the same bucket, it performs no
-   * worse than the previous binary-search-the-whole-thing impementation.
-   */
-
-  /**
-   * Describes the target number of members per bucket, approximately 2^BUCKET_SHIFT per bucket.
-   *
-   * <p>This number was settled on after benchmarking. Increasing it will decrease the memory
-   * footprint of bucketBoundaries and increase hash-bucket crowding. Every time the shift shrinks
-   * by one, footprint doubles.
-   *
-   * <p>Outcomes for different values:
-   *
-   * <ul>
-   *   <li>1 - 68ns (expanded memory footprint)
-   *   <li>2 - 66ns
-   *   <li>3 - 70ns
-   *   <li>4 - 73ns
-   *   <li>5 - 75ns
-   *   <li>6 - 77ns (chosen option)
-   *   <li>7 - 82ns
-   *   <li>8 - 84ns
-   *   <li>9 - 87ns
-   *   <li>10 - 95ns
-   *   <li>24 - 128ns (low memory footprint, binary search everything)
-   * </ul>
-   */
   private static final int BUCKET_SHIFT = 6;
-
-  /** This is both the mask used to map IDs to buckets. It's also the number of buckets-1. */
   private final int bucketMask;
 
-  /** The bucket is the range [bucketBoundaries[bucketKey], bucketBoundaries[bucketKey]) in ids. */
   @SuppressWarnings("Immutable")
   private final int[] bucketBoundaries;
 
@@ -134,46 +76,40 @@ public final class RenderOnlySoyMsgBundleImpl extends SoyMsgBundle {
    *     ID's are not permitted.
    */
   public RenderOnlySoyMsgBundleImpl(@Nullable String localeString, Iterable<SoyMsg> msgs) {
-
     this.localeString = localeString;
     this.locale = localeString == null ? null : new ULocale(localeString);
     this.isRtl = BidiGlobalDir.forStaticLocale(localeString) == BidiGlobalDir.RTL;
 
-    // This creates the mask. Basically, take the high-bit and fill in the bits below it.
     int maskHigh = Integer.highestOneBit(Iterables.size(msgs));
     this.bucketMask = maskHigh == 0 ? 0 : (maskHigh | (maskHigh - 1)) >>> BUCKET_SHIFT;
     int numBuckets = this.bucketMask + 1;
 
-    // Sorts by bucket (low bits within the mask) and breaks ties with the full ID.
-    Comparator<SoyMsg> bucketComparator =
-        Comparator.comparingInt((SoyMsg m) -> bucketOf(m.getId())).thenComparingLong(SoyMsg::getId);
+    Comparator<SoyMsg> bucketComparator = Comparator.comparingInt((SoyMsg m) -> bucketOf(m.getId()))
+        .thenComparingLong(SoyMsg::getId);
     ImmutableList<SoyMsg> sortedMsgs = ImmutableList.sortedCopyOf(bucketComparator, msgs);
 
-    // Scan the sorted list to discover bucket boundaries and place them into the boundaries array.
     bucketBoundaries = new int[numBuckets + 1];
     for (int bucket = 0, idx = 0; bucket < numBuckets; bucket++) {
       bucketBoundaries[bucket] = idx;
-      for (;
-          (idx < sortedMsgs.size()) && (bucketOf(sortedMsgs.get(idx).getId()) == bucket);
-          idx++) {}
+      while (idx < sortedMsgs.size() && bucketOf(sortedMsgs.get(idx).getId()) == bucket) {
+        idx++;
+      }
     }
     bucketBoundaries[numBuckets] = sortedMsgs.size();
-
+    
     ids = new long[sortedMsgs.size()];
     ImmutableList.Builder<SoyMsgPart> partsBuilder = ImmutableList.builder();
     partRanges = new int[sortedMsgs.size() + 1];
-    partRanges[0] = 0; // The first range always starts at the beginning of the list.
+    partRanges[0] = 0;
     long priorId = sortedMsgs.isEmpty() ? -1L : sortedMsgs.get(0).getId() - 1L;
     int runningPartCount = 0;
+
     for (int i = 0, c = sortedMsgs.size(); i < c; i++) {
       SoyMsg msg = sortedMsgs.get(i);
       ImmutableList<SoyMsgPart> parts = msg.getParts();
 
-      checkArgument(
-          msg.getId() != priorId, "Duplicate messages are not permitted in the render-only impl.");
-      checkArgument(
-          MsgPartUtils.hasPlrselPart(parts) == msg.isPlrselMsg(),
-          "Message's plural/select status is inconsistent -- internal compiler bug.");
+      checkArgument(msg.getId() != priorId, "Duplicate messages are not permitted in the render-only impl.");
+      checkArgument(MsgPartUtils.hasPlrselPart(parts) == msg.isPlrselMsg(), "Message's plural/select status is inconsistent -- internal compiler bug.");
 
       priorId = msg.getId();
       ids[i] = msg.getId();
@@ -182,26 +118,27 @@ public final class RenderOnlySoyMsgBundleImpl extends SoyMsgBundle {
       partRanges[i + 1] = runningPartCount; // runningPartCount is the end of range, hence +1
     }
 
-    // This will build the collections in the same order as the sorted map.
     values = partsBuilder.build();
   }
 
   /** Copies a RenderOnlySoyMsgBundleImpl, replacing only the localeString. */
-  public RenderOnlySoyMsgBundleImpl(
-      @Nullable String localeString, RenderOnlySoyMsgBundleImpl exemplar) {
+  public RenderOnlySoyMsgBundleImpl(@Nullable String localeString, RenderOnlySoyMsgBundleImpl exemplar) {
+    this(localeString, exemplar.locale, exemplar.isRtl, exemplar.bucketMask, exemplar.bucketBoundaries, exemplar.ids, exemplar.values, exemplar.partRanges);
+  }
 
+  private RenderOnlySoyMsgBundleImpl(@Nullable String localeString, ULocale locale, boolean isRtl,
+      int bucketMask, int[] bucketBoundaries, long[] ids, ImmutableList<SoyMsgPart> values, int[] partRanges) {
     this.localeString = localeString;
-    this.locale = localeString == null ? null : new ULocale(localeString);
-    this.isRtl = BidiGlobalDir.forStaticLocale(localeString) == BidiGlobalDir.RTL;
-    this.bucketMask = exemplar.bucketMask;
-    this.bucketBoundaries = exemplar.bucketBoundaries;
-    this.ids = exemplar.ids;
-    this.values = exemplar.values;
-    this.partRanges = exemplar.partRanges;
+    this.locale = locale;
+    this.isRtl = isRtl;
+    this.bucketMask = bucketMask;
+    this.bucketBoundaries = bucketBoundaries;
+    this.ids = ids;
+    this.values = values;
+    this.partRanges = partRanges;
   }
 
   /** Brings a message back to life from only its ID and parts. */
-  // The constructor guarantees the type of ImmutableList.
   private SoyMsg resurrectMsg(long id, ImmutableList<SoyMsgPart> parts) {
     return SoyMsg.builder()
         .setId(id)
