@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -66,14 +67,11 @@ public final class ExtractMsgsVisitor extends AbstractSoyNodeVisitor<SoyMsgBundl
 
     msgs = Lists.newArrayList();
     visit(node);
-    // the messages in this list only have one source location.
-    // messages gain extra source locations when merged together in a bundle.
     msgs.sort(comparing(m -> Iterables.getOnlyElement(m.getSourceLocations()).sourceLocation()));
     return new SoyMsgBundleImpl(null, msgs, this::merge);
   }
 
   private Optional<SoyMsg> merge(SoyMsg m1, SoyMsg m2) {
-    // TODO(b/173828073): consider comparing things like contentType
     return Optional.of(
         m1.toBuilder()
             .setHasFallback(m1.hasFallback() && m2.hasFallback())
@@ -97,41 +95,46 @@ public final class ExtractMsgsVisitor extends AbstractSoyNodeVisitor<SoyMsgBundl
     }
     return attributes.toString();
   }
+
   // -----------------------------------------------------------------------------------------------
   // Implementations for specific nodes.
 
   @Override
   protected void visitMsgNode(MsgNode node) {
+    SoyMsg msg = createSoyMsgFromNode(node);
+    msgs.add(msg);
+    visitChildren(node);
+  }
+
+  private SoyMsg createSoyMsgFromNode(MsgNode node) {
     MsgPartsAndIds msgPartsAndIds = MsgUtils.buildMsgPartsAndComputeMsgIdForDualFormat(node);
     SoyMsg.Builder builder = SoyMsg.builder().setId(msgPartsAndIds.id);
+    
     if (node.getMeaning() != null) {
       builder.setMeaning(node.getMeaning());
     }
+    
     node.getAlternateId().ifPresent(builder::setAlternateId);
-    SoyMsg msg =
-        builder
-            .setDesc(node.getDesc())
-            .setContentType(node.getContentType())
-            .addSourceLocation(node.getSourceLocation(), currentTemplate)
-            .setIsPlrselMsg(node.isPlrselMsg())
-            .setParts(msgPartsAndIds.parts)
-            .setHasFallback(
-                // we have a fallback if our parent has 2 children (the msg and the fallbackmsg) and
-                // we are the msg
-                node.getParent().numChildren() == 2 && node.getParent().getChildIndex(node) == 0)
-            .build();
-    msgs.add(msg);
+    
+    return builder
+        .setDesc(node.getDesc())
+        .setContentType(node.getContentType())
+        .addSourceLocation(node.getSourceLocation(), currentTemplate)
+        .setIsPlrselMsg(node.isPlrselMsg())
+        .setParts(msgPartsAndIds.parts)
+        .setHasFallback(isFallback(node))
+        .build();
+  }
 
-    // Nested msg are allowed, e.g. as params of a nested call node.
-    visitChildren(node);
+  private boolean isFallback(MsgNode node) {
+    return node.getParent().numChildren() == 2 && node.getParent().getChildIndex(node) == 0;
   }
 
   @Override
   protected void visitTemplateNode(TemplateNode node) {
-    if (node instanceof TemplateDelegateNode) {
-      currentTemplate = ((TemplateDelegateNode) node).getDelTemplateName();
-    }
-    currentTemplate = node.getTemplateName();
+    currentTemplate = (node instanceof TemplateDelegateNode) ? 
+                      ((TemplateDelegateNode) node).getDelTemplateName() : 
+                      node.getTemplateName();
     super.visitTemplateNode(node);
   }
 
