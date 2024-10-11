@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -48,6 +49,20 @@ public final class EvalVisitorFactoryImpl implements EvalVisitorFactory {
       ImmutableTable<SourceFilePath, String, ImmutableList<ExternNode>> externs,
       DelTemplateSelector<TemplateNode> deltemplates,
       Predicate<String> activeModSelector) {
+    return buildEvalVisitor(env, cssRenamingMap, xidRenamingMap, msgBundle,
+        debugSoyTemplateInfo, pluginInstances, externs, deltemplates, activeModSelector);
+  }
+
+  private EvalVisitor buildEvalVisitor(
+      Environment env,
+      @Nullable SoyCssRenamingMap cssRenamingMap,
+      @Nullable SoyIdRenamingMap xidRenamingMap,
+      @Nullable SoyMsgBundle msgBundle,
+      boolean debugSoyTemplateInfo,
+      PluginInstances pluginInstances,
+      ImmutableTable<SourceFilePath, String, ImmutableList<ExternNode>> externs,
+      DelTemplateSelector<TemplateNode> deltemplates,
+      Predicate<String> activeModSelector) {
     return new EvalVisitor(
         env,
         cssRenamingMap,
@@ -55,11 +70,6 @@ public final class EvalVisitorFactoryImpl implements EvalVisitorFactory {
         msgBundle,
         debugSoyTemplateInfo,
         pluginInstances,
-        /*
-         * Use BUGGED mode for backwards compatibility.  The default tofu renderer always had a
-         * buggy implementation of data access nodes and this makes that behavior a little more
-         * explicit.
-         */
         EvalVisitor.UndefinedDataHandlingMode.BUGGED,
         externs,
         deltemplates,
