@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -62,6 +63,10 @@ public class PyExpr extends TargetExpr {
    * @return A PyStringExpr representing this expression as a String.
    */
   public PyStringExpr toPyString() {
-    return new PyStringExpr("str(" + getText() + ")", Integer.MAX_VALUE);
+    return convertToPyString(getText());
+  }
+
+  private PyStringExpr convertToPyString(String expression) {
+    return new PyStringExpr("str(" + expression + ")", Integer.MAX_VALUE);
   }
 }
