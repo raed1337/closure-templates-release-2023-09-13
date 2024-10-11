@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2010 Google Inc.
  *
@@ -16,7 +17,6 @@
 
 package com.google.template.soy.msgs.restricted;
 
-import com.google.common.base.MoreObjects;
 import java.util.Objects;
 
 /**
@@ -29,7 +29,7 @@ public final class SoyMsgPluralRemainderPart extends SoyMsgPart {
 
   /** @param pluralVarName The plural variable name. */
   public SoyMsgPluralRemainderPart(String pluralVarName) {
-    this.pluralVarName = pluralVarName;
+    this.pluralVarName = Objects.requireNonNull(pluralVarName, "pluralVarName cannot be null");
   }
 
   public String getPluralVarName() {
@@ -38,17 +38,19 @@ public final class SoyMsgPluralRemainderPart extends SoyMsgPart {
 
   @Override
   public boolean equals(Object other) {
-    return other instanceof SoyMsgPluralRemainderPart
-        && pluralVarName.equals(((SoyMsgPluralRemainderPart) other).pluralVarName);
+    if (this == other) return true;
+    if (!(other instanceof SoyMsgPluralRemainderPart)) return false;
+    SoyMsgPluralRemainderPart that = (SoyMsgPluralRemainderPart) other;
+    return pluralVarName.equals(that.pluralVarName);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(SoyMsgPluralRemainderPart.class, pluralVarName);
+    return Objects.hash(pluralVarName);
   }
 
   @Override
   public String toString() {
-    return MoreObjects.toStringHelper("Remainder").addValue(pluralVarName).toString();
+    return String.format("Remainder{pluralVarName='%s'}", pluralVarName);
   }
 }
