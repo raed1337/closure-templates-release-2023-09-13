@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -33,6 +34,7 @@ import com.google.template.soy.jssrc.restricted.SoyLibraryAssistedJsSrcPrintDire
 import com.google.template.soy.pysrc.restricted.PyExpr;
 import com.google.template.soy.pysrc.restricted.SoyPySrcPrintDirective;
 import com.google.template.soy.shared.restricted.SoyJavaPrintDirective;
+
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -71,8 +73,7 @@ final class BidiSpanWrapDirective
   @Override
   @Nonnull
   public ContentKind getContentKind() {
-    // This directive expects HTML as input and produces HTML as output.
-    return ContentKind.HTML;
+    return ContentKind.HTML; // This directive expects HTML as input and produces HTML as output.
   }
 
   @Override
@@ -110,9 +111,8 @@ final class BidiSpanWrapDirective
 
   @Override
   public JsExpr applyForJsSrc(JsExpr value, List<JsExpr> args) {
-    String codeSnippet = bidiGlobalDirProvider.get().getCodeSnippet();
     return new JsExpr(
-        "soy.$$bidiSpanWrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
+        String.format("soy.$$bidiSpanWrap(%s, %s)", bidiGlobalDirProvider.get().getCodeSnippet(), value.getText()), Integer.MAX_VALUE);
   }
 
   @Override
@@ -122,8 +122,7 @@ final class BidiSpanWrapDirective
 
   @Override
   public PyExpr applyForPySrc(PyExpr value, List<PyExpr> args) {
-    String codeSnippet = bidiGlobalDirProvider.get().getCodeSnippet();
     return new PyExpr(
-        "bidi.span_wrap(" + codeSnippet + ", " + value.getText() + ")", Integer.MAX_VALUE);
+        String.format("bidi.span_wrap(%s, %s)", bidiGlobalDirProvider.get().getCodeSnippet(), value.getText()), Integer.MAX_VALUE);
   }
 }
