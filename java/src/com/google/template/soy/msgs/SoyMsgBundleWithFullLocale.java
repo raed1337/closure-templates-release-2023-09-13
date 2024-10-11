@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -49,13 +50,14 @@ public final class SoyMsgBundleWithFullLocale extends SoyMsgBundle {
    * </ul>
    */
   public static SoyMsgBundle preservingLocaleIfAllowed(SoyMsgBundle bundle, Locale locale) {
-    // When checking compatibility, normalize the locale using toLanguageTag() to convert deprecated
-    // locale language codes ("iw") to new ones ("he"). Thus, for backward compatiblity, we thus
-    // avoid wrapping the original bundle when its language code isn't preserved.
     ULocale ulocale = new ULocale(locale.toLanguageTag());
-    return ulocale.getLanguage().equals(bundle.getLocale().getLanguage())
-        ? new SoyMsgBundleWithFullLocale(bundle, ulocale, ulocale.toLanguageTag())
-        : bundle;
+    return isLanguageCompatible(bundle, ulocale) ? 
+        new SoyMsgBundleWithFullLocale(bundle, ulocale, ulocale.toLanguageTag()) : 
+        bundle;
+  }
+
+  private static boolean isLanguageCompatible(SoyMsgBundle bundle, ULocale ulocale) {
+    return ulocale.getLanguage().equals(bundle.getLocale().getLanguage());
   }
 
   private final SoyMsgBundle delegate;
@@ -65,14 +67,17 @@ public final class SoyMsgBundleWithFullLocale extends SoyMsgBundle {
 
   @VisibleForTesting
   SoyMsgBundleWithFullLocale(SoyMsgBundle delegate, ULocale locale, String localeString) {
-    // unwrap the delegate
-    while (delegate instanceof SoyMsgBundleWithFullLocale) {
-      delegate = ((SoyMsgBundleWithFullLocale) delegate).delegate;
-    }
-    this.delegate = delegate;
+    this.delegate = unwrapDelegate(delegate);
     this.locale = locale;
     this.localeString = localeString;
     this.isRtl = BidiGlobalDir.forStaticLocale(localeString) == BidiGlobalDir.RTL;
+  }
+
+  private static SoyMsgBundle unwrapDelegate(SoyMsgBundle delegate) {
+    while (delegate instanceof SoyMsgBundleWithFullLocale) {
+      delegate = ((SoyMsgBundleWithFullLocale) delegate).delegate;
+    }
+    return delegate;
   }
 
   @Override
