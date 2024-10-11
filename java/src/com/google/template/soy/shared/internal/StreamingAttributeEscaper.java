@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 Google Inc.
  *
@@ -64,13 +65,17 @@ public final class StreamingAttributeEscaper extends LoggingAdvisingAppendable {
 
   private Appendable getAppendable() {
     if (getSanitizedContentKind() == ContentKind.HTML) {
-      if (buffer == null) {
-        buffer = new StringBuilder();
-      }
-      return buffer;
+      return getOrCreateBuffer();
     } else {
       return escapedAppendable;
     }
+  }
+
+  private Appendable getOrCreateBuffer() {
+    if (buffer == null) {
+      buffer = new StringBuilder();
+    }
+    return buffer;
   }
 
   @CanIgnoreReturnValue
@@ -100,16 +105,24 @@ public final class StreamingAttributeEscaper extends LoggingAdvisingAppendable {
       LoggingFunctionInvocation funCall, ImmutableList<Function<String, String>> escapers)
       throws IOException {
     if (getSanitizedContentKind() == ContentKind.HTML) {
-      getAppendable().append(escapePlaceholder(funCall.placeholderValue(), escapers));
+      appendEscapedPlaceholder(funCall, escapers);
     } else {
-      delegate.appendLoggingFunctionInvocation(
-          funCall,
-          new ImmutableList.Builder<Function<String, String>>()
-              .addAll(escapers)
-              .add(transform::escape)
-              .build());
+      appendNormalInvocation(funCall, escapers);
     }
     return this;
+  }
+
+  private void appendEscapedPlaceholder(LoggingFunctionInvocation funCall, ImmutableList<Function<String, String>> escapers) throws IOException {
+    getAppendable().append(escapePlaceholder(funCall.placeholderValue(), escapers));
+  }
+
+  private void appendNormalInvocation(LoggingFunctionInvocation funCall, ImmutableList<Function<String, String>> escapers) throws IOException {
+    delegate.appendLoggingFunctionInvocation(
+        funCall,
+        new ImmutableList.Builder<Function<String, String>>()
+            .addAll(escapers)
+            .add(transform::escape)
+            .build());
   }
 
   @Override
@@ -129,13 +142,17 @@ public final class StreamingAttributeEscaper extends LoggingAdvisingAppendable {
 
   @Override
   public void flushBuffers(int depth) throws IOException {
+    flushBufferIfPresent();
+    if (depth > 0) {
+      delegate.flushBuffers(depth - 1);
+    }
+  }
+
+  private void flushBufferIfPresent() throws IOException {
     if (buffer != null) {
       delegate.append(
           Sanitizers.stripHtmlTags(
               /* value=*/ buffer.toString(), /* safeTags=*/ null, /* rawSpacesAllowed=*/ true));
-    }
-    if (depth > 0) {
-      delegate.flushBuffers(depth - 1);
     }
   }
 }
