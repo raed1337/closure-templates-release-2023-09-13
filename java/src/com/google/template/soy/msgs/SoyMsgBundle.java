@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -28,6 +29,7 @@ import javax.annotation.Nullable;
  * Represents a full set of messages in some language/locale.
  */
 public abstract class SoyMsgBundle implements Iterable<SoyMsg> {
+  
   /**
    * Gets the language/locale string of this bundle of messages.
    *
@@ -50,7 +52,8 @@ public abstract class SoyMsgBundle implements Iterable<SoyMsg> {
    */
   @Nullable
   public ULocale getLocale() {
-    return getLocaleString() == null ? null : new ULocale(getLocaleString());
+    String localeString = getLocaleString();
+    return localeString != null ? new ULocale(localeString) : null;
   }
 
   /**
@@ -58,11 +61,14 @@ public abstract class SoyMsgBundle implements Iterable<SoyMsg> {
    *
    * <p>This is useful for rendering only usecases when the rest of the {@link SoyMsg} doesn't
    * matter. The default implementation is just {@link SoyMsg#getParts} but some subclasses may have
-   * more efficient implementations
+   * more efficient implementations.
+   *
+   * @param msgId The unique ID of the message to retrieve parts for.
+   * @return The message parts or an empty list if no message is found.
    */
   public ImmutableList<SoyMsgPart> getMsgParts(long msgId) {
     SoyMsg msg = getMsg(msgId);
-    return msg == null ? ImmutableList.of() : msg.getParts();
+    return msg != null ? msg.getParts() : ImmutableList.of();
   }
 
   /**
