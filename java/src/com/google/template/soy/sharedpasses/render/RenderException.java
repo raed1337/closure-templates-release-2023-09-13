@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -31,6 +32,17 @@ import javax.annotation.Nullable;
  */
 public final class RenderException extends RuntimeException {
 
+  /** The list of all stack traces from the soy rendering. */
+  private final Deque<StackTraceElement> soyStackTrace = new ArrayDeque<>();
+
+  /**
+   * @param message A detailed description of the error.
+   * @param cause The underlying error.
+   */
+  private RenderException(String message, Throwable cause) {
+    super(message, cause);
+  }
+
   public static RenderException create(String message) {
     return create(message, null);
   }
@@ -61,33 +73,24 @@ public final class RenderException extends RuntimeException {
 
   public static RenderException createFromRenderException(
       String message, RenderException cause, SoyNode node) {
+    return buildRenderException(message, cause, node);
+  }
+
+  private static RenderException buildRenderException(
+      String message, RenderException cause, SoyNode node) {
     RenderException renderException = new RenderException(message, cause.getCause());
     renderException.soyStackTrace.addAll(cause.soyStackTrace);
     renderException.addStackTraceElement(node);
     return renderException;
   }
 
-  /** The list of all stack traces from the soy rendering. */
-  private final Deque<StackTraceElement> soyStackTrace = new ArrayDeque<>();
-
-  /**
-   * @param message A detailed description of the error.
-   * @param cause The underlying error.
-   */
-  private RenderException(String message, Throwable cause) {
-    super(message, cause);
-  }
-
   @Override
   public synchronized Throwable fillInStackTrace() {
-    // Remove java stack trace, we only care about the soy stack.
     return this;
   }
 
   /** Add a partial stack trace element by specifying the source location of the soy file. */
   RenderException addStackTraceElement(SoyNode node) {
-    // Typically, this is fast since templates aren't that deep and we only do this in error
-    // situations so performance matters less.
     TemplateNode template = node.getNearestAncestor(TemplateNode.class);
     return addStackTraceElement(template, node.getSourceLocation());
   }
@@ -95,8 +98,6 @@ public final class RenderException extends RuntimeException {
   /** Add a partial stack trace element by specifying the source location of the soy file. */
   @CanIgnoreReturnValue
   RenderException addStackTraceElement(TemplateNode template, SourceLocation location) {
-    // Typically, this is fast since templates aren't that deep and we only do this in error
-    // situations so performance matters less.
     soyStackTrace.add(template.createStackTraceElement(location));
     return this;
   }
