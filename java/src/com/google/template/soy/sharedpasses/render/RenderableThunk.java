@@ -1,9 +1,10 @@
+
 /*
  * Copyright 2014 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * you may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -50,7 +51,7 @@ public abstract class RenderableThunk implements SoyValueProvider {
   public RenderResult renderAndResolve(LoggingAdvisingAppendable appendable, boolean isLast)
       throws IOException {
     if (content == null) {
-      doResolveOnto(new TeeAppendable(appendable));
+      resolveAndRender(new TeeAppendable(appendable));
     } else {
       appendable.append(content);
     }
@@ -61,7 +62,7 @@ public abstract class RenderableThunk implements SoyValueProvider {
   @Nonnull
   public SoyValue resolve() {
     if (resolved == null) {
-      doResolveOnto(new StringBuilder());
+      resolveContent();
     }
     return resolved;
   }
@@ -73,19 +74,20 @@ public abstract class RenderableThunk implements SoyValueProvider {
     return RenderResult.done();
   }
 
-  /**
-   * Resolves the value by writing it to appendable
-   *
-   * @param appendable An Appendable that you can call toString on to get the appended value
-   */
-  void doResolveOnto(Appendable appendable) {
+  private void resolveAndRender(Appendable appendable) {
     doRender(appendable);
     content = appendable.toString();
-    if (kind == ContentKind.TEXT) {
-      resolved = StringData.forValue(content);
-    } else {
-      resolved = UnsafeSanitizedContentOrdainer.ordainAsSafe(content, kind);
-    }
+    resolved = resolveContentValue(content);
+  }
+
+  private SoyValue resolveContentValue(String content) {
+    return kind == ContentKind.TEXT 
+        ? StringData.forValue(content) 
+        : UnsafeSanitizedContentOrdainer.ordainAsSafe(content, kind);
+  }
+
+  private void resolveContent() {
+    resolveAndRender(new StringBuilder());
   }
 
   protected abstract void doRender(Appendable appendable);
