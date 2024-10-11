@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -33,18 +34,22 @@ public final class XliffMsgPlugin implements SoyMsgPlugin {
   @Override
   public CharSequence generateExtractedMsgsFile(
       SoyMsgBundle msgBundle, OutputFileOptions options, ErrorReporter errorReporter) {
-
+    // Delegate to the XliffGenerator
     return XliffGenerator.generateXliff(
         msgBundle, options.getSourceLocaleString(), options.getTargetLocaleString());
   }
 
   @Override
   public SoyMsgBundle parseTranslatedMsgsFile(String translatedMsgsFileContent) {
-
     try {
+      // Delegate to the XliffParser
       return XliffParser.parseXliffTargetMsgs(translatedMsgsFileContent);
     } catch (SAXException e) {
-      throw new SoyMsgException(e);
+      // Handle SAXException with a more descriptive message
+      throw new SoyMsgException("Failed to parse translated messages from XLIFF content.", e);
+    } catch (Exception e) {
+      // Catch any other exceptions and provide a generic error message
+      throw new SoyMsgException("An unexpected error occurred while parsing the translated messages.", e);
     }
   }
 }
