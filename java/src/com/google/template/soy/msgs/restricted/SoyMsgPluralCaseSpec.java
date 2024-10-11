@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -60,7 +61,7 @@ public final class SoyMsgPluralCaseSpec {
   }
 
   private static final ImmutableMap<Type, SoyMsgPluralCaseSpec> TYPE_TO_SPEC =
-      stream(SoyMsgPluralCaseSpec.Type.values())
+      stream(Type.values())
           .map(SoyMsgPluralCaseSpec::new)
           .collect(toImmutableEnumMap(SoyMsgPluralCaseSpec::getType, Function.identity()));
 
@@ -78,12 +79,12 @@ public final class SoyMsgPluralCaseSpec {
    *     with any of the enum types.
    */
   public static SoyMsgPluralCaseSpec forType(String typeStr) {
-    return SoyMsgPluralCaseSpec.forType(Type.valueOf(Ascii.toUpperCase(typeStr)));
+    return forType(Type.valueOf(Ascii.toUpperCase(typeStr)));
   }
 
   /** Constructs an object from a non-numeric value. */
   public static SoyMsgPluralCaseSpec forType(Type type) {
-    return TYPE_TO_SPEC.get(type);
+    return TYPE_TO_SPEC.get(checkNotNull(type, "type cannot be null"));
   }
 
   /** Constructs an object from a non-numeric value. */
@@ -100,12 +101,11 @@ public final class SoyMsgPluralCaseSpec {
    * @throws SoyMsgException if invalid numeric value.
    */
   public SoyMsgPluralCaseSpec(long explicitValue) {
-    if (explicitValue >= 0) {
-      type = Type.EXPLICIT;
-      this.explicitValue = explicitValue;
-    } else {
+    if (explicitValue < 0) {
       throw new SoyMsgException("Negative plural case value.");
     }
+    type = Type.EXPLICIT;
+    this.explicitValue = explicitValue;
   }
 
   /**
@@ -142,6 +142,6 @@ public final class SoyMsgPluralCaseSpec {
 
   @Override
   public int hashCode() {
-    return Objects.hash(SoyMsgPluralCaseSpec.class, type, explicitValue);
+    return Objects.hash(type, explicitValue);
   }
 }
