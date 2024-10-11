@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -83,10 +84,13 @@ public final class DirectiveDigest {
    */
   public void updateNames(
       List<String> escapeMapNames, List<String> matcherNames, List<String> filterNames) {
-    // Store the names for this directive for use in building the helper function.
-    escapesName = escapeMapVar >= 0 ? escapeMapNames.get(escapeMapVar) : null;
-    matcherName = matcherVar >= 0 ? matcherNames.get(matcherVar) : null;
-    filterName = filterVar >= 0 ? filterNames.get(filterVar) : null;
+    this.escapesName = getName(escapeMapVar, escapeMapNames);
+    this.matcherName = getName(matcherVar, matcherNames);
+    this.filterName = getName(filterVar, filterNames);
+  }
+
+  private String getName(int varIndex, List<String> names) {
+    return varIndex >= 0 ? names.get(varIndex) : null;
   }
 
   /** @return the directiveName */
