@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -44,7 +45,7 @@ public final class NamespacedTofu implements SoyTofu {
   public NamespacedTofu(SoyTofu baseTofu, String namespace) {
     Preconditions.checkNotNull(baseTofu);
     this.baseTofu = baseTofu;
-    Preconditions.checkArgument(namespace != null && namespace.length() > 0);
+    Preconditions.checkArgument(namespace != null && !namespace.isEmpty(), "Namespace must not be null or empty.");
     this.namespace = namespace;
   }
 
@@ -52,13 +53,15 @@ public final class NamespacedTofu implements SoyTofu {
   public SoyTofu forNamespace(@Nullable String namespace) {
     if (namespace == null) {
       return baseTofu;
-    } else {
-      checkArgument(
-          namespace.charAt(0) != '.' && namespace.charAt(namespace.length() - 1) != '.',
-          "Invalid namespace '%s' (must not begin or end with a dot).",
-          namespace);
-      return new NamespacedTofu(baseTofu, namespace);
-    }
+    } 
+    validateNamespace(namespace);
+    return new NamespacedTofu(baseTofu, namespace);
+  }
+
+  /** Validates the provided namespace for correct format. */
+  private void validateNamespace(String namespace) {
+    checkArgument(namespace.charAt(0) != '.' && namespace.charAt(namespace.length() - 1) != '.',
+        "Invalid namespace '%s' (must not begin or end with a dot).", namespace);
   }
 
   /** Translates a template name that may be full or partial to a full template name. */
