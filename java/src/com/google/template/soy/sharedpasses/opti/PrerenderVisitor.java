@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -76,24 +77,21 @@ final class PrerenderVisitor extends RenderVisitor {
 
   @Override
   protected PrerenderVisitor createHelperInstance(Appendable outputBuf, SoyRecord data) {
-
     return new PrerenderVisitor(
         (PreevalVisitorFactory) evalVisitorFactory, outputBuf, basicTemplates);
   }
 
   @Override
   public Void exec(SoyNode soyNode) {
-    // Set the environment to be empty for each node.  This will set all params to Undefined.
     env = Environment.prerenderingEnvironment();
-    // Note: This is a catch-all to turn RuntimeExceptions that aren't RenderExceptions into
-    // RenderExceptions during prerendering.
+    return executeWithErrorHandling(soyNode);
+  }
 
+  private Void executeWithErrorHandling(SoyNode soyNode) {
     try {
       return super.exec(soyNode);
-
     } catch (RenderException e) {
       throw e;
-
     } catch (RuntimeException e) {
       throw RenderException.create("Failed prerender due to exception: " + e.getMessage(), e);
     }
@@ -119,8 +117,6 @@ final class PrerenderVisitor extends RenderVisitor {
 
   @Override
   protected void visitKeyNode(KeyNode node) {
-    // Key nodes don't render any output outside of incremental dom, so avoid prerendering
-    // them or they'll be optimized away.
     throw RenderException.create("Cannot prerender KeyNode.");
   }
 
@@ -131,20 +127,28 @@ final class PrerenderVisitor extends RenderVisitor {
 
   @Override
   protected void visitPrintNode(PrintNode node) {
+    validatePrintDirectives(node);
+    super.visitPrintNode(node);
+  }
+
+  private void validatePrintDirectives(PrintNode node) {
     for (PrintDirectiveNode directiveNode : node.getChildren()) {
       if (!isSoyPurePrintDirective(directiveNode)) {
         throw RenderException.create("Cannot prerender a node with some impure print directive.");
       }
     }
-    super.visitPrintNode(node);
   }
 
   @Override
   protected void visitPrintDirectiveNode(PrintDirectiveNode node) {
+    validatePrintDirective(node);
+    super.visitPrintDirectiveNode(node);
+  }
+
+  private void validatePrintDirective(PrintDirectiveNode node) {
     if (!isSoyPurePrintDirective(node)) {
       throw RenderException.create("Cannot prerender impure print directive.");
     }
-    super.visitPrintDirectiveNode(node);
   }
 
   private boolean isSoyPurePrintDirective(PrintDirectiveNode node) {
