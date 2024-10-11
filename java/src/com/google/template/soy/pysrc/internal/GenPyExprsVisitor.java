@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -43,6 +44,7 @@ import com.google.template.soy.soytree.PrintNode;
 import com.google.template.soy.soytree.RawTextNode;
 import com.google.template.soy.soytree.SoyNode;
 import com.google.template.soy.soytree.SoyNode.ParentSoyNode;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -60,8 +62,6 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
   public static final class GenPyExprsVisitorFactory {
     private final IsComputableAsPyExprVisitor isComputableAsPyExprVisitor;
     private final PythonValueFactoryImpl pluginValueFactory;
-    // depend on a Supplier since there is a circular dependency between GenPyExprsVisitorFactory
-    // and GenPyCallExprVisitor
     private final Supplier<GenPyCallExprVisitor> genPyCallExprVisitor;
 
     GenPyExprsVisitorFactory(
@@ -85,18 +85,11 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
   }
 
   private final IsComputableAsPyExprVisitor isComputableAsPyExprVisitor;
-
   private final GenPyExprsVisitorFactory genPyExprsVisitorFactory;
-
   private final PythonValueFactoryImpl pluginValueFactory;
-
   private final GenPyCallExprVisitor genPyCallExprVisitor;
-
   private final LocalVariableStack localVarExprs;
-
-  /** List to collect the results. */
   private List<PyExpr> pyExprs;
-
   private final ErrorReporter errorReporter;
 
   GenPyExprsVisitor(
@@ -122,10 +115,6 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
     return pyExprs;
   }
 
-  /**
-   * Executes this visitor on the children of the given node, without visiting the given node
-   * itself.
-   */
   List<PyExpr> execOnChildren(ParentSoyNode<?> node) {
     Preconditions.checkArgument(isComputableAsPyExprVisitor.execOnChildren(node));
     pyExprs = new ArrayList<>();
@@ -133,189 +122,104 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
     return pyExprs;
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // Implementations for specific nodes.
-
-  /**
-   * Example:
-   *
-   * <pre>
-   *   I'm feeling lucky!
-   * </pre>
-   *
-   * generates
-   *
-   * <pre>
-   *   'I\'m feeling lucky!'
-   * </pre>
-   */
   @Override
   protected void visitRawTextNode(RawTextNode node) {
-    // Escape special characters in the text before writing as a string.
     String exprText =
         BaseUtils.escapeToWrappedSoyString(node.getRawText(), false, QuoteStyle.SINGLE);
     pyExprs.add(new PyStringExpr(exprText));
   }
 
-  /**
-   * Visiting a print node accomplishes 3 basic tasks. It loads data, it performs any operations
-   * needed, and it executes the appropriate print directives.
-   *
-   * <p>TODO(dcphillips): Add support for local variables once LetNode are supported.
-   *
-   * <p>Example:
-   *
-   * <pre>
-   *   {$boo |changeNewlineToBr}
-   *   {$goo + 5}
-   * </pre>
-   *
-   * might generate
-   *
-   * <pre>
-   *   sanitize.change_newline_to_br(data.get('boo'))
-   *   data.get('goo') + 5
-   * </pre>
-   */
   @Override
   protected void visitPrintNode(PrintNode node) {
+    PyExpr pyExpr = processPrintNode(node);
+    pyExprs.add(pyExpr);
+  }
+
+  private PyExpr processPrintNode(PrintNode node) {
     TranslateToPyExprVisitor translator =
         new TranslateToPyExprVisitor(localVarExprs, pluginValueFactory, node, errorReporter);
-
     PyExpr pyExpr = translator.exec(node.getExpr());
 
-    // Process directives.
     for (PrintDirectiveNode directiveNode : node.getChildren()) {
-
-      // Get directive.
-      SoyPrintDirective directive = directiveNode.getPrintDirective();
-      if (!(directive instanceof SoyPySrcPrintDirective)) {
-        errorReporter.report(
-            directiveNode.getSourceLocation(),
-            UNKNOWN_SOY_PY_SRC_PRINT_DIRECTIVE,
-            directiveNode.getName());
-        continue;
-      }
-
-      // Get directive args.
-      List<ExprRootNode> args = directiveNode.getArgs();
-      // Translate directive args.
-      List<PyExpr> argsPyExprs = new ArrayList<>(args.size());
-      for (ExprRootNode arg : args) {
-        argsPyExprs.add(translator.exec(arg));
-      }
-
-      // Apply directive.
-      pyExpr = ((SoyPySrcPrintDirective) directive).applyForPySrc(pyExpr, argsPyExprs);
+      processPrintDirective(directiveNode, translator, pyExpr);
     }
 
-    pyExprs.add(pyExpr);
+    return pyExpr;
+  }
+
+  private void processPrintDirective(PrintDirectiveNode directiveNode, TranslateToPyExprVisitor translator, PyExpr pyExpr) {
+    SoyPrintDirective directive = directiveNode.getPrintDirective();
+    if (!(directive instanceof SoyPySrcPrintDirective)) {
+      errorReporter.report(directiveNode.getSourceLocation(), UNKNOWN_SOY_PY_SRC_PRINT_DIRECTIVE, directiveNode.getName());
+      return;
+    }
+
+    List<ExprRootNode> args = directiveNode.getArgs();
+    List<PyExpr> argsPyExprs = new ArrayList<>(args.size());
+    for (ExprRootNode arg : args) {
+      argsPyExprs.add(translator.exec(arg));
+    }
+
+    pyExpr = ((SoyPySrcPrintDirective) directive).applyForPySrc(pyExpr, argsPyExprs);
   }
 
   @Override
   protected void visitMsgFallbackGroupNode(MsgFallbackGroupNode node) {
-    PyExpr msg = generateMsgFunc(node.getMsg(), /* useAlternateId=*/ false);
-    String ternaryExpression =
-        "(%s) if (translator_impl.is_msg_available(%d) or not"
-            + " translator_impl.is_msg_available(%d)) else (%s)";
-    long msgId = MsgUtils.computeMsgIdForDualFormat(node.getMsg());
-    long alternateId;
-    long fbAlternateId;
+    PyExpr msg = generateMsgFunc(node.getMsg(), false);
+    String pyExprText = buildMsgFallbackGroupExpression(node, msg);
+    msg = new PyStringExpr(pyExprText, PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL));
 
-    String usePrimaryOrAlternateMsg =
-        node.getMsg().getAlternateId().isPresent()
-            ? String.format(
-                ternaryExpression,
-                msg.getText(),
-                msgId,
-                node.getMsg().getAlternateId().getAsLong(),
-                generateMsgFunc(node.getMsg(), /* useAlternateId=*/ true).getText())
-            : msg.getText();
+    applyEscapingDirectives(node, msg);
+    pyExprs.add(msg);
+  }
+
+  private String buildMsgFallbackGroupExpression(MsgFallbackGroupNode node, PyExpr msg) {
+    String ternaryExpression = "(%s) if (translator_impl.is_msg_available(%d) or not translator_impl.is_msg_available(%d)) else (%s)";
+    long msgId = MsgUtils.computeMsgIdForDualFormat(node.getMsg());
+    long alternateId = node.getMsg().getAlternateId().orElse(-1);
+    String usePrimaryOrAlternateMsg = buildPrimaryOrAlternateMsg(node, msg, msgId, ternaryExpression);
     String pyExprText = "";
 
-    // MsgFallbackGroupNode could only have one child or two children. See MsgFallbackGroupNode.
-    // Priority is the msg id > alternate id > fallback id > fallback alternate id.
     if (node.hasFallbackMsg()) {
       long fallbackId = MsgUtils.computeMsgIdForDualFormat(node.getFallbackMsg());
-      PyExpr fallbackMsg = generateMsgFunc(node.getFallbackMsg(), /* useAlternateId=*/ false);
-      String useFbOrFbAlternateMsg =
-          node.getFallbackMsg().getAlternateId().isPresent()
-              ? String.format(
-                  ternaryExpression,
-                  fallbackMsg.getText(),
-                  fallbackId,
-                  node.getFallbackMsg().getAlternateId().getAsLong(),
-                  generateMsgFunc(node.getFallbackMsg(), /* useAlternateId=*/ true).getText())
-              : fallbackMsg.getText();
-      if (node.getMsg().getAlternateId().isPresent()) {
-        alternateId = node.getMsg().getAlternateId().getAsLong();
-        if (node.getFallbackMsg().getAlternateId().isPresent()) {
-          // msg id > alternate id > fallback id > fallback alternate id
-          fbAlternateId = node.getFallbackMsg().getAlternateId().getAsLong();
-          pyExprText =
-              String.format(
-                  usePrimaryOrAlternateMsg
-                      + " if (translator_impl.is_msg_available(%d) or"
-                      + " translator_impl.is_msg_available(%d) or"
-                      + " (not translator_impl.is_msg_available(%d) and not"
-                      + " translator_impl.is_msg_available(%d))) else "
-                      + useFbOrFbAlternateMsg,
-                  msgId,
-                  alternateId,
-                  fallbackId,
-                  fbAlternateId);
-        } else {
-          // msg id > alternate id > fallback id
-          pyExprText =
-              String.format(
-                  usePrimaryOrAlternateMsg
-                      + " if (translator_impl.is_msg_available(%d) or"
-                      + " translator_impl.is_msg_available(%d) or not"
-                      + " translator_impl.is_msg_available(%d)) else "
-                      + useFbOrFbAlternateMsg,
-                  msgId,
-                  alternateId,
-                  fallbackId);
-        }
-      } else {
-        // msg id > fallback id > fallback alternate id
-        if (node.getFallbackMsg().getAlternateId().isPresent()) {
-          fbAlternateId = node.getFallbackMsg().getAlternateId().getAsLong();
-          pyExprText =
-              String.format(
-                  usePrimaryOrAlternateMsg
-                      + " if (translator_impl.is_msg_available(%d) or"
-                      + " (not translator_impl.is_msg_available(%d) and not"
-                      + " translator_impl.is_msg_available(%d))) else "
-                      + useFbOrFbAlternateMsg,
-                  msgId,
-                  fallbackId,
-                  fbAlternateId);
-        } else {
-          // msg id > fallback id
-          pyExprText =
-              String.format(
-                  ternaryExpression, msg.getText(), msgId, fallbackId, fallbackMsg.getText());
-        }
-      }
-      msg = new PyStringExpr(pyExprText, PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL));
-    }
+      PyExpr fallbackMsg = generateMsgFunc(node.getFallbackMsg(), false);
+      String useFbOrFbAlternateMsg = buildFallbackMsg(node, fallbackMsg, fallbackId);
 
-    if (!node.hasFallbackMsg() && node.getMsg().getAlternateId().isPresent()) {
-      // msg id > alternate id
+      pyExprText = buildTernaryExpression(node, usePrimaryOrAlternateMsg, useFbOrFbAlternateMsg, msgId, alternateId, fallbackId);
+    } else if (alternateId != -1) {
       pyExprText = usePrimaryOrAlternateMsg;
-      msg = new PyStringExpr(pyExprText, PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL));
     }
 
-    // Escaping directives apply to messages, especially in attribute context.
+    return pyExprText;
+  }
+
+  private String buildPrimaryOrAlternateMsg(MsgFallbackGroupNode node, PyExpr msg, long msgId, String ternaryExpression) {
+    return node.getMsg().getAlternateId().isPresent()
+        ? String.format(ternaryExpression, msg.getText(), msgId, node.getMsg().getAlternateId().getAsLong(), generateMsgFunc(node.getMsg(), true).getText())
+        : msg.getText();
+  }
+
+  private String buildFallbackMsg(MsgFallbackGroupNode node, PyExpr fallbackMsg, long fallbackId) {
+    return node.getFallbackMsg().getAlternateId().isPresent()
+        ? String.format("( %s if translator_impl.is_msg_available(%d) else %s)", fallbackMsg.getText(), fallbackId, generateMsgFunc(node.getFallbackMsg(), true).getText())
+        : fallbackMsg.getText();
+  }
+
+  private String buildTernaryExpression(MsgFallbackGroupNode node, String usePrimaryOrAlternateMsg, String useFbOrFbAlternateMsg, long msgId, long alternateId, long fallbackId) {
+    if (alternateId != -1) {
+      return String.format(usePrimaryOrAlternateMsg + " if (translator_impl.is_msg_available(%d) or translator_impl.is_msg_available(%d)) else " + useFbOrFbAlternateMsg,
+          msgId, alternateId);
+    } else {
+      return String.format(usePrimaryOrAlternateMsg + " if (translator_impl.is_msg_available(%d)) else " + useFbOrFbAlternateMsg,
+          msgId);
+    }
+  }
+
+  private void applyEscapingDirectives(MsgFallbackGroupNode node, PyExpr msg) {
     for (SoyPrintDirective directive : node.getEscapingDirectives()) {
-      Preconditions.checkState(
-          directive instanceof SoyPySrcPrintDirective,
-          "Contextual autoescaping produced a bogus directive: %s",
-          directive.getName());
+      Preconditions.checkState(directive instanceof SoyPySrcPrintDirective, "Contextual autoescaping produced a bogus directive: %s", directive.getName());
       msg = ((SoyPySrcPrintDirective) directive).applyForPySrc(msg, ImmutableList.of());
     }
-    pyExprs.add(msg);
   }
 
   private PyStringExpr generateMsgFunc(MsgNode msg, boolean useAlternateId) {
@@ -329,52 +233,18 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
         .getPyExpr();
   }
 
-  /**
-   * If all the children are computable as expressions, the IfNode can be written as a ternary
-   * conditional expression.
-   */
   @Override
   protected void visitIfNode(IfNode node) {
-    // Create another instance of this visitor for generating Python expressions from children.
-    GenPyExprsVisitor genPyExprsVisitor =
-        genPyExprsVisitorFactory.create(localVarExprs, errorReporter);
-    TranslateToPyExprVisitor translator =
-        new TranslateToPyExprVisitor(localVarExprs, pluginValueFactory, node, errorReporter);
-
     StringBuilder pyExprTextSb = new StringBuilder();
-
     boolean hasElse = false;
-    // We need to be careful about parenthesizing the sub-expressions in a python ternary operator,
-    // as nested ternary operators will right-associate. Due to the structure of the parse tree,
-    // we accumulate open parens in the loop below, and pendingParens tracks how many closing parens
-    // we need to add at the end.
     int pendingParens = 0;
+
     for (SoyNode child : node.getChildren()) {
-
       if (child instanceof IfCondNode) {
-        IfCondNode icn = (IfCondNode) child;
-
-        // Python ternary conditional expressions modify the order of the conditional from
-        // <conditional> ? <true> : <false> to
-        // <true> if <conditional> else <false>
-        PyExpr condBlock = PyExprUtils.concatPyExprs(genPyExprsVisitor.exec(icn)).toPyString();
-        condBlock =
-            PyExprUtils.maybeProtect(
-                condBlock, PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL));
-        pyExprTextSb.append("(").append(condBlock.getText());
-
-        // Append the conditional and if/else syntax.
-        PyExpr condPyExpr = translator.exec(icn.getExpr());
-        pyExprTextSb.append(") if (").append(condPyExpr.getText()).append(") else (");
-        pendingParens++;
-
+        pendingParens = processIfCondNode((IfCondNode) child, pyExprTextSb, pendingParens);
       } else if (child instanceof IfElseNode) {
         hasElse = true;
-        IfElseNode ien = (IfElseNode) child;
-
-        PyExpr elseBlock = PyExprUtils.concatPyExprs(genPyExprsVisitor.exec(ien)).toPyString();
-        pyExprTextSb.append(elseBlock.getText()).append(")");
-        pendingParens--;
+        processIfElseNode((IfElseNode) child, pyExprTextSb, pendingParens);
       } else {
         throw new AssertionError("Unexpected if child node type. Child: " + child);
       }
@@ -387,11 +257,27 @@ public final class GenPyExprsVisitor extends AbstractSoyNodeVisitor<List<PyExpr>
       pyExprTextSb.append(")");
     }
 
-    // By their nature, inline'd conditionals can only contain output strings, so they can be
-    // treated as a string type with a conditional precedence.
-    pyExprs.add(
-        new PyStringExpr(
-            pyExprTextSb.toString(), PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL)));
+    pyExprs.add(new PyStringExpr(pyExprTextSb.toString(), PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL)));
+  }
+
+  private int processIfCondNode(IfCondNode icn, StringBuilder pyExprTextSb, int pendingParens) {
+    GenPyExprsVisitor genPyExprsVisitor =
+        genPyExprsVisitorFactory.create(localVarExprs, errorReporter);
+    TranslateToPyExprVisitor translator =
+        new TranslateToPyExprVisitor(localVarExprs, pluginValueFactory, icn.getParent(), errorReporter);
+
+    PyExpr condBlock = PyExprUtils.concatPyExprs(genPyExprsVisitor.exec(icn)).toPyString();
+    condBlock = PyExprUtils.maybeProtect(condBlock, PyExprUtils.pyPrecedenceForOperator(Operator.CONDITIONAL));
+    pyExprTextSb.append("(").append(condBlock.getText());
+
+    PyExpr condPyExpr = translator.exec(icn.getExpr());
+    pyExprTextSb.append(") if (").append(condPyExpr.getText()).append(") else (");
+    return pendingParens + 1;
+  }
+
+  private void processIfElseNode(IfElseNode ien, StringBuilder pyExprTextSb, int pendingParens) {
+    PyExpr elseBlock = PyExprUtils.concatPyExprs(execOnChildren(ien)).toPyString();
+    pyExprTextSb.append(elseBlock.getText()).append(")");
   }
 
   @Override
