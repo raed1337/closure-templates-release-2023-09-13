@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -71,7 +72,6 @@ public final class InsertMsgsVisitor {
 
   @Nullable private final SoyMsgBundle msgBundle;
   private final ErrorReporter errorReporter;
-
   private IdGenerator nodeIdGen;
 
   /** The replacement nodes for the current MsgFallbackGroupNode we're visiting (during a pass). */
@@ -88,11 +88,8 @@ public final class InsertMsgsVisitor {
   }
 
   public void insertMsgs(SoyNode node) {
-
-    // Retrieve the node id generator from the root of the parse tree.
     nodeIdGen = node.getNearestAncestor(SoyFileSetNode.class).getNodeIdGenerator();
-    for (MsgFallbackGroupNode msgNode :
-        SoyTreeUtils.getAllNodesOfType(node, MsgFallbackGroupNode.class)) {
+    for (MsgFallbackGroupNode msgNode : SoyTreeUtils.getAllNodesOfType(node, MsgFallbackGroupNode.class)) {
       replaceMsgNode(msgNode);
     }
     SoyTreeUtils.allFunctionInvocations(node, BuiltinFunction.IS_PRIMARY_MSG_IN_USE)
@@ -100,82 +97,70 @@ public final class InsertMsgsVisitor {
   }
 
   private void replaceMsgNode(MsgFallbackGroupNode node) {
-
-    // Check for plural or select message. Either report error or don't replace.
-    for (MsgNode msg : node.getChildren()) {
-      if (msg.isPlrselMsg()) {
-        errorReporter.report(node.getSourceLocation(), ENCOUNTERED_PLURAL_OR_SELECT);
-        return;
-      }
+    if (containsPluralOrSelectMsg(node)) {
+      errorReporter.report(node.getSourceLocation(), ENCOUNTERED_PLURAL_OR_SELECT);
+      return;
     }
 
-    // Figure out which message we're going to use, and build its list of replacement nodes.
+    currReplacementNodes = getReplacementNodes(node);
+    replaceNodeInParent(node, currReplacementNodes);
     currReplacementNodes = null;
+  }
+
+  private boolean containsPluralOrSelectMsg(MsgFallbackGroupNode node) {
+    return node.getChildren().stream().anyMatch(MsgNode::isPlrselMsg);
+  }
+
+  private List<StandaloneNode> getReplacementNodes(MsgFallbackGroupNode node) {
+    List<StandaloneNode> replacementNodes = Lists.newArrayList();
     if (msgBundle != null) {
       for (MsgNode msg : node.getChildren()) {
         SoyMsg translation = msgBundle.getMsg(MsgUtils.computeMsgIdForDualFormat(msg));
         if (translation != null) {
           buildReplacementNodesFromTranslation(msg, translation);
-          break;
+          return currReplacementNodes;
         }
       }
     }
-    if (currReplacementNodes == null) {
-      buildReplacementNodesFromSource(node.getChild(0));
-    }
+    buildReplacementNodesFromSource(node.getChild(0));
+    return currReplacementNodes;
+  }
 
-    // Replace this MsgFallbackGroupNode with the replacement nodes.
+  private void replaceNodeInParent(MsgFallbackGroupNode node, List<StandaloneNode> replacementNodes) {
     ParentSoyNode<StandaloneNode> parent = node.getParent();
     int indexInParent = parent.getChildIndex(node);
     parent.removeChild(indexInParent);
-    parent.addChildren(indexInParent, currReplacementNodes);
-    currReplacementNodes = null;
+    parent.addChildren(indexInParent, replacementNodes);
   }
 
-  /**
-   * Private helper for visitMsgFallbackGroupNode() to build the list of replacement nodes for a
-   * message from its translation.
-   */
   private void buildReplacementNodesFromTranslation(MsgNode msg, SoyMsg translation) {
-
     currReplacementNodes = Lists.newArrayList();
-
     for (SoyMsgPart msgPart : translation.getParts()) {
-
       if (msgPart instanceof SoyMsgRawTextPart) {
-        // Append a new RawTextNode to the currReplacementNodes list.
         String rawText = ((SoyMsgRawTextPart) msgPart).getRawText();
-        currReplacementNodes.add(
-            new RawTextNode(nodeIdGen.genId(), rawText, SourceLocation.UNKNOWN));
-
+        currReplacementNodes.add(new RawTextNode(nodeIdGen.genId(), rawText, SourceLocation.UNKNOWN));
       } else if (msgPart instanceof SoyMsgPlaceholderPart) {
-        // Get the representative placeholder node and iterate through its contents.
-        String placeholderName = ((SoyMsgPlaceholderPart) msgPart).getPlaceholderName();
-        MsgPlaceholderNode placeholderNode = msg.getRepPlaceholderNode(placeholderName);
-        for (StandaloneNode contentNode : placeholderNode.getChildren()) {
-          // If the content node is a MsgHtmlTagNode, it needs to be replaced by a number of
-          // consecutive siblings. This is done by visiting the MsgHtmlTagNode. Otherwise, we
-          // simply add the content node to the currReplacementNodes list being built.
-          if (contentNode instanceof MsgHtmlTagNode) {
-            currReplacementNodes.addAll(
-                ((MsgHtmlTagNode) contentNode)
-                    .getChildren().stream()
-                        .map(InsertMsgsVisitor::maybeRewriteSourceLocation)
-                        .collect(toList()));
-          } else {
-            currReplacementNodes.add(maybeRewriteSourceLocation(contentNode));
-          }
-        }
-
+        processPlaceholderPart(msg, (SoyMsgPlaceholderPart) msgPart);
       } else {
         throw new AssertionError();
       }
     }
   }
 
-  // because translations reoder placeholders and message parts, stip the source locations since
-  // they are no longer useful or accurate.  This also prevents the CombineConsecutiveRawTextNodes
-  // pass from blowing up.
+  private void processPlaceholderPart(MsgNode msg, SoyMsgPlaceholderPart msgPart) {
+    String placeholderName = msgPart.getPlaceholderName();
+    MsgPlaceholderNode placeholderNode = msg.getRepPlaceholderNode(placeholderName);
+    for (StandaloneNode contentNode : placeholderNode.getChildren()) {
+      if (contentNode instanceof MsgHtmlTagNode) {
+        currReplacementNodes.addAll(((MsgHtmlTagNode) contentNode).getChildren().stream()
+            .map(InsertMsgsVisitor::maybeRewriteSourceLocation)
+            .collect(toList()));
+      } else {
+        currReplacementNodes.add(maybeRewriteSourceLocation(contentNode));
+      }
+    }
+  }
+
   private static StandaloneNode maybeRewriteSourceLocation(StandaloneNode node) {
     if (node instanceof RawTextNode) {
       RawTextNode textNode = (RawTextNode) node;
@@ -184,51 +169,43 @@ public final class InsertMsgsVisitor {
     return node;
   }
 
-  /**
-   * Private helper for visitMsgFallbackGroupNode() to build the list of replacement nodes for a
-   * message from its source.
-   */
   private void buildReplacementNodesFromSource(MsgNode msg) {
-
     currReplacementNodes = Lists.newArrayList();
-
     for (StandaloneNode child : msg.getChildren()) {
-
       if (child instanceof RawTextNode) {
         currReplacementNodes.add(child);
-
       } else if (child instanceof MsgPlaceholderNode) {
-        for (StandaloneNode contentNode : ((MsgPlaceholderNode) child).getChildren()) {
-          // If the content node is a MsgHtmlTagNode, it needs to be replaced by a number of
-          // consecutive siblings. This is done by visiting the MsgHtmlTagNode. Otherwise, we
-          // simply add the content node to the currReplacementNodes list being built.
-          if (contentNode instanceof MsgHtmlTagNode) {
-            currReplacementNodes.addAll(((MsgHtmlTagNode) contentNode).getChildren());
-          } else {
-            currReplacementNodes.add(contentNode);
-          }
-        }
-
+        processPlaceholderNode((MsgPlaceholderNode) child);
       } else {
         throw new AssertionError();
       }
     }
   }
 
-  private void replaceIsPrimaryMsgInUseFunction(FunctionNode node) {
-    boolean isPrimaryMsgInUse;
-    if (msgBundle == null) {
-      isPrimaryMsgInUse = true;
-    } else {
-      // if the primary message id is available or the fallback message is not available, then we
-      // are using the primary message.
-      long primaryMsgId = ((IntegerNode) node.getChild(1)).getValue();
-      long fallbackMsgId = ((IntegerNode) node.getChild(2)).getValue();
-      isPrimaryMsgInUse =
-          !msgBundle.getMsgParts(primaryMsgId).isEmpty()
-              || msgBundle.getMsgParts(fallbackMsgId).isEmpty();
+  private void processPlaceholderNode(MsgPlaceholderNode placeholderNode) {
+    for (StandaloneNode contentNode : placeholderNode.getChildren()) {
+      if (contentNode instanceof MsgHtmlTagNode) {
+        currReplacementNodes.addAll(((MsgHtmlTagNode) contentNode).getChildren());
+      } else {
+        currReplacementNodes.add(contentNode);
+      }
     }
+  }
+
+  private void replaceIsPrimaryMsgInUseFunction(FunctionNode node) {
+    boolean isPrimaryMsgInUse = calculateIsPrimaryMsgInUse(node);
     node.getParent()
         .replaceChild(node, new BooleanNode(isPrimaryMsgInUse, node.getSourceLocation()));
+  }
+
+  private boolean calculateIsPrimaryMsgInUse(FunctionNode node) {
+    if (msgBundle == null) {
+      return true;
+    } else {
+      long primaryMsgId = ((IntegerNode) node.getChild(1)).getValue();
+      long fallbackMsgId = ((IntegerNode) node.getChild(2)).getValue();
+      return !msgBundle.getMsgParts(primaryMsgId).isEmpty()
+          || msgBundle.getMsgParts(fallbackMsgId).isEmpty();
+    }
   }
 }
