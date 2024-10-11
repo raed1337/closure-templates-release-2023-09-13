@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -42,17 +43,18 @@ final class TofuPluginContext implements JavaPluginContext {
 
   @Override
   public TofuJavaValue getULocale() {
-    return TofuJavaValue.forRaw(msgBundle == null ? ULocale.ENGLISH : msgBundle.getLocale());
+    ULocale locale = (msgBundle == null) ? ULocale.ENGLISH : msgBundle.getLocale();
+    return TofuJavaValue.forRaw(locale);
   }
 
   @Override
   public TofuJavaValue getAllRequiredCssNamespaces(JavaValue template) {
     throw new UnsupportedOperationException(
-        "Tofu does not support getting required css namespaces.");
+        "Tofu does not support getting required CSS namespaces.");
   }
 
   @Override
   public TofuJavaValue getAllRequiredCssPaths(JavaValue template) {
-    throw new UnsupportedOperationException("Tofu does not support getting required css paths.");
+    throw new UnsupportedOperationException("Tofu does not support getting required CSS paths.");
   }
 }
