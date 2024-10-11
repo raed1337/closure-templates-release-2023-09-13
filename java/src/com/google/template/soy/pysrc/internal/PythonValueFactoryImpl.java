@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2019 Google Inc.
  *
@@ -72,17 +73,26 @@ final class PythonValueFactoryImpl extends PythonValueFactory {
       SourceLocation location, String name, SoyPythonSourceFunction fn, List<PyExpr> args) {
     PythonValueImpl result;
     try {
-      result = (PythonValueImpl) fn.applyForPythonSource(this, wrapParams(args), context);
-      if (result == null) {
-        report(location, name, fn, NULL_RETURN, fn.getClass().getSimpleName());
-        result = ERROR_VALUE;
-      }
+      result = executeFunction(location, name, fn, args);
     } catch (Throwable t) {
-      BaseUtils.trimStackTraceTo(t, fn.getClass());
-      report(location, name, fn, UNEXPECTED_ERROR, Throwables.getStackTraceAsString(t));
-      result = ERROR_VALUE;
+      result = handleError(location, name, fn, t);
     }
     return result.expr;
+  }
+
+  private PythonValueImpl executeFunction(SourceLocation location, String name, SoyPythonSourceFunction fn, List<PyExpr> args) {
+    PythonValueImpl result = (PythonValueImpl) fn.applyForPythonSource(this, wrapParams(args), context);
+    if (result == null) {
+      report(location, name, fn, NULL_RETURN, fn.getClass().getSimpleName());
+      result = ERROR_VALUE;
+    }
+    return result;
+  }
+
+  private PythonValueImpl handleError(SourceLocation location, String name, SoyPythonSourceFunction fn, Throwable t) {
+    BaseUtils.trimStackTraceTo(t, fn.getClass());
+    report(location, name, fn, UNEXPECTED_ERROR, Throwables.getStackTraceAsString(t));
+    return ERROR_VALUE;
   }
 
   private void report(
@@ -163,10 +173,20 @@ final class PythonValueFactoryImpl extends PythonValueFactory {
 
     @Override
     public PythonValue call(PythonValue... args) {
+      return buildCallExpression(args);
+    }
+
+    private PythonValueImpl buildCallExpression(PythonValue... args) {
       StringBuilder sb =
           new StringBuilder()
               .append(maybeProtect(expr, PyExprUtils.CALL_PRECEDENCE).getText())
               .append("(");
+      appendArguments(sb, args);
+      sb.append(")");
+      return new PythonValueImpl(new PyExpr(sb.toString(), PyExprUtils.CALL_PRECEDENCE));
+    }
+
+    private void appendArguments(StringBuilder sb, PythonValue... args) {
       boolean isFirst = true;
       for (PythonValue arg : args) {
         if (isFirst) {
@@ -176,8 +196,6 @@ final class PythonValueFactoryImpl extends PythonValueFactory {
         }
         sb.append(unwrap(arg).getText());
       }
-      sb.append(")");
-      return new PythonValueImpl(new PyExpr(sb.toString(), PyExprUtils.CALL_PRECEDENCE));
     }
 
     @Override
