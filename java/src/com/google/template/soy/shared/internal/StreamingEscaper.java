@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -63,22 +64,19 @@ public final class StreamingEscaper extends LoggingAdvisingAppendable {
   @CanIgnoreReturnValue
   @Override
   public LoggingAdvisingAppendable append(CharSequence csq) throws IOException {
-    escapedAppendable.append(csq);
-    return this;
+    return appendToEscaped(csq);
   }
 
   @CanIgnoreReturnValue
   @Override
   public LoggingAdvisingAppendable append(CharSequence csq, int start, int end) throws IOException {
-    escapedAppendable.append(csq, start, end);
-    return this;
+    return appendToEscaped(csq, start, end);
   }
 
   @CanIgnoreReturnValue
   @Override
   public LoggingAdvisingAppendable append(char c) throws IOException {
-    escapedAppendable.append(c);
-    return this;
+    return appendToEscaped(c);
   }
 
   @CanIgnoreReturnValue
@@ -110,5 +108,20 @@ public final class StreamingEscaper extends LoggingAdvisingAppendable {
     if (depth > 0) {
       delegate.flushBuffers(depth - 1);
     }
+  }
+
+  private LoggingAdvisingAppendable appendToEscaped(CharSequence csq) throws IOException {
+    escapedAppendable.append(csq);
+    return this;
+  }
+
+  private LoggingAdvisingAppendable appendToEscaped(CharSequence csq, int start, int end) throws IOException {
+    escapedAppendable.append(csq, start, end);
+    return this;
+  }
+
+  private LoggingAdvisingAppendable appendToEscaped(char c) throws IOException {
+    escapedAppendable.append(c);
+    return this;
   }
 }
