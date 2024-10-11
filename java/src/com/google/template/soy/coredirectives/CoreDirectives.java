@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -21,9 +22,11 @@ import com.google.template.soy.shared.restricted.SoyPrintDirective;
 
 /** Lists all core directives */
 public final class CoreDirectives {
+  private static final ImmutableSet<SoyPrintDirective> DIRECTIVES = ImmutableSet.of(new EscapeHtmlDirective());
+
   private CoreDirectives() {}
 
   public static ImmutableSet<SoyPrintDirective> directives() {
-    return ImmutableSet.of(new EscapeHtmlDirective());
+    return DIRECTIVES;
   }
 }
