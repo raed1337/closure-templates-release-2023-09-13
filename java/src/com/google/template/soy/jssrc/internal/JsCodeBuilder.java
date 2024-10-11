@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -49,7 +50,7 @@ public final class JsCodeBuilder {
   private final Map<String, GoogRequire> googRequires = new TreeMap<>();
 
   public JsCodeBuilder(OutputVarHandler outputVars) {
-    code = new StringBuilder();
+    this.code = new StringBuilder();
     this.outputVars = outputVars;
   }
 
@@ -95,7 +96,7 @@ public final class JsCodeBuilder {
 
   public JsCodeBuilder appendNullable(@Nullable CodeChunk codeChunk) {
     if (codeChunk != null) {
-      return append(codeChunk);
+      append(codeChunk);
     }
     return this;
   }
@@ -121,10 +122,7 @@ public final class JsCodeBuilder {
    * @param require The namespace being required
    */
   public void addGoogRequire(GoogRequire require) {
-    GoogRequire oldRequire = googRequires.put(require.symbol(), require);
-    if (oldRequire != null) {
-      googRequires.put(require.symbol(), require.merge(oldRequire));
-    }
+    googRequires.merge(require.symbol(), require, GoogRequire::merge);
   }
 
   public void addGoogRequires(Iterable<GoogRequire> googRequires) {
@@ -134,9 +132,6 @@ public final class JsCodeBuilder {
   /** Should only be used by {@link GenJsCodeVisitor#visitSoyFileNode}. */
   public void appendGoogRequiresTo(StringBuilder sb) {
     for (GoogRequire require : googRequires.values()) {
-      // TODO(lukes): we need some namespace management here... though really we need namespace
-      // management with all declarations... The problem is that a require could introduce a name
-      // alias that conflicts with a symbol defined elsewhere in the file.
       require.writeTo(sb);
     }
   }
