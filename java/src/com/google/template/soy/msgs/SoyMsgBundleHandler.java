@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -109,21 +110,21 @@ public class SoyMsgBundleHandler {
    * @throws SoyMsgException If there's an error while processing the messages.
    */
   public SoyMsgBundle createFromFile(File inputFile) throws IOException {
-
-    // TODO: This is for backwards-compatibility. Figure out how to get rid of this.
-    // We special-case English locales because they often don't have translated files and falling
-    // back to the Soy source should be fine.
-    if (!inputFile.exists() && FIRST_WORD_IS_EN_PATTERN.matcher(inputFile.getName()).matches()) {
+    if (isFallbackFile(inputFile)) {
       return SoyMsgBundle.EMPTY;
     }
 
-    try {
-      // reading the file as a byte array and then invoking the string constructor is the fastest
-      // way to read a full file as a string.  it avoids copies incurred by CharSource and picks a
-      // faster path for charset decoding.
-      String inputFileContent = Files.asCharSource(inputFile, UTF_8).read();
-      return msgPlugin.parseTranslatedMsgsFile(inputFileContent);
+    String inputFileContent = readFileContent(inputFile);
+    return msgPlugin.parseTranslatedMsgsFile(inputFileContent);
+  }
 
+  private boolean isFallbackFile(File inputFile) {
+    return !inputFile.exists() && FIRST_WORD_IS_EN_PATTERN.matcher(inputFile.getName()).matches();
+  }
+
+  private String readFileContent(File inputFile) throws IOException {
+    try {
+      return Files.asCharSource(inputFile, UTF_8).read();
     } catch (SoyMsgException sme) {
       sme.setFileOrResourceName(inputFile.toString());
       throw sme;
@@ -139,11 +140,13 @@ public class SoyMsgBundleHandler {
    * @throws SoyMsgException If there's an error while processing the messages.
    */
   public SoyMsgBundle createFromResource(URL inputResource) throws IOException {
+    String inputFileContent = readResourceContent(inputResource);
+    return msgPlugin.parseTranslatedMsgsFile(inputFileContent);
+  }
 
+  private String readResourceContent(URL inputResource) throws IOException {
     try {
-      String inputFileContent = Resources.asCharSource(inputResource, UTF_8).read();
-      return msgPlugin.parseTranslatedMsgsFile(inputFileContent);
-
+      return Resources.asCharSource(inputResource, UTF_8).read();
     } catch (SoyMsgException sme) {
       sme.setFileOrResourceName(inputResource.toString());
       throw sme;
