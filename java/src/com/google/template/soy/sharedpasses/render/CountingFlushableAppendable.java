@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014 Google Inc.
  *
@@ -58,12 +59,12 @@ final class CountingFlushableAppendable implements Appendable, Flushable, Future
   }
 
   @Override public Appendable append(CharSequence csq, int start, int end) throws IOException {
-     count += end - start;
+    count += end - start;
     return appendable.append(csq, start, end);
   }
 
   @Override public Appendable append(char c) throws IOException {
-    count += 1;
+    count++;
     return appendable.append(c);
   }
 
@@ -78,12 +79,15 @@ final class CountingFlushableAppendable implements Appendable, Flushable, Future
    */
   @Override public void beforeBlock() {
     if (count > 0) {
-      try {
-        flush();
-      } catch (IOException e) {
-        logger.log(Level.SEVERE, "Flush from soy failed", e);
-      }
+      flushWithLogging();
+    }
+  }
+
+  private void flushWithLogging() {
+    try {
+      flush();
+    } catch (IOException e) {
+      logger.log(Level.SEVERE, "Flush from soy failed", e);
     }
   }
 }
-
