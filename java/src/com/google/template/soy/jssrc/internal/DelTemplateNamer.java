@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 Google Inc.
  *
@@ -52,11 +53,7 @@ public class DelTemplateNamer {
    */
   final String getDelegateName(TemplateBasicNode node) {
     Preconditions.checkState(node.isModifiable());
-    String delegateMapKey =
-        !node.getLegacyDeltemplateNamespace().isEmpty()
-            ? node.getLegacyDeltemplateNamespace()
-            : node.getTemplateName();
-    return getDelegateName(delegateMapKey);
+    return getDelegateNameWithLegacyNamespace(node.getLegacyDeltemplateNamespace(), node.getTemplateName());
   }
 
   /**
@@ -73,10 +70,7 @@ public class DelTemplateNamer {
     }
     TemplateType templateType = (TemplateType) nodeType;
     Preconditions.checkState(templateType.isModifiable());
-    return getDelegateName(
-        !templateType.getLegacyDeltemplateNamespace().isEmpty()
-            ? templateType.getLegacyDeltemplateNamespace()
-            : node.getResolvedName());
+    return getDelegateNameWithLegacyNamespace(templateType.getLegacyDeltemplateNamespace(), node.getResolvedName());
   }
 
   /**
@@ -99,5 +93,9 @@ public class DelTemplateNamer {
    */
   protected String getDelegateName(String delTemplateName) {
     return delTemplateName;
+  }
+
+  private String getDelegateNameWithLegacyNamespace(String legacyNamespace, String defaultName) {
+    return !legacyNamespace.isEmpty() ? legacyNamespace : defaultName;
   }
 }
