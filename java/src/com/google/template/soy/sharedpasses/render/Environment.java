@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014 Google Inc.
  *
@@ -40,128 +41,129 @@ import java.util.IdentityHashMap;
  * in testing usecases.
  */
 public abstract class Environment {
-  Environment() {} // package private constructor to limit subclasses to this package.
+    Environment() {} // package private constructor to limit subclasses to this package.
 
-  /**
-   * The main way to create an environment.
-   *
-   * <p>Allocates the local variable table for the template and prepopulates it with data from the
-   * given SoyRecords.
-   */
-  static Environment create(TemplateNode template, SoyRecord data, SoyRecord ijData) {
-    return new Impl(template, data, ijData);
-  }
-
-  /**
-   * For Prerendering we create an {@link Environment} for the given template where all entries are
-   * initialized to UndefinedData.
-   */
-  public static Environment prerenderingEnvironment() {
-    return new EmptyImpl();
-  }
-
-  /** Associates a value with the given variable. */
-  abstract void bind(VarDefn var, SoyValueProvider value);
-
-  /**
-   * Binds the data about the current loop position to support the isLast and index builtin
-   * functions.
-   */
-  abstract void bindLoopPosition(VarDefn loopVar, SoyValueProvider value);
-
-  /** Returns the resolved SoyValue for the given VarDefn. Guaranteed to not return null. */
-  abstract SoyValue getVar(VarDefn var);
-
-  /** Returns {@code true} if SoyRecord has a field of the given VarDefn. */
-  abstract boolean hasVar(VarDefn var);
-
-  /** Returns the resolved SoyValue for the given VarDefn. Guaranteed to not return null. */
-  abstract SoyValueProvider getVarProvider(VarDefn var);
-
-  private static final class Impl extends Environment {
-    private static final class LoopPosition {
-      SoyValueProvider item;
+    /**
+     * The main way to create an environment.
+     *
+     * <p>Allocates the local variable table for the template and prepopulates it with data from the
+     * given SoyRecords.
+     */
+    static Environment create(TemplateNode template, SoyRecord data, SoyRecord ijData) {
+        return new Impl(template, data, ijData);
     }
 
-    final IdentityHashMap<VarDefn, Object> localVariables = new IdentityHashMap<>();
-    final SoyRecord data;
+    /**
+     * For Prerendering we create an {@link Environment} for the given template where all entries are
+     * initialized to UndefinedData.
+     */
+    public static Environment prerenderingEnvironment() {
+        return new EmptyImpl();
+    }
 
-    Impl(TemplateNode template, SoyRecord data, SoyRecord ijData) {
-      this.data = data;
-      for (TemplateParam param : template.getAllParams()) {
-        SoyValueProvider provider =
-            (param.isInjected() ? ijData : data).getFieldProvider(param.name());
-        if (provider == null) {
-          provider =
-              param.isRequired() || param.hasDefault() ? UndefinedData.INSTANCE : NullData.INSTANCE;
+    /** Associates a value with the given variable. */
+    abstract void bind(VarDefn var, SoyValueProvider value);
+
+    /**
+     * Binds the data about the current loop position to support the isLast and index builtin
+     * functions.
+     */
+    abstract void bindLoopPosition(VarDefn loopVar, SoyValueProvider value);
+
+    /** Returns the resolved SoyValue for the given VarDefn. Guaranteed to not return null. */
+    abstract SoyValue getVar(VarDefn var);
+
+    /** Returns {@code true} if SoyRecord has a field of the given VarDefn. */
+    abstract boolean hasVar(VarDefn var);
+
+    /** Returns the resolved SoyValue for the given VarDefn. Guaranteed to not return null. */
+    abstract SoyValueProvider getVarProvider(VarDefn var);
+
+    private static final class Impl extends Environment {
+        private static final class LoopPosition {
+            SoyValueProvider item;
         }
-        bind(param, provider);
-      }
+
+        final IdentityHashMap<VarDefn, Object> localVariables = new IdentityHashMap<>();
+        final SoyRecord data;
+
+        Impl(TemplateNode template, SoyRecord data, SoyRecord ijData) {
+            this.data = data;
+            initializeLocalVariables(template, ijData);
+        }
+
+        private void initializeLocalVariables(TemplateNode template, SoyRecord ijData) {
+            for (TemplateParam param : template.getAllParams()) {
+                SoyValueProvider provider = getFieldProvider(param, ijData);
+                bind(param, provider);
+            }
+        }
+
+        private SoyValueProvider getFieldProvider(TemplateParam param, SoyRecord ijData) {
+            SoyValueProvider provider = (param.isInjected() ? ijData : data).getFieldProvider(param.name());
+            return provider != null ? provider :
+                (param.isRequired() || param.hasDefault() ? UndefinedData.INSTANCE : NullData.INSTANCE);
+        }
+
+        @Override
+        void bind(VarDefn var, SoyValueProvider value) {
+            localVariables.put(var, value);
+        }
+
+        @Override
+        void bindLoopPosition(VarDefn loopVar, SoyValueProvider value) {
+            LoopPosition position = (LoopPosition) localVariables.computeIfAbsent(loopVar, k -> new LoopPosition());
+            position.item = value;
+        }
+
+        @Override
+        SoyValueProvider getVarProvider(VarDefn var) {
+            Object o = localVariables.get(var);
+            return (o instanceof LoopPosition) ? ((LoopPosition) o).item : (SoyValueProvider) o;
+        }
+
+        @Override
+        SoyValue getVar(VarDefn var) {
+            return Preconditions.checkNotNull(
+                    getVarProvider(var),
+                    "No value for %s at %s. All: %s",
+                    var.name(),
+                    var.nameLocation().toLineColumnString(),
+                    localVariables.keySet())
+                .resolve();
+        }
+
+        @Override
+        boolean hasVar(VarDefn var) {
+            return data.hasField(var.name());
+        }
     }
 
-    @Override
-    void bind(VarDefn var, SoyValueProvider value) {
-      localVariables.put(var, value);
-    }
+    /** An environment that is empty and returns {@link UndefinedData} for everything. */
+    private static final class EmptyImpl extends Environment {
+        @Override
+        void bind(VarDefn var, SoyValueProvider value) {
+            throw new UnsupportedOperationException();
+        }
 
-    @Override
-    void bindLoopPosition(VarDefn loopVar, SoyValueProvider value) {
-      LoopPosition position =
-          (LoopPosition) localVariables.computeIfAbsent(loopVar, ignored -> new LoopPosition());
-      position.item = value;
-    }
+        @Override
+        void bindLoopPosition(VarDefn loopVar, SoyValueProvider value) {
+            throw new UnsupportedOperationException();
+        }
 
-    @Override
-    SoyValueProvider getVarProvider(VarDefn var) {
-      Object o = localVariables.get(var);
-      if (o instanceof LoopPosition) {
-        return ((LoopPosition) o).item;
-      }
-      return (SoyValueProvider) o;
-    }
+        @Override
+        SoyValueProvider getVarProvider(VarDefn var) {
+            return UndefinedData.INSTANCE;
+        }
 
-    @Override
-    SoyValue getVar(VarDefn var) {
-      return Preconditions.checkNotNull(
-              getVarProvider(var),
-              "No value for %s at %s. All: %s",
-              var.name(),
-              var.nameLocation().toLineColumnString(),
-              localVariables.keySet())
-          .resolve();
-    }
+        @Override
+        SoyValue getVar(VarDefn var) {
+            return UndefinedData.INSTANCE;
+        }
 
-    @Override
-    boolean hasVar(VarDefn var) {
-      return data.hasField(var.name());
+        @Override
+        boolean hasVar(VarDefn var) {
+            return false;
+        }
     }
-  }
-
-  /** An environment that is empty and returns {@link UndefinedData} for everything. */
-  private static final class EmptyImpl extends Environment {
-    @Override
-    void bind(VarDefn var, SoyValueProvider value) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    void bindLoopPosition(VarDefn loopVar, SoyValueProvider value) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    SoyValueProvider getVarProvider(VarDefn var) {
-      return UndefinedData.INSTANCE;
-    }
-
-    @Override
-    SoyValue getVar(VarDefn var) {
-      return UndefinedData.INSTANCE;
-    }
-
-    @Override
-    boolean hasVar(VarDefn var) {
-      return false;
-    }
-  }
 }
