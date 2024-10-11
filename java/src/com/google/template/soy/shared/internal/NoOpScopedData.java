@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2018 Google Inc.
  *
@@ -48,6 +49,6 @@ public final class NoOpScopedData
 
   @Override
   public BidiGlobalDir getBidiGlobalDir() {
-    throw new UnsupportedOperationException();
+    return BidiGlobalDir.LTR; // Provide a default value instead of throwing an exception
   }
 }
