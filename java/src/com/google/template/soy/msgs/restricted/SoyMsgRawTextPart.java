@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 Google Inc.
  *
@@ -20,12 +21,12 @@ import com.google.common.base.Preconditions;
 
 /** Represents a raw text string within a message (the stuff that translators change). */
 public final class SoyMsgRawTextPart extends SoyMsgPart {
+  private final String rawText;
+
   /** Returns a SoyMsgRawTextPart representing the specified raw text string. */
   public static SoyMsgRawTextPart of(String rawText) {
-    return new SoyMsgRawTextPart(Preconditions.checkNotNull(rawText));
+    return new SoyMsgRawTextPart(Preconditions.checkNotNull(rawText, "rawText cannot be null"));
   }
-
-  private final String rawText;
 
   private SoyMsgRawTextPart(String rawText) {
     this.rawText = rawText;
@@ -38,13 +39,15 @@ public final class SoyMsgRawTextPart extends SoyMsgPart {
 
   @Override
   public String toString() {
-    return getRawText();
+    return rawText;
   }
 
   @Override
   public boolean equals(Object other) {
-    return other instanceof SoyMsgRawTextPart
-        && rawText.equals(((SoyMsgRawTextPart) other).rawText);
+    if (this == other) return true;
+    if (!(other instanceof SoyMsgRawTextPart)) return false;
+    SoyMsgRawTextPart that = (SoyMsgRawTextPart) other;
+    return rawText.equals(that.rawText);
   }
 
   @Override
