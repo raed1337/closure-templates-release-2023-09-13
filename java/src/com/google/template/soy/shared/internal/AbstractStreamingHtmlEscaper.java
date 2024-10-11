@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 Google Inc.
  *
@@ -42,7 +43,7 @@ public abstract class AbstractStreamingHtmlEscaper extends LoggingAdvisingAppend
   protected AbstractStreamingHtmlEscaper(
       LoggingAdvisingAppendable delegate, Appendable escapingAppendable) {
     this.delegate = checkNotNull(delegate);
-    activeAppendable = checkNotNull(escapingAppendable);
+    this.activeAppendable = checkNotNull(escapingAppendable);
   }
 
   @CanIgnoreReturnValue
