@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2015 Google Inc.
  *
@@ -51,22 +52,24 @@ public final class DelTemplateSelector<T> {
   private final ImmutableListMultimap<String, T> delTemplateNameToValues;
 
   private DelTemplateSelector(Builder<T> builder) {
-    ImmutableTable.Builder<String, String, Group<T>> nameAndVariantBuilder =
-        ImmutableTable.builder();
-    ImmutableListMultimap.Builder<String, T> delTemplateNameToValuesBuilder =
-        ImmutableListMultimap.builder();
-    for (Table.Cell<String, String, Group.Builder<T>> entry :
-        builder.nameAndVariantToGroup.cellSet()) {
+    ImmutableTable.Builder<String, String, Group<T>> nameAndVariantBuilder = ImmutableTable.builder();
+    ImmutableListMultimap.Builder<String, T> delTemplateNameToValuesBuilder = ImmutableListMultimap.builder();
+    
+    for (Cell<String, String, Group.Builder<T>> entry : builder.nameAndVariantToGroup.cellSet()) {
       Group<T> group = entry.getValue().build();
       nameAndVariantBuilder.put(entry.getRowKey(), entry.getColumnKey(), group);
-      String delTemplateName = entry.getRowKey();
-      if (group.defaultValue != null) {
-        delTemplateNameToValuesBuilder.put(delTemplateName, group.defaultValue);
-      }
-      delTemplateNameToValuesBuilder.putAll(delTemplateName, group.modToValue.values());
+      populateDelTemplateNameToValues(delTemplateNameToValuesBuilder, entry.getRowKey(), group);
     }
+    
     this.nameAndVariantToGroup = nameAndVariantBuilder.buildOrThrow();
     this.delTemplateNameToValues = delTemplateNameToValuesBuilder.build();
+  }
+
+  private void populateDelTemplateNameToValues(ImmutableListMultimap.Builder<String, T> builder, String delTemplateName, Group<T> group) {
+    if (group.defaultValue != null) {
+      builder.put(delTemplateName, group.defaultValue);
+    }
+    builder.putAll(delTemplateName, group.modToValue.values());
   }
 
   /**
@@ -90,38 +93,33 @@ public final class DelTemplateSelector<T> {
    * <p>See {@code soy.$$getDelegateFn} for the {@code JS} version
    */
   @Nullable
-  public T selectTemplate(
-      String delTemplateName, String variant, Predicate<String> activeModSelector) {
+  public T selectTemplate(String delTemplateName, String variant, Predicate<String> activeModSelector) {
+    T selection = selectFromGroup(delTemplateName, variant, activeModSelector);
+    
+    if (selection != null) {
+      return selection;
+    }
+    
+    return variant.isEmpty() ? null : selectFromGroup(delTemplateName, "", activeModSelector);
+  }
+
+  @Nullable
+  private T selectFromGroup(String delTemplateName, String variant, Predicate<String> activeModSelector) {
     Group<T> group = nameAndVariantToGroup.get(delTemplateName, variant);
-    if (group != null) {
-      T selection = group.select(activeModSelector);
-      if (selection != null) {
-        return selection;
-      }
-    }
-    if (!variant.isEmpty()) {
-      // Retry with an empty variant
-      group = nameAndVariantToGroup.get(delTemplateName, "");
-      if (group != null) {
-        return group.select(activeModSelector);
-      }
-    }
-    return null;
+    return group == null ? null : group.select(activeModSelector);
   }
 
   public Builder<T> toBuilder() {
     Builder<T> builder = new Builder<>();
     for (Cell<String, String, Group<T>> cell : nameAndVariantToGroup.cellSet()) {
-      builder.nameAndVariantToGroup.put(
-          cell.getRowKey(), cell.getColumnKey(), cell.getValue().toBuilder());
+      builder.nameAndVariantToGroup.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().toBuilder());
     }
     return builder;
   }
 
   /** A Builder for DelTemplateSelector. */
   public static final class Builder<T> {
-    private final Table<String, String, Group.Builder<T>> nameAndVariantToGroup =
-        Tables.newCustomTable(new LinkedHashMap<>(), LinkedHashMap::new);
+    private final Table<String, String, Group.Builder<T>> nameAndVariantToGroup = Tables.newCustomTable(new LinkedHashMap<>(), LinkedHashMap::new);
 
     /** Adds the default template (not associated with any mod or variant). */
     public T addDefault(String delTemplateName, String variant, T value) {
@@ -167,16 +165,6 @@ public final class DelTemplateSelector<T> {
      */
     T select(Predicate<String> activeModSelector) {
       Map.Entry<String, T> selected = null;
-      // Select whatever mod is active and ensure that only one is activated.  If none are
-      // active use the default.
-      // This is analagous to what happens in JavaScript, see soy.$$registerDelegateFn.  The main
-      // difference is that in JavaScript delegate conflicts are resolved/detected at code loading
-      // time.  In Java it is only at rendering time because that is when the set of active packages
-      // is determined.
-      // In theory we could validate the Predicate against the whole DelTemplateSelector at the
-      // start of rendering which would flag erroneous Predicates even if no deltempate group
-      // containing the conflict is ever rendered. However, this sounds like a potentially expensive
-      // operation, so for now we delay detecting conflicts until selection time.
       for (Map.Entry<String, T> entry : modToValue.entrySet()) {
         if (activeModSelector.test(entry.getKey())) {
           if (selected != null) {
@@ -189,10 +177,7 @@ public final class DelTemplateSelector<T> {
           selected = entry;
         }
       }
-      if (selected != null) {
-        return selected.getValue();
-      }
-      return defaultValue;
+      return selected != null ? selected.getValue() : defaultValue;
     }
 
     Builder<T> toBuilder() {
