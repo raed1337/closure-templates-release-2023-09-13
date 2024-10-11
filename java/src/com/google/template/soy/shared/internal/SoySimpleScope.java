@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -28,11 +29,7 @@ import javax.annotation.Nullable;
  * <p>Important: Do not use outside of Soy code (treat as superpackage-private).
  */
 public final class SoySimpleScope implements SoyScopedData, SoyScopedData.Enterable {
-  /**
-   * An autoclosable object that can be used to seed and exit scopes.
-   *
-   * <p>Obtain an instance with {@link SoySimpleScope#enter}.
-   */
+  
   private static final class InScope implements SoyScopedData.InScope {
     private boolean isClosed;
     private final Thread openThread = Thread.currentThread();
@@ -52,12 +49,12 @@ public final class SoySimpleScope implements SoyScopedData, SoyScopedData.Entera
     /** Exits the scope */
     @Override
     public void close() {
-      checkOpenAndOnCorrectThread();
+      validateScope();
       isClosed = true;
       deque.pop();
     }
 
-    private void checkOpenAndOnCorrectThread() {
+    private void validateScope() {
       if (isClosed) {
         throw new IllegalStateException("called close() more than once!");
       }
@@ -67,7 +64,6 @@ public final class SoySimpleScope implements SoyScopedData, SoyScopedData.Entera
     }
   }
 
-  /** The ThreadLocal holding all the values in scope. */
   private static final ThreadLocal<ArrayDeque<BidiGlobalDir>> scopedValuesTl = new ThreadLocal<>();
 
   @Override
@@ -88,13 +84,18 @@ public final class SoySimpleScope implements SoyScopedData, SoyScopedData.Entera
   @Override
   @CheckReturnValue
   public InScope enter(BidiGlobalDir bidiGlobalDir) {
+    ArrayDeque<BidiGlobalDir> stack = getOrCreateStack();
+    stack.push(bidiGlobalDir);
+    return new InScope(bidiGlobalDir, stack);
+  }
+
+  private ArrayDeque<BidiGlobalDir> getOrCreateStack() {
     ArrayDeque<BidiGlobalDir> stack = scopedValuesTl.get();
     if (stack == null) {
       stack = new ArrayDeque<>();
       scopedValuesTl.set(stack);
     }
-    stack.push(bidiGlobalDir);
-    return new InScope(bidiGlobalDir, stack);
+    return stack;
   }
 
   @Override
