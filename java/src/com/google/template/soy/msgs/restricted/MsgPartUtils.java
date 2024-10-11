@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -32,7 +33,19 @@ public class MsgPartUtils {
    * @return Whether there are any plural or select parts.
    */
   public static boolean hasPlrselPart(List<SoyMsgPart> msgParts) {
-    // If there is a plrsel part then it has to be the first and only part in the list
+    if (isSinglePlrselPart(msgParts)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Determines if the list contains a single plural or select message part.
+   *
+   * @param msgParts The msg parts to check.
+   * @return True if the list contains one and only one plural or select part; otherwise false.
+   */
+  private static boolean isSinglePlrselPart(List<SoyMsgPart> msgParts) {
     if (msgParts.size() == 1) {
       SoyMsgPart rootPart = msgParts.get(0);
       return rootPart instanceof SoyMsgPluralPart || rootPart instanceof SoyMsgSelectPart;
