@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -49,6 +50,10 @@ final class PreevalVisitorFactory implements EvalVisitorFactory {
       ImmutableTable<SourceFilePath, String, ImmutableList<ExternNode>> externs,
       DelTemplateSelector<TemplateNode> deltemplates,
       Predicate<String> activeModSelector) {
+    return createPreevalVisitor(env);
+  }
+
+  private PreevalVisitor createPreevalVisitor(Environment env) {
     return new PreevalVisitor(env);
   }
 }
